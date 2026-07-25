@@ -1,0 +1,31 @@
+from fastapi import APIRouter
+from app.api.endpoints import auth, users, banks, transactions, labels, sync, logs, oauth, pdfs, dashboard, field_mapping, settings, csv_exports, api_tokens, ingest, goals, categories, currencies, analytics, filters, templates, backup, ai, rules, notifications
+
+api_router = APIRouter()
+
+# Include all endpoint routers
+api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+api_router.include_router(users.router, prefix="/users", tags=["Users"])
+api_router.include_router(banks.router, prefix="/banks", tags=["Banks"])
+api_router.include_router(transactions.router, prefix="/transactions", tags=["Transactions"])
+api_router.include_router(labels.router, prefix="/labels", tags=["Labels"])
+api_router.include_router(sync.router, prefix="/sync", tags=["Sync"])
+api_router.include_router(logs.router, prefix="/logs", tags=["Logs"])
+api_router.include_router(oauth.router, prefix="/oauth", tags=["OAuth"])
+api_router.include_router(pdfs.router, prefix="/pdfs", tags=["PDFs"])
+api_router.include_router(csv_exports.router, prefix="/csv", tags=["CSV Exports"])
+api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
+api_router.include_router(field_mapping.router, prefix="/field-mapping", tags=["Field Mapping"])
+api_router.include_router(settings.router, prefix="/settings", tags=["Settings"])
+api_router.include_router(api_tokens.router, prefix="/api-tokens", tags=["API Tokens"])
+api_router.include_router(ingest.router, prefix="/ingest", tags=["Ingestion"])
+api_router.include_router(goals.router, prefix="/goals", tags=["Savings Goals"])
+api_router.include_router(categories.router, prefix="/categories", tags=["Categories"])
+api_router.include_router(currencies.router, prefix="/currencies", tags=["Currencies"])
+api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
+api_router.include_router(filters.router, prefix="/filters", tags=["Saved Filters"])
+api_router.include_router(templates.router, prefix="/templates", tags=["Templates"])
+api_router.include_router(backup.router, prefix="/backup", tags=["Backup"])
+api_router.include_router(ai.router, prefix="/ai", tags=["AI"])
+api_router.include_router(rules.router, prefix="/rules", tags=["Automatic Rules"])
+api_router.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])

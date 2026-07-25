@@ -1,0 +1,17 @@
+.env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+uploads/
+logs/
+credentials/
+.git/
+.gitignore
+.pytest_cache/
+.coverage
+htmlcov/
+app/tests/

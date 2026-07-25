@@ -1,0 +1,43 @@
+# --- Secrets & credentials ---
+.env
+.env.local
+.env.*.local
+backend/credentials/
+backend/.env
+
+# --- Runtime data & user financial data (never commit real transactions) ---
+backend/uploads/
+backend/backups/
+backend/logs/
+backend/data/
+backend/celerybeat-schedule
+*.pdf
+test_results_*.json
+test_output.log
+
+# --- Screenshots captured from real account data (name/address/transactions) ---
+screenshot_*.png
+
+# --- Claude Code local config ---
+.claude/settings.local.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+backend/.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Node / frontend ---
+node_modules/
+frontend/build/
+frontend/test-results/
+frontend/playwright-report/
+npm-debug.log*
+
+# --- OS ---
+.DS_Store

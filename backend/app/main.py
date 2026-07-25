@@ -1,0 +1,355 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import logging
+import os
+import secrets
+from logging.handlers import RotatingFileHandler
+
+from app.core.config import settings
+from app.core.database import engine, Base, SessionLocal
+from app.core.security import get_password_hash
+from app.models.models import User, UserRole
+from sqlalchemy import inspect, text
+from app.api import router
+
+def configure_logging() -> logging.Logger:
+    """Configure stdout + file + in-memory logging for UI log viewer."""
+    log_dir = "/app/logs"
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "app.log")
+
+    root_logger = logging.getLogger()
+    level_name = (settings.LOG_LEVEL or "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    root_logger.setLevel(level)
+
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S'
+    )
+
+    # Stdout handler – visible in `docker compose logs`
+    if not any(isinstance(h, logging.StreamHandler) and h.stream.name == '<stdout>'
+               for h in root_logger.handlers):
+        stdout_handler = logging.StreamHandler()
+        stdout_handler.setLevel(level)
+        stdout_handler.setFormatter(formatter)
+        root_logger.addHandler(stdout_handler)
+
+    # Rotating file handler – for UI log viewer
+    if not any(isinstance(h, RotatingFileHandler) for h in root_logger.handlers):
+        file_handler = RotatingFileHandler(log_path, maxBytes=5 * 1024 * 1024, backupCount=3)
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+
+    # Silence overly noisy third-party loggers
+    for noisy in ("urllib3", "httpx", "httpcore", "googleapiclient.discovery"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    return logging.getLogger(__name__)
+
+
+logger = configure_logging()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events"""
+    # Startup
+    logger.info("Starting Finance Tracker Application")
+    logger.info("Creating database tables...")
+    _bootstrap_schema()
+    logger.info("Application started successfully")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down Finance Tracker Application")
+
+
+def _ensure_columns() -> None:
+    """Add new columns on existing tables when missing."""
+    inspector = inspect(engine)
+    existing_tables = inspector.get_table_names()
+
+    if "banks" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("banks")}
+        _add_column_if_missing(columns, "csv_email", "ALTER TABLE banks ADD COLUMN csv_email VARCHAR(255)")
+        _add_column_if_missing(columns, "current_balance", "ALTER TABLE banks ADD COLUMN current_balance FLOAT")
+        _add_column_if_missing(columns, "balance_updated_at", "ALTER TABLE banks ADD COLUMN balance_updated_at TIMESTAMP")
+        _add_column_if_missing(columns, "pdf_filename_prefix", "ALTER TABLE banks ADD COLUMN pdf_filename_prefix VARCHAR(100)")
+        _add_column_if_missing(columns, "currency_code", "ALTER TABLE banks ADD COLUMN currency_code VARCHAR(3) DEFAULT 'INR'")
+        _add_column_if_missing(columns, "color", "ALTER TABLE banks ADD COLUMN color VARCHAR(7)")
+        _add_column_if_missing(columns, "exclude_from_stats", "ALTER TABLE banks ADD COLUMN exclude_from_stats BOOLEAN DEFAULT FALSE")
+        _add_column_if_missing(columns, "is_archived", "ALTER TABLE banks ADD COLUMN is_archived BOOLEAN DEFAULT FALSE")
+
+    if "pdf_statements" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("pdf_statements")}
+        _add_column_if_missing(columns, "decrypted_path", "ALTER TABLE pdf_statements ADD COLUMN decrypted_path VARCHAR(500)")
+        _add_column_if_missing(columns, "decrypted_at", "ALTER TABLE pdf_statements ADD COLUMN decrypted_at TIMESTAMP")
+        _add_column_if_missing(columns, "error_message", "ALTER TABLE pdf_statements ADD COLUMN error_message TEXT")
+
+    if "bank_emails" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("bank_emails")}
+        _add_column_if_missing(columns, "from_email", "ALTER TABLE bank_emails ADD COLUMN from_email VARCHAR(255)")
+
+    if "sync_logs" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("sync_logs")}
+        _add_column_if_missing(columns, "user_id", "ALTER TABLE sync_logs ADD COLUMN user_id INTEGER")
+        # Live-progress columns for the sync status bar.
+        _add_column_if_missing(columns, "total_emails", "ALTER TABLE sync_logs ADD COLUMN total_emails INTEGER DEFAULT 0")
+        _add_column_if_missing(columns, "processed_emails", "ALTER TABLE sync_logs ADD COLUMN processed_emails INTEGER DEFAULT 0")
+        _add_column_if_missing(columns, "current_step", "ALTER TABLE sync_logs ADD COLUMN current_step VARCHAR(150)")
+        _add_column_if_missing(columns, "current_bank", "ALTER TABLE sync_logs ADD COLUMN current_bank VARCHAR(150)")
+
+    if "transactions" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("transactions")}
+        _add_column_if_missing(columns, "source", "ALTER TABLE transactions ADD COLUMN source VARCHAR(50)")
+        _add_column_if_missing(columns, "currency_code", "ALTER TABLE transactions ADD COLUMN currency_code VARCHAR(3)")
+
+    if "users" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("users")}
+        _add_column_if_missing(columns, "avatar_url", "ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500)")
+
+    if "templates" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("templates")}
+        _add_column_if_missing(columns, "label_ids", "ALTER TABLE templates ADD COLUMN label_ids TEXT")
+
+    if "auto_rules" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("auto_rules")}
+        _add_column_if_missing(columns, "notify_discord", "ALTER TABLE auto_rules ADD COLUMN notify_discord BOOLEAN DEFAULT FALSE")
+
+    # Widen columns that now hold encrypted values (ciphertext is longer than plaintext).
+    _widen_to_text(inspector, existing_tables, "users", "avatar_url")  # holds base64 data URLs
+    _widen_to_text(inspector, existing_tables, "banks", "account_password")
+    _widen_to_text(inspector, existing_tables, "pdf_statements", "password_hash")
+    _widen_to_text(inspector, existing_tables, "bank_configs", "password_hints")
+
+    # Indexes on hot query columns (idempotent; create_all does not add indexes to
+    # pre-existing tables). Postgres supports CREATE INDEX IF NOT EXISTS.
+    _ensure_index("ix_transactions_user_date", "transactions", "(user_id, transaction_date)")
+    _ensure_index("ix_transactions_user_bank", "transactions", "(user_id, bank_id)")
+    _ensure_index("ix_transactions_transaction_date", "transactions", "(transaction_date)")
+
+
+def _ensure_index(name: str, table: str, columns_sql: str) -> None:
+    """Create an index if it does not already exist (Postgres-safe, idempotent)."""
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(f"CREATE INDEX IF NOT EXISTS {name} ON {table} {columns_sql}"))
+    except Exception:
+        logger.warning("Failed to ensure index %s on %s", name, table, exc_info=True)
+
+
+def _add_column_if_missing(existing_columns: set, column_name: str, ddl: str) -> None:
+    if column_name in existing_columns:
+        return
+    try:
+        with engine.begin() as connection:
+            connection.execute(text(ddl))
+        logger.info("Added missing column %s", column_name)
+    except Exception:
+        # Log the full traceback so migration failures are diagnosable, not silent.
+        logger.warning("Failed to add column %s", column_name, exc_info=True)
+
+
+def _widen_to_text(inspector, existing_tables, table: str, column: str) -> None:
+    """Convert a VARCHAR column to TEXT so encrypted values are never truncated."""
+    if table not in existing_tables:
+        return
+    try:
+        col = next((c for c in inspector.get_columns(table) if c["name"] == column), None)
+        if col is None or "TEXT" in str(col["type"]).upper():
+            return
+        with engine.begin() as connection:
+            connection.execute(text(f"ALTER TABLE {table} ALTER COLUMN {column} TYPE TEXT"))
+        logger.info("Widened %s.%s to TEXT", table, column)
+    except Exception:
+        logger.warning("Failed to widen %s.%s to TEXT", table, column, exc_info=True)
+
+
+_SCHEMA_LOCK_KEY = 741_852_963  # arbitrary constant advisory-lock id for schema bootstrap
+
+
+def _bootstrap_schema() -> None:
+    """Run all schema setup under a Postgres advisory lock.
+
+    With uvicorn --workers 2, every worker process runs this on startup. Without
+    serialization they race on CREATE TABLE/INDEX and one worker dies with a catalog
+    unique-violation. The advisory lock makes exactly one worker do the (idempotent)
+    work while the others wait, then no-op. Any residual error is logged, not fatal.
+    """
+    lock_conn = engine.connect()
+    try:
+        lock_conn.exec_driver_sql("SELECT pg_advisory_lock(%s)", (_SCHEMA_LOCK_KEY,))
+        try:
+            Base.metadata.create_all(bind=engine)
+            _ensure_columns()
+            _ensure_admin_user()
+            _claim_orphaned_banks()
+            _seed_user_defaults()
+            _reap_stale_syncs()
+        finally:
+            lock_conn.exec_driver_sql("SELECT pg_advisory_unlock(%s)", (_SCHEMA_LOCK_KEY,))
+    except Exception:
+        # Never let schema bootstrap crash the worker; it is idempotent and any partial
+        # state is completed on the next start.
+        logger.warning("Schema bootstrap encountered an error (continuing)", exc_info=True)
+    finally:
+        lock_conn.close()
+
+
+def _reap_stale_syncs() -> None:
+    """Reconcile syncs left stuck in queued/processing by a prior crash/restart, so the
+    UI never shows a phantom 'sync in progress'."""
+    db = SessionLocal()
+    try:
+        from app.api.endpoints.sync import reap_stale_syncs
+        n = reap_stale_syncs(db)
+        if n:
+            logger.info("Reaped %d stale sync job(s) on startup", n)
+    except Exception:
+        db.rollback()
+        logger.warning("Failed to reap stale syncs", exc_info=True)
+    finally:
+        db.close()
+
+
+def _claim_orphaned_banks() -> None:
+    """Assign any banks with a NULL owner to the admin user.
+
+    Such rows predate user-scoping. They used to be shown to every user (a cross-user
+    metadata leak); now that queries filter strictly by owner, we attribute them to the
+    admin so the data stays accessible instead of becoming invisible to everyone.
+    """
+    from app.models.models import Bank
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.role == UserRole.ADMIN).order_by(User.id).first()
+        if not admin:
+            return
+        orphaned = db.query(Bank).filter(Bank.user_id.is_(None)).all()
+        if not orphaned:
+            return
+        for bank in orphaned:
+            bank.user_id = admin.id
+        db.commit()
+        logger.info("Claimed %d orphaned bank(s) for admin user '%s'", len(orphaned), admin.username)
+    except Exception:
+        db.rollback()
+        logger.warning("Failed to claim orphaned banks", exc_info=True)
+    finally:
+        db.close()
+
+
+def _seed_user_defaults() -> None:
+    """Seed default categories + currencies (and backfill account currency) for
+    every existing user that lacks them. Idempotent."""
+    from app.services.seed_service import seed_user_defaults
+    db = SessionLocal()
+    try:
+        for (uid,) in db.query(User.id).all():
+            seed_user_defaults(db, uid)
+    except Exception:
+        db.rollback()
+        logger.warning("Failed to seed user defaults", exc_info=True)
+    finally:
+        db.close()
+
+
+def _ensure_admin_user() -> None:
+    """Ensure an admin account exists.
+
+    The admin password is NOT reset on every startup (that would silently overwrite a
+    rotated password). It is only (re)set when ADMIN_RESET_PASSWORD=true AND a non-empty
+    ADMIN_PASSWORD is provided. On first creation with no password configured, a secure
+    random one is generated and logged once.
+    """
+    if not settings.ADMIN_EMAIL or not settings.ADMIN_USERNAME:
+        return
+
+    db = SessionLocal()
+    try:
+        existing = db.query(User).filter(
+            (User.username == settings.ADMIN_USERNAME) | (User.email == settings.ADMIN_EMAIL)
+        ).first()
+        if existing:
+            existing.username = settings.ADMIN_USERNAME
+            existing.email = settings.ADMIN_EMAIL
+            existing.role = UserRole.ADMIN
+            existing.is_active = True
+            if settings.ADMIN_RESET_PASSWORD and settings.ADMIN_PASSWORD:
+                existing.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
+                logger.warning("Admin password reset from ADMIN_PASSWORD (ADMIN_RESET_PASSWORD=true).")
+            db.commit()
+            return
+
+        password = settings.ADMIN_PASSWORD
+        generated = not password
+        if generated:
+            password = secrets.token_urlsafe(16)
+
+        admin = User(
+            username=settings.ADMIN_USERNAME,
+            email=settings.ADMIN_EMAIL,
+            hashed_password=get_password_hash(password),
+            role=UserRole.ADMIN,
+            is_active=True
+        )
+        db.add(admin)
+        db.commit()
+
+        if generated:
+            logger.warning(
+                "Created admin user '%s' with a GENERATED password: %s  — store it now and "
+                "change it after first login (it will not be shown again).",
+                settings.ADMIN_USERNAME, password
+            )
+        else:
+            logger.info("Created admin user '%s' from ADMIN_PASSWORD.", settings.ADMIN_USERNAME)
+    finally:
+        db.close()
+
+
+# Create FastAPI application
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description="Multi-Bank Finance Tracking System",
+    lifespan=lifespan
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
+# Include routers
+app.include_router(router, prefix="/api")
+
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "Finance Tracker API",
+        "version": settings.APP_VERSION,
+        "status": "running"
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
