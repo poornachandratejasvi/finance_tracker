@@ -54,6 +54,55 @@ def configure_logging() -> logging.Logger:
 logger = configure_logging()
 
 
+def _validate_google_config() -> None:
+    """Log, at startup, whether each Google integration is actually usable — so a
+    missing/malformed credentials.json or GOOGLE_CLIENT_ID shows up immediately in
+    the logs (Settings → Application Logs) instead of surfacing later as a
+    confusing failure the first time someone tries to link Gmail or connect Drive."""
+    import json as _json
+
+    creds_path = os.path.join(settings.BASE_DIR, 'credentials', 'credentials.json')
+    if not os.path.exists(creds_path):
+        logger.warning(
+            "Google OAuth: credentials.json not found at %s — Gmail linking and the "
+            "offline Drive backup flow are unavailable until it's added.", creds_path
+        )
+    else:
+        try:
+            with open(creds_path, 'r', encoding='utf-8') as f:
+                data = _json.load(f)
+            kind = next(iter(data.keys()), None)  # 'installed' or 'web'
+            block = data.get(kind, {}) if kind else {}
+            client_id = block.get('client_id', '')
+            redirect_uris = block.get('redirect_uris', [])
+            logger.info(
+                "Google OAuth: credentials.json OK (type=%s, client_id=%s…, "
+                "redirect_uris=%s) — powers Gmail linking + the offline Drive backup flow.",
+                kind, client_id[:20] if client_id else '?', redirect_uris,
+            )
+            if kind == 'installed':
+                logger.info(
+                    "Google OAuth: client type is 'installed' (Desktop) — Google only "
+                    "accepts loopback (localhost/127.0.0.1) redirect URIs for this type, "
+                    "regardless of path. Fine for BACKEND_URL=%s; if this is ever deployed "
+                    "behind a real domain, a separate 'Web application' OAuth client will "
+                    "be needed instead.", settings.BACKEND_URL,
+                )
+        except Exception as e:
+            logger.error("Google OAuth: credentials.json exists but failed to parse: %s", e)
+
+    if settings.GOOGLE_CLIENT_ID:
+        logger.info("Google Sign-In (GIS): GOOGLE_CLIENT_ID is set — browser Google login and the Client-ID-only Drive token flow are available.")
+    else:
+        logger.warning(
+            "Google Sign-In (GIS): GOOGLE_CLIENT_ID is not set — the 'Sign in with Google' "
+            "button and manual (browser-token) Drive backup connect are disabled until it's "
+            "configured (Settings → env). This requires a separate 'Web application' OAuth "
+            "client with an Authorized JavaScript origin — a Desktop-type client (like the "
+            "one used for Gmail) cannot be reused for this."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
@@ -61,10 +110,11 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Finance Tracker Application")
     logger.info("Creating database tables...")
     _bootstrap_schema()
+    _validate_google_config()
     logger.info("Application started successfully")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down Finance Tracker Application")
 
@@ -120,6 +170,15 @@ def _ensure_columns() -> None:
     if "auto_rules" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("auto_rules")}
         _add_column_if_missing(columns, "notify_discord", "ALTER TABLE auto_rules ADD COLUMN notify_discord BOOLEAN DEFAULT FALSE")
+
+    if "notification_rules" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("notification_rules")}
+        _add_column_if_missing(columns, "keyword_negate", "ALTER TABLE notification_rules ADD COLUMN keyword_negate BOOLEAN DEFAULT FALSE")
+        _add_column_if_missing(columns, "amount_operator", "ALTER TABLE notification_rules ADD COLUMN amount_operator VARCHAR(10) DEFAULT 'none'")
+        _add_column_if_missing(columns, "amount_value", "ALTER TABLE notification_rules ADD COLUMN amount_value FLOAT")
+        _add_column_if_missing(columns, "amount_value_max", "ALTER TABLE notification_rules ADD COLUMN amount_value_max FLOAT")
+        _add_column_if_missing(columns, "amount_negate", "ALTER TABLE notification_rules ADD COLUMN amount_negate BOOLEAN DEFAULT FALSE")
+        _add_column_if_missing(columns, "condition_logic", "ALTER TABLE notification_rules ADD COLUMN condition_logic VARCHAR(3) DEFAULT 'and'")
 
     # Widen columns that now hold encrypted values (ciphertext is longer than plaintext).
     _widen_to_text(inspector, existing_tables, "users", "avatar_url")  # holds base64 data URLs

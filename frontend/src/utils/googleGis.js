@@ -18,26 +18,3 @@ export const loadGis = () =>
     s.onerror = reject;
     document.body.appendChild(s);
   });
-
-// Prompt the user for a short-lived OAuth access token for the given scope.
-export const requestAccessToken = (clientId, scope = 'https://www.googleapis.com/auth/drive.file') =>
-  new Promise((resolve, reject) => {
-    loadGis()
-      .then(() => {
-        if (!window.google?.accounts?.oauth2) {
-          reject(new Error('Google Identity Services unavailable'));
-          return;
-        }
-        const client = window.google.accounts.oauth2.initTokenClient({
-          client_id: clientId,
-          scope,
-          callback: (resp) => {
-            if (resp && resp.access_token) resolve(resp.access_token);
-            else reject(new Error(resp?.error || 'Authorization was cancelled'));
-          },
-          error_callback: (err) => reject(new Error(err?.message || 'Authorization failed')),
-        });
-        client.requestAccessToken();
-      })
-      .catch(reject);
-  });

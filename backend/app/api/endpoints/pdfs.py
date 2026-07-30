@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
@@ -55,6 +55,13 @@ def _parse_bool_list(value) -> List[bool]:
     return result
 
 
+_PDF_SORT_FIELDS = (
+    "id", "bank_name", "from_email", "file_name",
+    "statement_period_start", "statement_period_end",
+    "transaction_count", "is_processed", "created_at",
+)
+
+
 @router.get("/")
 def get_pdfs(
     bank_id: Optional[str] = None,
@@ -62,16 +69,21 @@ def get_pdfs(
     from_email: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
+    sort_by: str = Query("id", pattern="^(" + "|".join(_PDF_SORT_FIELDS) + ")$"),
+    sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get list of PDF statements with details"""
+    """Get list of PDF statements with details, sortable on any column (including
+    the computed bank_name/transaction_count, which aren't real DB columns — the
+    per-user PDF count is small enough that sorting/paginating in Python here is
+    simpler and just as fast as pushing a partial sort into SQL)."""
     # Get user's Gmail accounts
     gmail_accounts = db.query(GmailAccount).filter(
         GmailAccount.user_id == current_user.id
     ).all()
     gmail_account_ids = [ga.id for ga in gmail_accounts]
-    
+
     # Get bank emails
     query = db.query(BankEmail).filter(
         BankEmail.gmail_account_id.in_(gmail_account_ids)
@@ -81,37 +93,39 @@ def get_pdfs(
         query = query.filter(BankEmail.bank_id.in_(bank_ids))
     if from_email:
         query = query.filter(BankEmail.from_email.ilike(f"%{from_email}%"))
-    
+
     bank_email_map = {be.id: be for be in query.all()}
     bank_email_ids = list(bank_email_map.keys())
-    
+
     # Get PDFs
     pdf_query = db.query(PDFStatement).filter(
         PDFStatement.bank_email_id.in_(bank_email_ids)
     )
-    
+
     processed_filters = _parse_bool_list(is_processed)
     if processed_filters:
         pdf_query = pdf_query.filter(PDFStatement.is_processed.in_(processed_filters))
-    
-    total = pdf_query.count()
-    pdfs = pdf_query.order_by(PDFStatement.id.desc()).offset(skip).limit(limit).all()
-    
-    # Build response with bank info (batch-load banks to avoid N+1)
+
+    all_pdfs = pdf_query.order_by(PDFStatement.id.desc()).all()
+
+    # Build response with bank info (batch-load banks + transaction counts to avoid N+1)
     bank_ids_needed = {bank_email_map[pdf.bank_email_id].bank_id
-                       for pdf in pdfs if pdf.bank_email_id in bank_email_map}
+                       for pdf in all_pdfs if pdf.bank_email_id in bank_email_map}
     banks_by_id = {b.id: b for b in db.query(Bank).filter(Bank.id.in_(bank_ids_needed)).all()}
 
+    pdf_ids = [p.id for p in all_pdfs]
+    tx_counts = dict(
+        db.query(Transaction.pdf_statement_id, func.count(Transaction.id))
+        .filter(Transaction.pdf_statement_id.in_(pdf_ids))
+        .group_by(Transaction.pdf_statement_id)
+        .all()
+    ) if pdf_ids else {}
+
     items = []
-    for pdf in pdfs:
+    for pdf in all_pdfs:
         bank_email = bank_email_map.get(pdf.bank_email_id)
         bank = banks_by_id.get(bank_email.bank_id) if bank_email else None
-        
-        # Count transactions from this PDF
-        transaction_count = db.query(Transaction).filter(
-            Transaction.pdf_statement_id == pdf.id
-        ).count()
-        
+
         items.append({
             "id": pdf.id,
             "file_name": pdf.file_name,
@@ -127,11 +141,26 @@ def get_pdfs(
             "bank_id": bank.id if bank else None,
             "from_email": bank_email.from_email if bank_email else None,
             "email_subject": bank_email.subject if bank_email else None,
-            "transaction_count": transaction_count
+            "transaction_count": tx_counts.get(pdf.id, 0),
         })
-    
+
+    # Sort with nulls always last (regardless of direction) — a missing bank_name or
+    # statement_period shouldn't jump to the top just because the direction flipped.
+    def _key(it):
+        v = it.get(sort_by)
+        return v.lower() if isinstance(v, str) else v
+
+    reverse = sort_dir == "desc"
+    with_value = [it for it in items if it.get(sort_by) is not None]
+    without_value = [it for it in items if it.get(sort_by) is None]
+    with_value.sort(key=_key, reverse=reverse)
+    items = with_value + without_value
+
+    total = len(items)
+    page_items = items[skip: skip + limit]
+
     return {
-        "items": items,
+        "items": page_items,
         "total": total,
         "skip": skip,
         "limit": limit

@@ -74,6 +74,19 @@ def send_test_message(db: Session, uid: int) -> Tuple[bool, str]:
         return False, str(e)[:200]
 
 
+def send_discord_message(db: Session, uid: int, title: str, description: str) -> bool:
+    """Best-effort, transaction-agnostic Discord post — used by notification rules
+    (both 'match' and 'absence' triggers, the latter having no specific transaction
+    to describe). Returns False (no exception) if no webhook is configured."""
+    url = get_webhook(db, uid)
+    if not url:
+        return False
+    embed = {"title": title[:256], "description": description[:4000], "color": 0x1AA565}
+    r = httpx.post(url, json={"embeds": [embed]}, timeout=10)
+    r.raise_for_status()
+    return True
+
+
 def send_rule_match_notification(db: Session, uid: int, transaction, rule) -> bool:
     """Best-effort: post a message about a transaction that matched a rule with
     notify_discord=True. Never raises — failures are logged and swallowed so a

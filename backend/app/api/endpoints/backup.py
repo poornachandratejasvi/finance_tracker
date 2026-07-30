@@ -16,7 +16,7 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -29,13 +29,16 @@ from app.core.time_utils import utcnow
 from app.api.endpoints.auth import get_current_active_user
 # Reuse the signed, user-bound OAuth state helpers from the oauth module.
 from app.api.endpoints.oauth import _make_oauth_state, _read_oauth_state
-from app.models.models import User, AppSetting
+from app.models.models import User, UserRole, AppSetting
 from app.services import backup_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.file']
+DRIVE_SCOPES = [
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/tasks',
+]
 
 VALID_FREQUENCIES = ("hourly", "daily", "weekly")
 VALID_DESTINATIONS = ("local", "drive")
@@ -110,6 +113,8 @@ def _get_history(db: Session, uid: int) -> list:
 
 
 def _drive_connected(db: Session, uid: int) -> bool:
+    """True if the offline (credentials.json, refresh-token) Drive OAuth is connected —
+    this is the only Drive auth mechanism now; it also powers scheduled backups."""
     creds = _get_json(db, _creds_key(uid), None)
     return isinstance(creds, dict) and bool(creds)
 
@@ -210,41 +215,6 @@ def run_backup(
         raise HTTPException(status_code=500, detail="Backup failed")
 
 
-class DriveTokenRunRequest(BaseModel):
-    access_token: str  # short-lived GIS access token (drive.file scope) from the browser
-
-
-@router.post("/run-drive-token")
-def run_backup_with_drive_token(
-    payload: DriveTokenRunRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    """Client-ID-only Drive backup: the browser obtains a short-lived Drive access
-    token via Google Identity Services and posts it here; the server uploads the
-    snapshot with it. No client secret / credentials.json / refresh token involved."""
-    if not payload.access_token:
-        raise HTTPException(status_code=400, detail="Missing Google access token")
-    filename, data = backup_service.create_snapshot(db)
-    backup_service.save_local(filename, data)
-    try:
-        drive_file_id = backup_service.upload_to_drive({"token": payload.access_token}, filename, data)
-    except Exception as exc:
-        logger.error("Drive (token) upload failed for user %s: %s", current_user.id, exc, exc_info=True)
-        raise HTTPException(status_code=502, detail=f"Drive upload failed: {str(exc)[:150]}")
-    entry = {
-        "filename": filename,
-        "size": len(data),
-        "destination": "drive",
-        "drive_file_id": drive_file_id,
-        "created_at": utcnow().isoformat(),
-    }
-    history = _get_history(db, current_user.id)
-    history.insert(0, entry)
-    _set_json(db, _hist_key(current_user.id), history[:HISTORY_CAP])
-    return entry
-
-
 @router.get("/history")
 def backup_history(
     db: Session = Depends(get_db),
@@ -252,6 +222,21 @@ def backup_history(
 ):
     """Return the user's backup history, newest first."""
     return _get_history(db, current_user.id)
+
+
+def _safe_local_path(filename: str) -> str:
+    """Resolve a backup filename to a path inside the backups dir, rejecting any
+    path traversal attempt. Shared by download/restore."""
+    if (
+        not filename
+        or "/" in filename
+        or "\\" in filename
+        or os.path.sep in filename
+        or (os.path.altsep and os.path.altsep in filename)
+        or ".." in filename
+    ):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    return os.path.join(backup_service.backups_dir(), filename)
 
 
 @router.get("/download/{filename}")
@@ -262,24 +247,72 @@ def download_backup(
 ):
     """Download a local backup file. Rejects path traversal and only serves files
     recorded in the requesting user's own history."""
-    if (
-        not filename
-        or "/" in filename
-        or "\\" in filename
-        or os.path.sep in filename
-        or (os.path.altsep and os.path.altsep in filename)
-        or ".." in filename
-    ):
-        raise HTTPException(status_code=400, detail="Invalid filename")
+    path = _safe_local_path(filename)
 
     # Only allow files that belong to this user (prevents cross-user access to the
     # shared backups directory).
     owned = any(e.get("filename") == filename for e in _get_history(db, current_user.id))
-    path = os.path.join(backup_service.backups_dir(), filename)
     if not owned or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Backup not found")
 
     return FileResponse(path, media_type="application/gzip", filename=filename)
+
+
+def _require_admin(current_user: User) -> None:
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
+class RestoreRequest(BaseModel):
+    filename: str
+
+
+@router.post("/restore")
+def restore_backup(
+    payload: RestoreRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Restore the ENTIRE application database from a local backup snapshot.
+
+    DESTRUCTIVE and NOT scoped to a single user — a snapshot contains every
+    table for every user, so this replaces the whole app's data, not just the
+    requesting user's. Admin-only for that reason. The file must still exist
+    locally (every backup is always saved locally regardless of destination —
+    see perform_backup — but the local retention cap prunes the oldest ones)."""
+    _require_admin(current_user)
+    path = _safe_local_path(payload.filename)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Backup file not found on this server")
+    try:
+        with open(path, "rb") as fh:
+            data = fh.read()
+        result = backup_service.restore_snapshot(db, data)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Restore from %s failed: %s", payload.filename, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Restore failed: {str(exc)[:200]}")
+    return result
+
+
+@router.post("/restore-upload")
+async def restore_backup_upload(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Restore from an uploaded .json.gz snapshot (e.g. a backup downloaded earlier
+    or copied from another server). Same destructive/admin-only semantics as
+    /restore — see its docstring."""
+    _require_admin(current_user)
+    data = await file.read()
+    try:
+        result = backup_service.restore_snapshot(db, data)
+    except Exception as exc:
+        logger.error("Restore from upload failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Restore failed: {str(exc)[:200]}")
+    return result
 
 
 @router.get("/config")
@@ -396,6 +429,6 @@ def google_disconnect(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Forget the stored Drive credentials for the current user."""
+    """Forget the stored Drive OAuth credentials for the current user."""
     _delete_key(db, _creds_key(current_user.id))
     return {"success": True, "drive_connected": False}

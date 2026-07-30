@@ -31,7 +31,15 @@ def run_sync_task(
 
 def _is_due(sched, now: datetime) -> bool:
     """Decide whether a schedule should fire now, using last_run_at as an idempotency
-    guard (the dispatcher runs every minute)."""
+    guard (the dispatcher runs every minute).
+
+    Catch-up: daily/weekly schedules only fire at an exact hour (or day+hour), so if
+    beat/worker was down through that window (server stopped, restarted, etc.) the
+    schedule would otherwise sit idle until the exact time rolls around again — up to
+    a full day (or week) later. Once a schedule is overdue by more than one full period
+    + a buffer, fire on the next dispatch regardless of hour, so restarting the stack
+    catches up immediately instead of silently waiting.
+    """
     last = sched.last_run_at
     freq = (sched.frequency or "daily").lower()
     if freq == "hourly":
@@ -39,10 +47,14 @@ def _is_due(sched, now: datetime) -> bool:
     if freq == "every4h":
         return last is None or (now - last) >= timedelta(hours=4)
     if freq == "daily":
+        if last is not None and (now - last) >= timedelta(hours=25):
+            return True
         if now.hour != (sched.hour or 0):
             return False
         return last is None or last.date() < now.date()
     if freq == "weekly":
+        if last is not None and (now - last) >= timedelta(days=7, hours=1):
+            return True
         if now.isoweekday() != (sched.day_of_week or 1) or now.hour != (sched.hour or 0):
             return False
         return last is None or (now - last) >= timedelta(days=6)

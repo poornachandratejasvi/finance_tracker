@@ -13,7 +13,7 @@ celery_app = Celery(
     "finance_tracker",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.sync_tasks", "app.tasks.backup_tasks"],
+    include=["app.tasks.sync_tasks", "app.tasks.backup_tasks", "app.tasks.notification_tasks"],
 )
 
 celery_app.conf.update(
@@ -39,5 +39,12 @@ celery_app.conf.beat_schedule = {
     "auto-backup-dispatch": {
         "task": "backup.dispatch_scheduled",
         "schedule": 60.0,
+    },
+    # 'Absence' notification rules only need checking once a day (they fire at most
+    # once per calendar month per rule, guarded by last_triggered_month) — every few
+    # hours is a cheap safety margin against a missed run, not a tighter real check.
+    "notification-absence-check": {
+        "task": "notifications.check_absence",
+        "schedule": 4 * 60 * 60.0,
     },
 }

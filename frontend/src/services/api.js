@@ -131,9 +131,6 @@ export const googleVerify = async (credential) => {
   return response.data;
 };
 
-// Client-ID-only Drive backup: upload the snapshot using a browser access token.
-export const runBackupWithDriveToken = async (accessToken) =>
-  (await api.post('/api/backup/run-drive-token', { access_token: accessToken })).data;
 
 export const getCurrentUser = async () => {
   const response = await api.get('/api/users/me');
@@ -293,6 +290,11 @@ export const getBackendLogs = async (lines = 100) => {
 
 export const getSystemInfo = async () => {
   const response = await api.get('/api/logs/system');
+  return response.data;
+};
+
+export const getContainerLogs = async (lines = 100) => {
+  const response = await api.get(`/api/logs/containers?lines=${lines}`);
   return response.data;
 };
 
@@ -590,6 +592,14 @@ export const previewRuleMatches = async ({ keywords, record_type, limit = 200 })
 // Apply a rule's category + labels to specific record ids
 export const applyRuleToSelected = async ({ transaction_ids, category, label_ids }) =>
   (await api.post('/api/rules/apply-selected', { transaction_ids, category, label_ids })).data;
+
+// Notification Rules (multi-channel keyword-match / missing-transaction alerting)
+export const getNotificationRules = async () => (await api.get('/api/notification-rules/')).data;
+export const createNotificationRule = async (data) => (await api.post('/api/notification-rules/', data)).data;
+export const updateNotificationRule = async (id, data) => (await api.put(`/api/notification-rules/${id}`, data)).data;
+export const deleteNotificationRule = async (id) => { await api.delete(`/api/notification-rules/${id}`); };
+export const testNotificationRule = async (id) => (await api.post(`/api/notification-rules/${id}/test`)).data;
+export const checkAbsenceNotificationsNow = async () => (await api.post('/api/notification-rules/check-absence-now')).data;
 // Apply a rule's category + labels to EVERY matching record (not just the previewed
 // page) — the server re-runs the match query, so this scales beyond the preview cap.
 export const applyRuleToAllMatching = async ({ keywords, record_type, category, label_ids }) =>
@@ -708,6 +718,13 @@ export const downloadBackup = async (filename) => {
   a.click();
   a.remove();
   window.URL.revokeObjectURL(url);
+};
+// Restore — DESTRUCTIVE, replaces the entire app database. Admin-only on the server.
+export const restoreBackup = async (filename) => (await api.post('/api/backup/restore', { filename })).data;
+export const restoreBackupUpload = async (file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return (await api.post('/api/backup/restore-upload', form, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
 };
 
 export default api;

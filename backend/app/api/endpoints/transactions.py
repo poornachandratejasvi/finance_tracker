@@ -276,7 +276,13 @@ def create_transaction(
                 discord_service.send_rule_match_notification(db, current_user.id, transaction, rule)
     except Exception:
         db.rollback()
-    
+
+    try:
+        from app.services.notification_rules import check_match
+        check_match(db, current_user.id, transaction)
+    except Exception:
+        db.rollback()
+
     # Build response with bank name and labels
     trans_dict = TransactionResponse.from_orm(transaction).dict()
     trans_dict['bank_name'] = transaction.bank.name if transaction.bank else None

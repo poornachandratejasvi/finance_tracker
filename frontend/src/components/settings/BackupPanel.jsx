@@ -1,19 +1,21 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Box, Paper, Typography, Button, IconButton, Alert, Chip, Divider, Link, Stack,
+  Box, Paper, Typography, Button, IconButton, Alert, Chip, Divider, Stack,
   Table, TableHead, TableRow, TableCell, TableBody, TableContainer,
   TextField, MenuItem, FormControlLabel, Switch, CircularProgress, Tooltip,
+  Dialog, DialogTitle, DialogContent, DialogActions, DialogContentText,
 } from '@mui/material';
 import {
   CloudDone, CloudOff, CloudUpload, Backup as BackupIcon, Save, Download, Refresh, LinkOff,
+  RestoreOutlined, UploadFile, WarningAmber,
 } from '@mui/icons-material';
 import {
   getBackupStatus, runBackup, getBackupHistory, getBackupConfig,
-  saveBackupConfig, disconnectDrive, downloadBackup,
-  getGoogleClientId, runBackupWithDriveToken,
+  saveBackupConfig, disconnectDrive, downloadBackup, getDriveAuthUrl, startSync,
+  restoreBackup, restoreBackupUpload,
 } from '../../services/api';
-import { requestAccessToken } from '../../utils/googleGis';
 import { formatDate } from '../../utils/format';
+import { useAuth } from '../../contexts/AuthContext';
 
 const FREQUENCIES = ['hourly', 'daily', 'weekly'];
 
@@ -38,6 +40,9 @@ const apiError = (e, fallback) => {
 };
 
 export default function BackupPanel() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+
   const [status, setStatus] = useState(null);
   const [history, setHistory] = useState([]);
   const [config, setConfig] = useState({ enabled: false, frequency: 'daily', destination: 'local' });
@@ -51,6 +56,14 @@ export default function BackupPanel() {
   const [savingCfg, setSavingCfg] = useState(false);
   const [driveBackingUp, setDriveBackingUp] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
+  const [syncingAndBackingUp, setSyncingAndBackingUp] = useState(false);
+
+  // Restore (destructive, admin-only) — confirm dialog requires typing RESTORE.
+  const [restoreTarget, setRestoreTarget] = useState(null); // { filename } | { file: File }
+  const [restoreConfirmText, setRestoreConfirmText] = useState('');
+  const [restoring, setRestoring] = useState(false);
+  const fileInputRef = useRef(null);
 
   const connected = !!status?.drive_connected;
 
@@ -82,24 +95,41 @@ export default function BackupPanel() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Client-ID-only manual Drive backup: get a Drive access token in the browser
-  // (GIS) and let the server upload the snapshot with it. No secret / credentials.json.
-  const handleDriveTokenBackup = async () => {
+  // Offline Drive connection: reuses the same credentials.json OAuth client as Gmail
+  // (different scope grant, requested separately). This is a real, persistent
+  // refresh-token connection — it can power scheduled/unattended backups, unlike a
+  // browser-only sign-in. Google redirects the browser away and back via
+  // /api/backup/google/callback -> /settings?drive_connected=1 (handled in Settings.js).
+  const handleConnectGoogle = async () => {
+    setConnectingGoogle(true);
+    setError('');
+    try {
+      const { auth_url, configured } = await getDriveAuthUrl();
+      if (!configured || !auth_url) {
+        setError('Google Drive is not configured (credentials.json missing on the server).');
+        return;
+      }
+      window.location.href = auth_url;
+    } catch (e) {
+      setError(apiError(e, 'Could not start the Google Drive connection.'));
+      setConnectingGoogle(false);
+    }
+  };
+
+  const handleDriveBackup = async () => {
     setDriveBackingUp(true);
     setError('');
     setSuccess('');
     try {
-      const { client_id, configured } = await getGoogleClientId();
-      if (!configured || !client_id) {
-        setError('Google is not configured. Set GOOGLE_CLIENT_ID on the server (Settings → AI / env).');
-        return;
+      const entry = await runBackup({ destination: 'drive' });
+      if (entry?.destination !== 'drive') {
+        setError('Drive upload failed — kept a local copy instead.');
+      } else {
+        setSuccess(`Backed up to Google Drive (${humanSize(entry?.size)}).`);
       }
-      const token = await requestAccessToken(client_id, 'https://www.googleapis.com/auth/drive.file');
-      const entry = await runBackupWithDriveToken(token);
-      setSuccess(`Backed up to Google Drive (${humanSize(entry?.size)}).`);
       await load();
     } catch (e) {
-      setError(apiError(e, e?.message || 'Google Drive backup failed.'));
+      setError(apiError(e, 'Google Drive backup failed.'));
     } finally {
       setDriveBackingUp(false);
     }
@@ -116,6 +146,34 @@ export default function BackupPanel() {
       setError(apiError(e, 'Could not disconnect Google Drive.'));
     } finally {
       setDisconnecting(false);
+    }
+  };
+
+  // One click: sync Gmail (existing linked account) and back up to Drive together.
+  const handleSyncAndBackup = async () => {
+    setSyncingAndBackingUp(true);
+    setError('');
+    setSuccess('');
+    const results = [];
+    try {
+      try {
+        await startSync({ gmail_account_id: null, sync_type: 'incremental' });
+        results.push('Gmail sync started');
+      } catch (e) {
+        results.push(`Gmail sync failed: ${apiError(e, 'unknown error')}`);
+      }
+      try {
+        const entry = await runBackup({ destination: 'drive' });
+        results.push(entry?.destination === 'drive'
+          ? `Drive backup done (${humanSize(entry?.size)})`
+          : 'Drive backup failed — kept a local copy');
+      } catch (e) {
+        results.push(`Drive backup failed: ${apiError(e, 'unknown error')}`);
+      }
+      setSuccess(results.join(' · '));
+      await load();
+    } finally {
+      setSyncingAndBackingUp(false);
     }
   };
 
@@ -162,6 +220,45 @@ export default function BackupPanel() {
     }
   };
 
+  const closeRestoreDialog = () => {
+    if (restoring) return;
+    setRestoreTarget(null);
+    setRestoreConfirmText('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleFileChosen = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setRestoreTarget({ file });
+      setRestoreConfirmText('');
+    }
+  };
+
+  const handleConfirmRestore = async () => {
+    if (!restoreTarget || restoreConfirmText !== 'RESTORE') return;
+    setRestoring(true);
+    setError('');
+    setSuccess('');
+    try {
+      const result = restoreTarget.file
+        ? await restoreBackupUpload(restoreTarget.file)
+        : await restoreBackup(restoreTarget.filename);
+      const totalRows = Object.values(result.row_counts || {}).reduce((a, b) => a + b, 0);
+      setSuccess(
+        `Restore complete: ${result.tables_restored} table(s), ${totalRows} row(s) restored from the ` +
+        `snapshot taken ${result.generated_at ? formatDate(result.generated_at) : 'at an earlier time'}. ` +
+        `Reload the app to see the restored data.`
+      );
+      closeRestoreDialog();
+      await load();
+    } catch (e) {
+      setError(apiError(e, 'Restore failed.'));
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -193,28 +290,47 @@ export default function BackupPanel() {
           {connected
             ? <CloudDone color="primary" sx={{ fontSize: 40 }} />
             : <CloudOff color="disabled" sx={{ fontSize: 40 }} />}
-          <Box sx={{ flexGrow: 1, minWidth: 180 }}>
+          <Box sx={{ flexGrow: 1, minWidth: 220 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Google Drive</Typography>
               <Chip
                 size="small"
-                label={connected ? 'Connected' : 'Not connected'}
+                label={connected ? 'Connected — scheduled backups enabled' : 'Not connected'}
                 color={connected ? 'success' : 'default'}
                 variant={connected ? 'filled' : 'outlined'}
               />
             </Box>
             <Typography variant="body2" color="text.secondary">
-              Back up to your Google Drive with one click — sign in with Google (Client ID only).
+              Reuses the same Google OAuth client as your Gmail connection (separate consent,
+              Drive-file-only access). This is a real, persistent connection — it can run
+              scheduled/unattended backups, not just while you're in the browser.
             </Typography>
           </Box>
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button
-              variant="contained" color="primary"
-              startIcon={driveBackingUp ? <CircularProgress size={16} color="inherit" /> : <CloudUpload />}
-              disabled={driveBackingUp} onClick={handleDriveTokenBackup}
+              variant={connected ? 'outlined' : 'contained'} color="primary"
+              disabled={connectingGoogle} onClick={handleConnectGoogle}
             >
-              {driveBackingUp ? 'Uploading…' : 'Back up to Google Drive'}
+              {connectingGoogle ? 'Connecting…' : connected ? 'Reconnect Google Drive' : 'Connect Google Drive'}
             </Button>
+            {connected && (
+              <Button
+                variant="contained" color="primary"
+                startIcon={syncingAndBackingUp ? <CircularProgress size={16} color="inherit" /> : <CloudUpload />}
+                disabled={syncingAndBackingUp} onClick={handleSyncAndBackup}
+              >
+                {syncingAndBackingUp ? 'Working…' : 'Sync Gmail & Backup Now'}
+              </Button>
+            )}
+            {connected && (
+              <Button
+                variant="outlined" color="primary"
+                startIcon={driveBackingUp ? <CircularProgress size={16} color="inherit" /> : <CloudUpload />}
+                disabled={driveBackingUp} onClick={handleDriveBackup}
+              >
+                {driveBackingUp ? 'Uploading…' : 'Back up to Drive only'}
+              </Button>
+            )}
             {connected && (
               <Button
                 variant="outlined" color="error" startIcon={<LinkOff />}
@@ -226,10 +342,11 @@ export default function BackupPanel() {
           </Stack>
         </Box>
         <Alert severity="info" icon={false} sx={{ mt: 2 }}>
-          Manual Drive backup uses "Sign in with Google" (your public Client ID only — no
-          <code> credentials.json</code>). You'll grant Drive access, then this snapshot uploads
-          to a <strong>FinanceTrackerBackups</strong> folder. Automatic/scheduled Drive uploads
-          need offline access (advanced); otherwise scheduled backups run locally.
+          "Connect Google Drive" opens Google's consent screen once; after that, both manual and
+          scheduled backups upload into a <strong>FinanceTrackerBackups</strong> Drive folder with no
+          further prompts. Uses the same <code>credentials.json</code> already set up for Gmail —
+          nothing new to configure in Google Cloud Console. This same connection also enables the
+          "Create a Google Task" channel in Settings → Notification Rules.
         </Alert>
       </Paper>
 
@@ -304,6 +421,31 @@ export default function BackupPanel() {
         </Button>
       </Paper>
 
+      {/* Restore from an uploaded snapshot file (admin-only, destructive) */}
+      {isAdmin && (
+        <Paper variant="outlined" sx={{ p: 2.5, mb: 3 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>Restore</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Restore replaces the ENTIRE database (every user's data) with the contents of a
+            snapshot — either from the history below or a <code>.json.gz</code> file you
+            previously downloaded. This cannot be undone except by restoring another backup.
+          </Typography>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".gz,.json.gz,application/gzip"
+            style={{ display: 'none' }}
+            onChange={handleFileChosen}
+          />
+          <Button
+            variant="outlined" color="warning" startIcon={<UploadFile />}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Restore from uploaded file…
+          </Button>
+        </Paper>
+      )}
+
       {/* History */}
       <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
         <Box sx={{ p: 2, pb: 1 }}>
@@ -318,12 +460,13 @@ export default function BackupPanel() {
                 <TableCell>Destination</TableCell>
                 <TableCell>Created</TableCell>
                 <TableCell align="right">Download</TableCell>
+                {isAdmin && <TableCell align="right">Restore</TableCell>}
               </TableRow>
             </TableHead>
             <TableBody>
               {history.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={isAdmin ? 6 : 5}>
                     <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
                       No backups yet.
                     </Typography>
@@ -357,6 +500,18 @@ export default function BackupPanel() {
                         <Typography variant="caption" color="text.secondary">On Drive</Typography>
                       )}
                     </TableCell>
+                    {isAdmin && (
+                      <TableCell align="right">
+                        <Tooltip title="Restore the entire database from this backup">
+                          <IconButton
+                            size="small" color="warning"
+                            onClick={() => { setRestoreTarget({ filename: h.filename }); setRestoreConfirmText(''); }}
+                          >
+                            <RestoreOutlined fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}
@@ -364,6 +519,44 @@ export default function BackupPanel() {
           </Table>
         </TableContainer>
       </Paper>
+
+      {/* Restore confirmation dialog — type RESTORE to arm the destructive action */}
+      <Dialog open={!!restoreTarget} onClose={closeRestoreDialog} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WarningAmber color="warning" />
+          Restore database
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            This replaces ALL current data (every user, every transaction, every setting) with the
+            contents of{' '}
+            <strong>{restoreTarget?.filename || restoreTarget?.file?.name || 'this backup'}</strong>.
+            Anything created or changed since that snapshot was taken will be lost. This cannot be
+            undone except by restoring a different backup.
+          </Alert>
+          <DialogContentText sx={{ mb: 1 }}>
+            Type <strong>RESTORE</strong> to confirm.
+          </DialogContentText>
+          <TextField
+            fullWidth autoFocus size="small"
+            value={restoreConfirmText}
+            onChange={(e) => setRestoreConfirmText(e.target.value)}
+            placeholder="RESTORE"
+            disabled={restoring}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={closeRestoreDialog} disabled={restoring}>Cancel</Button>
+          <Button
+            variant="contained" color="warning"
+            startIcon={restoring ? <CircularProgress size={16} color="inherit" /> : <RestoreOutlined />}
+            disabled={restoring || restoreConfirmText !== 'RESTORE'}
+            onClick={handleConfirmRestore}
+          >
+            {restoring ? 'Restoring…' : 'Restore database'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

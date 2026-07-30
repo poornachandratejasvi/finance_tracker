@@ -32,6 +32,7 @@ import {
   Description,
   Label as LabelIcon,
   Rule,
+  NotificationsActive,
   Person,
   Api,
   People,
@@ -46,6 +47,7 @@ import {
   Launch,
   DeleteSweep,
   AutoAwesome,
+  Terminal,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -63,9 +65,11 @@ import CategoriesPanel from '../components/settings/CategoriesPanel';
 import TemplatesPanel from '../components/settings/TemplatesPanel';
 import LabelsPanel from '../components/settings/LabelsPanel';
 import AutomaticRulesPanel from '../components/settings/AutomaticRulesPanel';
+import NotificationRulesPanel from '../components/settings/NotificationRulesPanel';
 import UsersPanel from '../components/settings/UsersPanel';
 import BackupPanel from '../components/settings/BackupPanel';
 import AIPanel from '../components/settings/AIPanel';
+import LogsPanel from '../components/settings/LogsPanel';
 
 const NAV_WIDTH = 230;
 
@@ -544,6 +548,7 @@ const NAV_SECTIONS = [
       { key: 'templates', label: 'Templates', icon: <Description /> },
       { key: 'labels', label: 'Labels', icon: <LabelIcon /> },
       { key: 'rules', label: 'Automatic Rules', icon: <Rule /> },
+      { key: 'notification-rules', label: 'Notification Rules', icon: <NotificationsActive /> },
     ],
   },
   {
@@ -555,6 +560,7 @@ const NAV_SECTIONS = [
       { key: 'users', label: 'Users', icon: <People />, adminOnly: true },
       { key: 'backup', label: 'Backup', icon: <BackupIcon /> },
       { key: 'mcp', label: 'MCP Server', icon: <Dns /> },
+      { key: 'logs', label: 'Application Logs', icon: <Terminal />, adminOnly: true },
       { key: 'billing', label: 'Billing', icon: <CreditCard /> },
       { key: 'privacy', label: 'Personal data & privacy', icon: <PrivacyTip /> },
       { key: 'help', label: 'Help', icon: <HelpOutline /> },
@@ -596,6 +602,8 @@ function Settings() {
         return <LabelsPanel />;
       case 'rules':
         return <AutomaticRulesPanel />;
+      case 'notification-rules':
+        return <NotificationRulesPanel />;
       case 'users':
         return isAdmin ? <UsersPanel /> : <GeneralPanel setSuccess={setSuccess} setError={setError} />;
       case 'backup':
@@ -606,6 +614,8 @@ function Settings() {
         return <RestApiPanel />;
       case 'mcp':
         return <McpPanel />;
+      case 'logs':
+        return isAdmin ? <LogsPanel /> : <GeneralPanel setSuccess={setSuccess} setError={setError} />;
       case 'billing':
         return <BillingPanel />;
       case 'privacy':

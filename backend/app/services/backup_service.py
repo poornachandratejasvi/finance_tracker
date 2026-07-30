@@ -13,6 +13,7 @@ import os
 import gzip
 import json
 import logging
+from typing import Optional
 
 from google.oauth2.credentials import Credentials
 
@@ -84,6 +85,60 @@ def save_local(filename: str, data: bytes) -> str:
     return path
 
 
+def restore_snapshot(db, data: bytes) -> dict:
+    """Restore every table from a gzip snapshot produced by ``create_snapshot``.
+
+    DESTRUCTIVE and NOT scoped to a single user — a snapshot contains every table
+    for every user, so this replaces the whole application's data. Deletes all
+    current rows in each backed-up table (children first, to satisfy foreign
+    keys), reinserts the snapshot's rows (parents first), then resets each
+    table's auto-increment sequence so future inserts don't collide with the
+    restored explicit ids. Runs in a single transaction: any failure rolls back
+    and leaves the live database exactly as it was.
+    """
+    raw = gzip.decompress(data)
+    payload = json.loads(raw)
+    tables_data = payload.get("tables") or {}
+    if not isinstance(tables_data, dict):
+        raise ValueError("Invalid backup file: missing 'tables'")
+
+    sorted_tables = Base.metadata.sorted_tables  # parents before children
+    row_counts = {}
+    try:
+        for table in reversed(sorted_tables):
+            if table.name in tables_data:
+                db.execute(table.delete())
+
+        for table in sorted_tables:
+            rows = tables_data.get(table.name)
+            if not rows:
+                continue
+            db.execute(table.insert(), rows)
+            row_counts[table.name] = len(rows)
+
+        from sqlalchemy import text as _text
+        for table in sorted_tables:
+            if "id" not in table.c or table.name not in tables_data:
+                continue
+            db.execute(_text(
+                f"SELECT setval(pg_get_serial_sequence('{table.name}', 'id'), "
+                f"COALESCE((SELECT MAX(id) FROM {table.name}), 1), "
+                f"(SELECT MAX(id) FROM {table.name}) IS NOT NULL)"
+            ))
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return {
+        "generated_at": payload.get("generated_at"),
+        "app_version": payload.get("app_version"),
+        "tables_restored": len(row_counts),
+        "row_counts": row_counts,
+    }
+
+
 def _prune_local(directory: str, keep: int = LOCAL_RETENTION) -> None:
     """Keep only the ``keep`` newest backup files in ``directory``."""
     try:
@@ -100,6 +155,22 @@ def _prune_local(directory: str, keep: int = LOCAL_RETENTION) -> None:
                 logger.warning("Failed to prune old backup %s", stale, exc_info=True)
     except Exception:
         logger.warning("Backup pruning failed in %s", directory, exc_info=True)
+
+
+def get_drive_creds(db, uid: int) -> Optional[dict]:
+    """Read the stored offline Drive/Tasks OAuth credentials dict for a user (the
+    same one connected via /api/backup/google/auth-url), or None if not connected.
+    Shared accessor so other services (e.g. notification_rules) don't need to know
+    the AppSetting key convention backup.py uses."""
+    from app.models.models import AppSetting
+    import json as _json
+    row = db.query(AppSetting).filter(AppSetting.key == f"drive_creds:{uid}").first()
+    if not row or not row.value:
+        return None
+    try:
+        return _json.loads(row.value)
+    except Exception:
+        return None
 
 
 def _build_credentials(creds_dict: dict) -> Credentials:

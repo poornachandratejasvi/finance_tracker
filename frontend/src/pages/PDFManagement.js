@@ -3,7 +3,7 @@ import {
   Container, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Typography, Box, Button, Chip, Alert, CircularProgress, Grid, Card, CardContent,
   FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip, TablePagination, Checkbox,
-  TextField
+  TextField, TableSortLabel
 } from '@mui/material';
 import { Download, Refresh, CheckCircle, Error, Lock, Delete } from '@mui/icons-material';
 import { getPDFs, getPDFStats, reprocessPDF, reprocessAllPDFs, downloadPDF, getBanks, startSync, remapPDFBank, deletePDFsBySender } from '../services/api';
@@ -26,13 +26,23 @@ function PDFManagement() {
   const [passwordDialog, setPasswordDialog] = useState({ open: false, pdf: null });
   const [selectedPdfIds, setSelectedPdfIds] = useState([]);
   const [bulkBankId, setBulkBankId] = useState('');
+  const [sortBy, setSortBy] = useState('id');
+  const [sortDir, setSortDir] = useState('desc');
+
+  const handleSort = (field) => {
+    setPage(0);
+    setSortDir((prevDir) => (sortBy === field ? (prevDir === 'asc' ? 'desc' : 'asc') : 'desc'));
+    setSortBy(field);
+  };
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const params = {
         skip: page * rowsPerPage,
-        limit: rowsPerPage
+        limit: rowsPerPage,
+        sort_by: sortBy,
+        sort_dir: sortDir,
       };
       if (bankFilter.length) params.bank_id = bankFilter.join(',');
       if (statusFilter.length) params.is_processed = statusFilter.join(',');
@@ -54,7 +64,7 @@ function PDFManagement() {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, bankFilter, statusFilter, fromEmailFilter]);
+  }, [page, rowsPerPage, bankFilter, statusFilter, fromEmailFilter, sortBy, sortDir]);
 
   useEffect(() => {
     fetchData();
@@ -449,14 +459,26 @@ function PDFManagement() {
                   onChange={(e) => handleSelectAll(e.target.checked)}
                 />
               </TableCell>
-              <TableCell>ID</TableCell>
-              <TableCell>Bank</TableCell>
-              <TableCell>From Email</TableCell>
-              <TableCell>File Name</TableCell>
-              <TableCell>Period</TableCell>
-              <TableCell>Transactions</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Created</TableCell>
+              {[
+                { field: 'id', label: 'ID' },
+                { field: 'bank_name', label: 'Bank' },
+                { field: 'from_email', label: 'From Email' },
+                { field: 'file_name', label: 'File Name' },
+                { field: 'statement_period_start', label: 'Period' },
+                { field: 'transaction_count', label: 'Transactions' },
+                { field: 'is_processed', label: 'Status' },
+                { field: 'created_at', label: 'Created' },
+              ].map(({ field, label }) => (
+                <TableCell key={field} sortDirection={sortBy === field ? sortDir : false}>
+                  <TableSortLabel
+                    active={sortBy === field}
+                    direction={sortBy === field ? sortDir : 'asc'}
+                    onClick={() => handleSort(field)}
+                  >
+                    {label}
+                  </TableSortLabel>
+                </TableCell>
+              ))}
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>

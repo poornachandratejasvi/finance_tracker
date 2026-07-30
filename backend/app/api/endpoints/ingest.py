@@ -252,6 +252,12 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
     except Exception:
         db.rollback()
 
+    try:
+        from app.services.notification_rules import check_match
+        check_match(db, user.id, txn)
+    except Exception:
+        db.rollback()
+
     # Attach any labels named in the payload (match existing labels case-insensitively).
     if label_names:
         try:

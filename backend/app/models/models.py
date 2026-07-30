@@ -417,6 +417,53 @@ class CategoryRule(Base):
     user = relationship("User")
 
 
+class NotificationRule(Base):
+    """Richer alerting than AutoRule's simple Discord-on-match toggle: supports two
+    trigger types (a NEW transaction matching keywords, OR a keyword's expected
+    transaction being ABSENT this month) fanned out to any combination of Discord,
+    email, and a Google Task."""
+    __tablename__ = "notification_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(150), nullable=False)
+    trigger_type = Column(String(20), default="match")  # 'match' | 'absence'
+    keywords = Column(Text)          # JSON array of strings
+    keyword_negate = Column(Boolean, default=False)  # True: fires when keywords DON'T match
+    record_type = Column(String(10), default="any")  # any | debit | credit | transfer
+    bank_id = Column(Integer, ForeignKey("banks.id", ondelete="SET NULL"), nullable=True)
+
+    # Optional amount condition, combined with the keyword condition via condition_logic.
+    # operator: none | eq | gte | lte | between
+    amount_operator = Column(String(10), default="none")
+    amount_value = Column(Float)
+    amount_value_max = Column(Float)  # only used when amount_operator == 'between'
+    amount_negate = Column(Boolean, default=False)  # True: fires when the amount condition DOESN'T match
+
+    # How the keyword condition and amount condition combine when BOTH are configured.
+    # 'and' — both must match; 'or' — either matching is enough. Irrelevant (ignored)
+    # when only one of the two conditions is configured.
+    condition_logic = Column(String(3), default="and")  # 'and' | 'or'
+
+    # 'absence' trigger only: if no matching transaction has appeared THIS calendar
+    # month by this day, fire once (idempotency via last_triggered_month below).
+    check_day_of_month = Column(Integer, default=28)
+
+    notify_discord = Column(Boolean, default=False)
+    notify_email = Column(Boolean, default=False)
+    email_to = Column(String(255))
+    notify_task = Column(Boolean, default=False)  # create a Google Task
+
+    is_active = Column(Boolean, default=True)
+    last_triggered_at = Column(DateTime)
+    last_triggered_month = Column(String(7))  # "YYYY-MM" — absence-trigger idempotency guard
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")
+    bank = relationship("Bank")
+
+
 class AutoRule(Base):
     """Wallet-style automatic rule: when a transaction's description contains any of
     the keywords (optionally filtered by record type), assign a category and labels."""
