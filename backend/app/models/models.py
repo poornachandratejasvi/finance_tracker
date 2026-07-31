@@ -48,7 +48,15 @@ class GmailAccount(Base):
     is_active = Column(Boolean, default=True)
     last_synced = Column(DateTime)
     created_at = Column(DateTime, default=utcnow)
-    
+
+    # Health monitoring (periodic Celery beat check, see gmail_health_tasks.py).
+    last_checked_at = Column(DateTime)
+    last_error = Column(Text)
+    # Idempotency guard: only fire the reauth-needed notification once per outage,
+    # not on every health-check tick until the account is reconnected (which clears
+    # this back to None).
+    reauth_notified_at = Column(DateTime)
+
     # Relationships
     user = relationship("User", back_populates="gmail_accounts")
     bank_emails = relationship("BankEmail", back_populates="gmail_account")
@@ -251,6 +259,8 @@ class SyncLog(Base):
     current_bank = Column(String(150))
     started_at = Column(DateTime, default=utcnow)
     completed_at = Column(DateTime)
+
+    gmail_account = relationship("GmailAccount")
 
 
 class ApiToken(Base):

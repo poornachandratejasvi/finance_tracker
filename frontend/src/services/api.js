@@ -222,18 +222,28 @@ export const generateCSVForBank = async (bankId) => {
 };
 
 export const getGmailAccounts = async () => {
-  const response = await api.get('/api/banks/gmail-accounts/');
+  const response = await api.get('/api/gmail-accounts/');
   return response.data;
 };
 
 export const getGmailAccountsStatus = async () => {
-  const response = await api.get('/api/banks/gmail-accounts/status');
+  const response = await api.get('/api/gmail-accounts/status');
   return response.data;
 };
 
 export const getGmailAuthUrl = async () => {
   const response = await api.get('/api/oauth/gmail/auth-url');
   return response.data;
+};
+
+export const checkGmailAccountNow = async (id) => (await api.post(`/api/gmail-accounts/${id}/check-now`)).data;
+export const testGmailNotification = async (id) => (await api.post(`/api/gmail-accounts/${id}/test-notification`)).data;
+export const disconnectGmailAccount = async (id) => { await api.delete(`/api/gmail-accounts/${id}`); };
+export const getGoogleCredentialsStatus = async () => (await api.get('/api/gmail-accounts/google-credentials/status')).data;
+export const uploadGoogleCredentials = async (file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return (await api.post('/api/gmail-accounts/google-credentials', form, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
 };
 
 // Labels

@@ -171,6 +171,12 @@ def _ensure_columns() -> None:
         columns = {col["name"] for col in inspector.get_columns("auto_rules")}
         _add_column_if_missing(columns, "notify_discord", "ALTER TABLE auto_rules ADD COLUMN notify_discord BOOLEAN DEFAULT FALSE")
 
+    if "gmail_accounts" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("gmail_accounts")}
+        _add_column_if_missing(columns, "last_checked_at", "ALTER TABLE gmail_accounts ADD COLUMN last_checked_at TIMESTAMP")
+        _add_column_if_missing(columns, "last_error", "ALTER TABLE gmail_accounts ADD COLUMN last_error TEXT")
+        _add_column_if_missing(columns, "reauth_notified_at", "ALTER TABLE gmail_accounts ADD COLUMN reauth_notified_at TIMESTAMP")
+
     if "notification_rules" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("notification_rules")}
         _add_column_if_missing(columns, "keyword_negate", "ALTER TABLE notification_rules ADD COLUMN keyword_negate BOOLEAN DEFAULT FALSE")
@@ -191,6 +197,34 @@ def _ensure_columns() -> None:
     _ensure_index("ix_transactions_user_date", "transactions", "(user_id, transaction_date)")
     _ensure_index("ix_transactions_user_bank", "transactions", "(user_id, bank_id)")
     _ensure_index("ix_transactions_transaction_date", "transactions", "(transaction_date)")
+
+    # transaction_labels.transaction_id was declared with ondelete="CASCADE" in the
+    # model from the start, but the live table predates that (create_all only
+    # creates NEW tables — it never alters an existing FK) and was actually built
+    # with NO ACTION. That silently broke "reprocess this PDF" (delete-then-recreate
+    # its transactions) for any transaction that had a manually-applied label —
+    # Postgres rejected the delete with a FK violation instead of cascading.
+    _ensure_cascade_delete("transaction_labels_transaction_id_fkey", "transaction_labels",
+                           "transaction_id", "transactions", "id")
+
+
+def _ensure_cascade_delete(constraint_name: str, table: str, column: str, ref_table: str, ref_column: str) -> None:
+    """Make sure a foreign key has ON DELETE CASCADE, replacing it if it doesn't."""
+    try:
+        with engine.begin() as connection:
+            row = connection.execute(text(
+                "SELECT confdeltype FROM pg_constraint WHERE conname = :name"
+            ), {"name": constraint_name}).first()
+            if row is None or row[0] == 'c':
+                return  # missing (nothing to fix) or already CASCADE
+            connection.execute(text(f"ALTER TABLE {table} DROP CONSTRAINT {constraint_name}"))
+            connection.execute(text(
+                f"ALTER TABLE {table} ADD CONSTRAINT {constraint_name} "
+                f"FOREIGN KEY ({column}) REFERENCES {ref_table}({ref_column}) ON DELETE CASCADE"
+            ))
+        logger.info("Fixed %s to ON DELETE CASCADE", constraint_name)
+    except Exception:
+        logger.warning("Failed to fix cascade delete for %s", constraint_name, exc_info=True)
 
 
 def _ensure_index(name: str, table: str, columns_sql: str) -> None:

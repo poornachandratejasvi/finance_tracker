@@ -37,6 +37,7 @@ import {
   Api,
   People,
   Backup as BackupIcon,
+  Email,
   Dns,
   CreditCard,
   PrivacyTip,
@@ -66,6 +67,7 @@ import TemplatesPanel from '../components/settings/TemplatesPanel';
 import LabelsPanel from '../components/settings/LabelsPanel';
 import AutomaticRulesPanel from '../components/settings/AutomaticRulesPanel';
 import NotificationRulesPanel from '../components/settings/NotificationRulesPanel';
+import ExternalAccountsPanel from '../components/settings/ExternalAccountsPanel';
 import UsersPanel from '../components/settings/UsersPanel';
 import BackupPanel from '../components/settings/BackupPanel';
 import AIPanel from '../components/settings/AIPanel';
@@ -558,6 +560,7 @@ const NAV_SECTIONS = [
       { key: 'ai', label: 'AI', icon: <AutoAwesome /> },
       { key: 'rest-api', label: 'REST API', icon: <Api /> },
       { key: 'users', label: 'Users', icon: <People />, adminOnly: true },
+      { key: 'external-accounts', label: 'External Accounts', icon: <Email /> },
       { key: 'backup', label: 'Backup', icon: <BackupIcon /> },
       { key: 'mcp', label: 'MCP Server', icon: <Dns /> },
       { key: 'logs', label: 'Application Logs', icon: <Terminal />, adminOnly: true },
@@ -604,6 +607,8 @@ function Settings() {
         return <AutomaticRulesPanel />;
       case 'notification-rules':
         return <NotificationRulesPanel />;
+      case 'external-accounts':
+        return <ExternalAccountsPanel />;
       case 'users':
         return isAdmin ? <UsersPanel /> : <GeneralPanel setSuccess={setSuccess} setError={setError} />;
       case 'backup':

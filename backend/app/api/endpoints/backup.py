@@ -35,6 +35,11 @@ from app.services import backup_service
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# See the matching comment in oauth.py: this client is shared with the Gmail flow,
+# so a re-consent here can come back with the union of both flows' scopes and
+# trip oauthlib's strict scope check unless relaxed.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
 DRIVE_SCOPES = [
     'https://www.googleapis.com/auth/drive.file',
     'https://www.googleapis.com/auth/tasks',

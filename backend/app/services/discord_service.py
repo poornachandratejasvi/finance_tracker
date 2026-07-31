@@ -39,15 +39,38 @@ def set_webhook(db: Session, uid: int, url: Optional[str]) -> None:
         db.add(AppSetting(key=key, value=enc))
     db.commit()
 
+    # Mirror into the legacy global key too, so sync-lifecycle notifications
+    # (discord_notifier.py) immediately pick up the same webhook instead of
+    # needing to be configured a second time on the Automation page. Safe
+    # because this app is single-user in practice (no per-user global setting
+    # collision) — if that ever changes, this global key should be retired.
+    legacy_row = db.query(AppSetting).filter(AppSetting.key == _LEGACY_GLOBAL_KEY).first()
+    if not legacy_row:
+        legacy_row = AppSetting(key=_LEGACY_GLOBAL_KEY)
+        db.add(legacy_row)
+    legacy_row.value = url.strip()
+    db.commit()
+
+
+_LEGACY_GLOBAL_KEY = "discord_webhook_url"  # set via Settings -> External Accounts -> Discord
+                                            # (also used directly by discord_notifier.py for
+                                            # sync-lifecycle notifications)
+
 
 def get_webhook(db: Session, uid: int) -> Optional[str]:
     row = db.query(AppSetting).filter(AppSetting.key == _webhook_key(uid)).first()
-    if not row or not row.value:
-        return None
-    try:
-        return decrypt_value(row.value)
-    except Exception:
-        return None
+    if row and row.value:
+        try:
+            return decrypt_value(row.value)
+        except Exception:
+            pass
+    # Fall back to the legacy global webhook so a webhook configured there also
+    # powers AutoRule/NotificationRule/Gmail-health alerts without needing to be
+    # set twice. Plaintext (unlike the per-user key) — that's how it's stored today.
+    legacy = db.query(AppSetting).filter(AppSetting.key == _LEGACY_GLOBAL_KEY).first()
+    if legacy and legacy.value:
+        return legacy.value
+    return None
 
 
 def has_webhook(db: Session, uid: int) -> bool:

@@ -193,10 +193,18 @@ const Layout = ({ children }) => {
                         <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', flexWrap: 'wrap' }}>
                           <Chip label={s.sync_type || 'sync'} size="small" variant="outlined" />
                           <Chip label={s.status} size="small" color={statusColor(s.status)} />
+                          {(s.current_bank || s.gmail_email) && (
+                            <Chip label={s.current_bank || s.gmail_email} size="small" variant="outlined" color="primary" />
+                          )}
                         </Box>
                       }
                       secondary={
                         <Box sx={{ mt: 0.5 }}>
+                          {s.gmail_email && (
+                            <Typography variant="caption" display="block" color="text.secondary">
+                              Account: {s.gmail_email}
+                            </Typography>
+                          )}
                           <Typography variant="caption" display="block">
                             Started: {fmtTs(s.started_at)}
                             {s.completed_at && ` · Done: ${fmtTs(s.completed_at)}`}

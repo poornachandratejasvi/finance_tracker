@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List, Optional
 import os
+import logging
 from datetime import datetime
 from uuid import uuid4
 
@@ -18,8 +19,6 @@ from app.schemas.bank import (
     BankConfigCreate,
     BankConfigUpdate,
     BankConfigResponse,
-    GmailAccountCreate,
-    GmailAccountResponse
 )
 from app.services.pdf_parser import PDFParser
 from app.services.transaction_service import TransactionService
@@ -28,6 +27,9 @@ from app.services.pdf_storage import ensure_decrypted_pdf
 from app.services.balance_service import apply_statement_balance, recompute_all_balances
 from app.services.credit_balance_service import redetect_all_credit_balances
 from app.services import ai_transaction_extraction
+from app.services.transaction_hooks import apply_auto_rules_and_notify
+
+logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel
 
@@ -229,6 +231,7 @@ def get_statement_dashboard(
 @router.post("/", response_model=BankResponse, status_code=status.HTTP_201_CREATED)
 def create_bank(
     bank_data: BankCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -238,13 +241,22 @@ def create_bank(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
         )
-    
+
     # Allow duplicate codes - users can have multiple accounts with same bank
     bank = Bank(**bank_data.dict(), user_id=current_user.id)
     db.add(bank)
     db.commit()
     db.refresh(bank)
-    
+
+    # Kick off an initial sync right away so the user doesn't have to remember to
+    # trigger one manually after adding a bank. Best-effort — a dispatch failure
+    # (e.g. no Gmail account linked yet) shouldn't block bank creation.
+    try:
+        from app.api.endpoints.sync import dispatch_sync
+        dispatch_sync(db, background_tasks, current_user.id, sync_type="incremental", bank_id=bank.id)
+    except Exception:
+        logger.warning("Auto-sync dispatch failed for new bank %s", bank.id, exc_info=True)
+
     return bank
 
 
@@ -482,132 +494,6 @@ def create_bank_config(
     return config
 
 
-@router.get("/gmail-accounts/", response_model=List[GmailAccountResponse])
-def list_gmail_accounts(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """List user's Gmail accounts"""
-    accounts = db.query(GmailAccount).filter(
-        GmailAccount.user_id == current_user.id
-    ).all()
-    return accounts
-
-
-@router.get("/gmail-accounts/status")
-def get_gmail_accounts_status(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Validate Gmail accounts and return their current status."""
-    accounts = db.query(GmailAccount).filter(
-        GmailAccount.user_id == current_user.id
-    ).all()
-
-    from app.services.gmail_service import GmailService, credentials_from_dict
-    from google.auth.transport.requests import Request as AuthRequest
-    import json
-    import logging as _logging
-    _log = _logging.getLogger(__name__)
-
-    results = []
-    gmail_service = GmailService()
-
-    for account in accounts:
-        status = {
-            "id": account.id,
-            "email": account.email,
-            "is_active": account.is_active,
-            "last_synced": account.last_synced,
-            "created_at": account.created_at,
-            "status": "unknown"
-        }
-
-        creds_dict = json.loads(account.credentials) if isinstance(account.credentials, str) else account.credentials
-        if not creds_dict:
-            # decrypt_value returns None for undecryptable data — genuine re-auth needed.
-            account.is_active = False
-            status["is_active"] = False
-            status["status"] = "reauth_required"
-            results.append(status)
-            continue
-
-        try:
-            # Rebuild WITH expiry so refresh state is accurate, then refresh + persist
-            # the new token (incl. expiry) so it is not discarded.
-            creds = credentials_from_dict(creds_dict)
-            if creds.expired and creds.refresh_token:
-                creds.refresh(AuthRequest())
-            account.credentials = json.dumps({
-                'token': creds.token,
-                'refresh_token': creds.refresh_token,
-                'token_uri': creds.token_uri,
-                'client_id': creds.client_id,
-                'client_secret': creds.client_secret,
-                'scopes': list(creds.scopes) if creds.scopes else None,
-                'expiry': creds.expiry.isoformat() if creds.expiry else None,
-            })
-
-            email_address = gmail_service.test_connection(creds)
-            if email_address:
-                account.is_active = True
-                status["is_active"] = True
-                status["status"] = "connected"
-            else:
-                # Reachable but no profile — treat as transient; do NOT deactivate.
-                status["status"] = "error"
-        except Exception as exc:
-            # Only a real invalid_grant means the grant is dead. Transient failures must
-            # NOT deactivate the account (that was a cause of "sync finds no accounts").
-            if 'invalid_grant' in str(exc):
-                account.is_active = False
-                status["is_active"] = False
-                status["status"] = "reauth_required"
-            else:
-                _log.warning("Transient Gmail status check error for %s: %s", account.email, exc)
-                status["status"] = "error"
-
-        results.append(status)
-
-    db.commit()
-
-    return {
-        "accounts": results,
-        "total": len(results)
-    }
-
-
-@router.post("/gmail-accounts/", response_model=GmailAccountResponse, status_code=status.HTTP_201_CREATED)
-def add_gmail_account(
-    account_data: GmailAccountCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Add Gmail account"""
-    # Check if account already exists
-    existing = db.query(GmailAccount).filter(
-        GmailAccount.user_id == current_user.id,
-        GmailAccount.email == account_data.email
-    ).first()
-    
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Gmail account already added"
-        )
-    
-    account = GmailAccount(
-        user_id=current_user.id,
-        email=account_data.email,
-        credentials=account_data.credentials
-    )
-    db.add(account)
-    db.commit()
-    db.refresh(account)
-    
-    return account
-
-
 @router.post("/{bank_id}/upload-pdf", status_code=status.HTTP_201_CREATED)
 async def upload_bank_pdf(
     bank_id: int,
@@ -749,6 +635,7 @@ async def upload_bank_pdf(
                 **trans_data
             )
             db.add(transaction)
+            apply_auto_rules_and_notify(db, current_user.id, transaction)
             transactions_added += 1
 
         apply_statement_balance(bank, parse_result, ai_context={"db": db, "user_id": current_user.id})

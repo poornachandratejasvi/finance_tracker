@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Container, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Typography, Box, Button, Chip, Alert, CircularProgress, Grid, Card, CardContent,
@@ -9,6 +9,70 @@ import { Download, Refresh, CheckCircle, Error, Lock, Delete } from '@mui/icons-
 import { getPDFs, getPDFStats, reprocessPDF, reprocessAllPDFs, downloadPDF, getBanks, startSync, remapPDFBank, deletePDFsBySender } from '../services/api';
 import api from '../services/api';
 import PDFPasswordDialog from '../components/PDFPasswordDialog';
+
+// Resizable columns: order matches the rendered <TableCell>s (checkbox column excluded —
+// fixed width). Widths persist in localStorage so a user's preferred layout sticks.
+const PDF_COLUMNS = [
+  { field: 'id', label: 'ID', defaultWidth: 70 },
+  { field: 'bank_name', label: 'Bank', defaultWidth: 130 },
+  { field: 'from_email', label: 'From Email', defaultWidth: 180 },
+  { field: 'email_received_date', label: 'Received', defaultWidth: 110 },
+  { field: 'file_name', label: 'File Name', defaultWidth: 320 },
+  { field: 'statement_period_start', label: 'Period', defaultWidth: 180 },
+  { field: 'transaction_count', label: 'Transactions', defaultWidth: 110 },
+  { field: 'is_processed', label: 'Status', defaultWidth: 140 },
+  { field: 'created_at', label: 'Created', defaultWidth: 110 },
+  { field: 'actions', label: 'Actions', defaultWidth: 140 },
+];
+const COL_WIDTHS_STORAGE_KEY = 'pdfManagement.colWidths';
+const MIN_COL_WIDTH = 60;
+
+function loadColWidths() {
+  const defaults = Object.fromEntries(PDF_COLUMNS.map((c) => [c.field, c.defaultWidth]));
+  try {
+    const saved = JSON.parse(localStorage.getItem(COL_WIDTHS_STORAGE_KEY) || '{}');
+    return { ...defaults, ...saved };
+  } catch {
+    return defaults;
+  }
+}
+
+// Draggable strip on a header cell's right edge. Reports live width deltas via onResize
+// while dragging; onResizeEnd commits the final value (caller persists it).
+function ColumnResizeHandle({ onResizeStart, onResize, onResizeEnd }) {
+  const draggingRef = useRef(null);
+
+  const handleMouseDown = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onResizeStart();
+    draggingRef.current = { startX: e.clientX };
+
+    const handleMouseMove = (moveEvent) => {
+      if (!draggingRef.current) return;
+      onResize(moveEvent.clientX - draggingRef.current.startX);
+    };
+    const handleMouseUp = () => {
+      draggingRef.current = null;
+      onResizeEnd();
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  return (
+    <Box
+      onMouseDown={handleMouseDown}
+      sx={{
+        position: 'absolute', top: 0, right: 0, bottom: 0, width: 6,
+        cursor: 'col-resize', userSelect: 'none', zIndex: 1,
+        '&:hover': { bgcolor: 'primary.main', opacity: 0.4 },
+      }}
+    />
+  );
+}
 
 function PDFManagement() {
   const [pdfs, setPdfs] = useState([]);
@@ -28,6 +92,25 @@ function PDFManagement() {
   const [bulkBankId, setBulkBankId] = useState('');
   const [sortBy, setSortBy] = useState('id');
   const [sortDir, setSortDir] = useState('desc');
+
+  const [colWidths, setColWidths] = useState(loadColWidths);
+  const resizeStartWidthRef = useRef(0);
+
+  const handleColumnResize = (field, deltaX) => {
+    setColWidths((prev) => ({
+      ...prev,
+      [field]: Math.max(MIN_COL_WIDTH, resizeStartWidthRef.current + deltaX),
+    }));
+  };
+  const handleColumnResizeStart = (field) => {
+    resizeStartWidthRef.current = colWidths[field];
+  };
+  const handleColumnResizeEnd = () => {
+    setColWidths((prev) => {
+      localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(prev));
+      return prev;
+    });
+  };
 
   const handleSort = (field) => {
     setPage(0);
@@ -448,8 +531,14 @@ function PDFManagement() {
       </Paper>
 
       {/* PDF Table */}
-      <TableContainer component={Paper}>
-        <Table>
+      <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+        <Table sx={{ tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: 48 }} />
+            {PDF_COLUMNS.map((c) => (
+              <col key={c.field} style={{ width: colWidths[c.field] }} />
+            ))}
+          </colgroup>
           <TableHead>
             <TableRow>
               <TableCell padding="checkbox">
@@ -459,33 +548,34 @@ function PDFManagement() {
                   onChange={(e) => handleSelectAll(e.target.checked)}
                 />
               </TableCell>
-              {[
-                { field: 'id', label: 'ID' },
-                { field: 'bank_name', label: 'Bank' },
-                { field: 'from_email', label: 'From Email' },
-                { field: 'file_name', label: 'File Name' },
-                { field: 'statement_period_start', label: 'Period' },
-                { field: 'transaction_count', label: 'Transactions' },
-                { field: 'is_processed', label: 'Status' },
-                { field: 'created_at', label: 'Created' },
-              ].map(({ field, label }) => (
-                <TableCell key={field} sortDirection={sortBy === field ? sortDir : false}>
-                  <TableSortLabel
-                    active={sortBy === field}
-                    direction={sortBy === field ? sortDir : 'asc'}
-                    onClick={() => handleSort(field)}
-                  >
-                    {label}
-                  </TableSortLabel>
+              {PDF_COLUMNS.map(({ field, label }) => (
+                <TableCell
+                  key={field}
+                  sortDirection={sortBy === field ? sortDir : false}
+                  sx={{ position: 'relative', overflow: 'hidden' }}
+                >
+                  {field === 'actions' ? label : (
+                    <TableSortLabel
+                      active={sortBy === field}
+                      direction={sortBy === field ? sortDir : 'asc'}
+                      onClick={() => handleSort(field)}
+                    >
+                      {label}
+                    </TableSortLabel>
+                  )}
+                  <ColumnResizeHandle
+                    onResizeStart={() => handleColumnResizeStart(field)}
+                    onResize={(delta) => handleColumnResize(field, delta)}
+                    onResizeEnd={handleColumnResizeEnd}
+                  />
                 </TableCell>
               ))}
-              <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {pdfs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} align="center">No PDFs found</TableCell>
+                <TableCell colSpan={11} align="center">No PDFs found</TableCell>
               </TableRow>
             ) : (
               pdfs.map((pdf) => (
@@ -510,6 +600,11 @@ function PDFManagement() {
                         />
                       </Tooltip>
                     ) : <Typography variant="caption" color="text.secondary">—</Typography>}
+                  </TableCell>
+                  <TableCell>
+                    {pdf.email_received_date ? formatDate(pdf.email_received_date) : (
+                      <Typography variant="caption" color="text.secondary">—</Typography>
+                    )}
                   </TableCell>
                   <TableCell>
                     {pdf.file_name}

@@ -45,8 +45,6 @@ import {
   getLabels,
   createLabel,
   getDiscordConfig,
-  updateDiscordWebhook,
-  testDiscordWebhook,
 } from '../../services/api';
 import CategoryIcon from '../CategoryIcon';
 import { formatCurrency, formatDate } from '../../utils/format';
@@ -106,12 +104,9 @@ export default function AutomaticRulesPanel() {
   const [matchLoading, setMatchLoading] = useState(false);
   const [matchApplying, setMatchApplying] = useState(false);
 
-  // Discord webhook config (used by any rule with "Notify on Discord" enabled)
+  // Discord webhook status (read-only here — configured in Settings -> External Accounts,
+  // used by any rule with "Notify on Discord" enabled)
   const [discordWebhookSet, setDiscordWebhookSet] = useState(false);
-  const [discordUrlInput, setDiscordUrlInput] = useState('');
-  const [discordSaving, setDiscordSaving] = useState(false);
-  const [discordTesting, setDiscordTesting] = useState(false);
-  const [discordTestResult, setDiscordTestResult] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -144,34 +139,6 @@ export default function AutomaticRulesPanel() {
     fetchData();
     fetchDiscordConfig();
   }, []);
-
-  const handleSaveDiscordWebhook = async () => {
-    setDiscordSaving(true);
-    setDiscordTestResult(null);
-    try {
-      const res = await updateDiscordWebhook(discordUrlInput.trim() || null);
-      setDiscordWebhookSet(!!res.webhook_set);
-      setDiscordUrlInput('');
-      setSuccess(res.webhook_set ? 'Discord webhook saved.' : 'Discord webhook removed.');
-    } catch {
-      setError('Failed to save the Discord webhook URL');
-    } finally {
-      setDiscordSaving(false);
-    }
-  };
-
-  const handleTestDiscordWebhook = async () => {
-    setDiscordTesting(true);
-    setDiscordTestResult(null);
-    try {
-      const res = await testDiscordWebhook();
-      setDiscordTestResult(res);
-    } catch {
-      setDiscordTestResult({ ok: false, message: 'Request failed.' });
-    } finally {
-      setDiscordTesting(false);
-    }
-  };
 
   // Flattened category hierarchy: roots then indented children (built from parent_id).
   const categoryItems = useMemo(() => {
@@ -502,49 +469,20 @@ export default function AutomaticRulesPanel() {
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
 
-      <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Discord Notifications</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          Add a Discord webhook URL here, then turn on "Notify on Discord" for any rule below —
-          it'll post a message the moment a new transaction matches that rule's keywords.
+      <Paper variant="outlined" sx={{ p: 2, mb: 3, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+        <Typography variant="body2" sx={{ flex: 1, minWidth: 240 }}>
+          Turn on "Notify on Discord" for any rule below to post a message the moment a new
+          transaction matches its keywords.
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-          <TextField
-            size="small"
-            label={discordWebhookSet ? 'Replace webhook URL' : 'Discord webhook URL'}
-            placeholder="https://discord.com/api/webhooks/..."
-            value={discordUrlInput}
-            onChange={(e) => setDiscordUrlInput(e.target.value)}
-            sx={{ minWidth: 340, flex: 1 }}
-          />
-          <Button
-            variant="contained"
-            size="small"
-            onClick={handleSaveDiscordWebhook}
-            disabled={discordSaving || !discordUrlInput.trim()}
-          >
-            {discordSaving ? 'Saving…' : 'Save'}
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={handleTestDiscordWebhook}
-            disabled={discordTesting || !discordWebhookSet}
-          >
-            {discordTesting ? 'Sending…' : 'Send test message'}
-          </Button>
-          <Chip
-            size="small"
-            color={discordWebhookSet ? 'success' : 'default'}
-            variant="outlined"
-            label={discordWebhookSet ? 'Webhook configured' : 'Not configured'}
-          />
-        </Box>
-        {discordTestResult && (
-          <Alert severity={discordTestResult.ok ? 'success' : 'error'} sx={{ mt: 1.5 }} onClose={() => setDiscordTestResult(null)}>
-            {discordTestResult.message}
-          </Alert>
-        )}
+        <Chip
+          size="small"
+          color={discordWebhookSet ? 'success' : 'default'}
+          variant="outlined"
+          label={discordWebhookSet ? 'Discord webhook configured' : 'Discord webhook not configured'}
+        />
+        <Typography variant="caption" color="text.secondary">
+          Configure it in Settings → External Accounts
+        </Typography>
       </Paper>
 
       {loading ? (
@@ -826,7 +764,7 @@ export default function AutomaticRulesPanel() {
             />
             {form.notify_discord && !discordWebhookSet && (
               <Alert severity="warning" sx={{ mt: 1 }}>
-                No Discord webhook is configured yet — add one above (in the Discord Notifications box) or this rule won't be able to send anything.
+                No Discord webhook is configured yet — add one in Settings → External Accounts or this rule won't be able to send anything.
               </Alert>
             )}
           </Box>

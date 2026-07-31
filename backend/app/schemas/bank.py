@@ -17,7 +17,9 @@ class GmailAccountResponse(GmailAccountBase):
     is_active: bool
     last_synced: Optional[datetime] = None
     created_at: datetime
-    
+    last_checked_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+
     class Config:
         from_attributes = True
 

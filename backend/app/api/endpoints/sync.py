@@ -25,6 +25,7 @@ from app.services.discord_notifier import discord_notifier
 from app.services.pdf_storage import get_preferred_pdf_path, ensure_decrypted_with_candidates, ensure_decrypted_pdf
 from app.services.balance_service import apply_statement_balance
 from app.services import ai_transaction_extraction
+from app.services.transaction_hooks import apply_auto_rules_and_notify
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -159,13 +160,15 @@ def _process_pdf_task(
                 trans_data["category"] = TransactionService.categorize_transaction(
                     trans_data["description"]
                 )
-            db.add(Transaction(
+            transaction = Transaction(
                 user_id=user_id,
                 bank_id=bank.id,
                 pdf_statement_id=pdf_statement.id,
                 source="pdf",
                 **trans_data,
-            ))
+            )
+            db.add(transaction)
+            apply_auto_rules_and_notify(db, user_id, transaction)
             transactions_added += 1
 
         if is_protected and bank.account_password:
@@ -692,19 +695,23 @@ def _run_sync_with_session(
         )
 
 
-@router.post("/", response_model=SyncResponse, status_code=status.HTTP_202_ACCEPTED)
-async def sync_transactions(
-    sync_request: SyncRequest,
+def dispatch_sync(
+    db: Session,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Sync transactions from Gmail accounts"""
-    # Create sync log (owned by the requesting user)
+    user_id: int,
+    sync_type: str = "incremental",
+    gmail_account_id: Optional[int] = None,
+    bank_id: Optional[int] = None,
+    start_date=None,
+) -> SyncLog:
+    """Create a SyncLog and dispatch it to Celery (falling back to in-process if no
+    worker is alive to consume it). Shared by the manual "Sync now" endpoint below
+    and any other place that needs to kick off a sync programmatically (e.g.
+    auto-starting a sync right after a new bank is created)."""
     sync_log = SyncLog(
-        user_id=current_user.id,
-        gmail_account_id=sync_request.gmail_account_id,
-        sync_type=sync_request.sync_type,
+        user_id=user_id,
+        gmail_account_id=gmail_account_id,
+        sync_type=sync_type,
         status="queued",
         current_step="Queued",
     )
@@ -712,23 +719,13 @@ async def sync_transactions(
     db.commit()
     db.refresh(sync_log)
 
-    # Prefer Celery, but ONLY if a worker is actually alive to consume the task. A task
-    # enqueued with no consumer would sit forever and the sync would silently never run.
-    # If no worker answers a quick ping, run in-process instead so sync always works.
-    start_date_iso = sync_request.start_date.isoformat() if sync_request.start_date else None
+    start_date_iso = start_date.isoformat() if start_date else None
     dispatched_to_worker = False
     if _celery_worker_available():
         try:
             from app.tasks.sync_tasks import run_sync_task
             run_sync_task.apply_async(
-                args=[
-                    sync_log.id,
-                    sync_request.gmail_account_id,
-                    current_user.id,
-                    sync_request.sync_type,
-                    start_date_iso,
-                    sync_request.bank_id,
-                ],
+                args=[sync_log.id, gmail_account_id, user_id, sync_type, start_date_iso, bank_id],
                 retry=False,
             )
             dispatched_to_worker = True
@@ -739,14 +736,27 @@ async def sync_transactions(
     if not dispatched_to_worker:
         logger.info("Sync %s running in-process (no Celery worker available)", sync_log.id)
         background_tasks.add_task(
-            run_sync,
-            sync_log.id,
-            sync_request.gmail_account_id,
-            current_user.id,
-            sync_request.sync_type,
-            sync_request.start_date,
-            sync_request.bank_id,
+            run_sync, sync_log.id, gmail_account_id, user_id, sync_type, start_date, bank_id,
         )
+
+    return sync_log
+
+
+@router.post("/", response_model=SyncResponse, status_code=status.HTTP_202_ACCEPTED)
+async def sync_transactions(
+    sync_request: SyncRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Sync transactions from Gmail accounts"""
+    sync_log = dispatch_sync(
+        db, background_tasks, current_user.id,
+        sync_type=sync_request.sync_type,
+        gmail_account_id=sync_request.gmail_account_id,
+        bank_id=sync_request.bank_id,
+        start_date=sync_request.start_date,
+    )
 
     return SyncResponse(
         sync_log_id=sync_log.id,
@@ -787,6 +797,7 @@ def _sync_log_dict(s: SyncLog) -> dict:
         "sync_log_id": s.id,
         "status": s.status,
         "sync_type": s.sync_type,
+        "gmail_email": s.gmail_account.email if s.gmail_account else None,
         "emails_processed": s.emails_processed or 0,
         "transactions_added": s.transactions_added or 0,
         "duplicates_found": s.duplicates_found or 0,
@@ -1006,6 +1017,7 @@ def resync_pdfs(
                         **trans_data
                     )
                     db.add(transaction)
+                    apply_auto_rules_and_notify(db, current_user.id, transaction)
                     transactions_added += 1
 
                 if is_protected and bank.account_password:
@@ -1216,10 +1228,12 @@ def update_pdf_password(
     for trans_data in parse_result["transactions"]:
         if not trans_data.get("category"):
             trans_data["category"] = TransactionService.categorize_transaction(trans_data["description"])
-        db.add(Transaction(
+        transaction = Transaction(
             user_id=current_user.id, bank_id=bank.id, pdf_statement_id=pdf_statement.id,
             source="pdf", **trans_data
-        ))
+        )
+        db.add(transaction)
+        apply_auto_rules_and_notify(db, current_user.id, transaction)
         transactions_added += 1
     apply_statement_balance(bank, parse_result, ai_context={"db": db, "user_id": current_user.id})
     db.commit()

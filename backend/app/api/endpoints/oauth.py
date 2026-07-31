@@ -19,6 +19,15 @@ from app.models.models import User, GmailAccount
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Gmail, Drive and Tasks all share the same credentials.json client. Once a Google
+# account has granted a broader scope set (e.g. drive.file+tasks for the Drive
+# connection), Google returns that FULL union of previously-granted scopes on any
+# later consent for the same client+account — even one that only requested
+# gmail.readonly. oauthlib's default strict scope check then raises "Scope has
+# changed" and google-auth-oauthlib turns that into a hard failure. This is a
+# well-known behavior with a documented escape hatch, not an app bug.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
 # Gmail OAuth scopes
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 

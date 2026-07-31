@@ -13,7 +13,7 @@ celery_app = Celery(
     "finance_tracker",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.sync_tasks", "app.tasks.backup_tasks", "app.tasks.notification_tasks"],
+    include=["app.tasks.sync_tasks", "app.tasks.backup_tasks", "app.tasks.notification_tasks", "app.tasks.gmail_health_tasks"],
 )
 
 celery_app.conf.update(
@@ -46,5 +46,13 @@ celery_app.conf.beat_schedule = {
     "notification-absence-check": {
         "task": "notifications.check_absence",
         "schedule": 4 * 60 * 60.0,
+    },
+    # Gmail refresh tokens can be revoked/expired independently of the app's own
+    # credentials.json (e.g. the OAuth consent screen being in "Testing" status
+    # expires them after 7 days) — check every couple hours so a broken connection
+    # is caught quickly rather than silently going stale for days.
+    "gmail-health-check": {
+        "task": "gmail.check_health",
+        "schedule": 2 * 60 * 60.0,
     },
 }

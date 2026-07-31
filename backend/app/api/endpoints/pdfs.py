@@ -20,6 +20,7 @@ from app.services.transaction_service import TransactionService
 from app.services.pdf_storage import get_preferred_pdf_path, ensure_decrypted_with_candidates, ensure_decrypted_pdf
 from app.services.balance_service import apply_statement_balance
 from app.services import ai_transaction_extraction
+from app.services.transaction_hooks import apply_auto_rules_and_notify
 import logging
 
 router = APIRouter()
@@ -58,7 +59,7 @@ def _parse_bool_list(value) -> List[bool]:
 _PDF_SORT_FIELDS = (
     "id", "bank_name", "from_email", "file_name",
     "statement_period_start", "statement_period_end",
-    "transaction_count", "is_processed", "created_at",
+    "transaction_count", "is_processed", "created_at", "email_received_date",
 )
 
 
@@ -141,6 +142,7 @@ def get_pdfs(
             "bank_id": bank.id if bank else None,
             "from_email": bank_email.from_email if bank_email else None,
             "email_subject": bank_email.subject if bank_email else None,
+            "email_received_date": bank_email.received_date if bank_email else None,
             "transaction_count": tx_counts.get(pdf.id, 0),
         })
 
@@ -519,6 +521,7 @@ def reprocess_pdf(
                 **trans_data
             )
             db.add(transaction)
+            apply_auto_rules_and_notify(db, current_user.id, transaction)
             transactions_added += 1
 
         if pdf.is_password_protected and bank.account_password:
@@ -641,6 +644,7 @@ def _reprocess_pdf_worker(pdf_id: int, user_id: int) -> dict:
                 **trans_data
             )
             db.add(transaction)
+            apply_auto_rules_and_notify(db, user_id, transaction)
             transactions_added += 1
 
         if pdf.is_password_protected and bank.account_password:

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Container, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TablePagination, Typography, Box, Button, TextField, Select, MenuItem, FormControl,
@@ -77,6 +78,7 @@ const renderAmount = (amt, type, currency) => (
 );
 
 function Transactions() {
+  const location = useLocation();
   const [transactions, setTransactions] = useState([]);
   const [banks, setBanks] = useState([]);
   const [labels, setLabels] = useState([]);
@@ -90,7 +92,10 @@ function Transactions() {
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [total, setTotal] = useState(0);
 
-  const [filters, setFilters] = useState(INITIAL_FILTERS);
+  const [filters, setFilters] = useState(() => {
+    const bankId = new URLSearchParams(location.search).get('bank_id');
+    return bankId ? { ...INITIAL_FILTERS, accountIds: [Number(bankId)] } : INITIAL_FILTERS;
+  });
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState('date');
   const [sortDir, setSortDir] = useState('desc');

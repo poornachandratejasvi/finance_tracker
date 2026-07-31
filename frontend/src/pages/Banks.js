@@ -14,12 +14,6 @@ import {
   Chip,
   IconButton,
   Paper,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Tabs,
-  Tab,
   Switch,
   FormControlLabel,
   MenuItem,
@@ -45,7 +39,7 @@ import {
 import { Avatar, Divider, Tooltip } from '@mui/material';
 import InputAdornment from '@mui/material/InputAdornment';
 import { useLocation } from 'react-router-dom';
-import { getBanks, createBank, updateBank, deleteBank, getGmailAccounts, getGmailAccountsStatus, startSync, getGmailAuthUrl, emailLatestBankCSV, generateAllCSV, reprocessAllPDFs, getBankAccountPassword, getBankPasswordCandidates, updateBankPasswordCandidates, recomputeBalances, redetectCreditBalances } from '../services/api';
+import { getBanks, createBank, updateBank, deleteBank, startSync, emailLatestBankCSV, generateAllCSV, reprocessAllPDFs, getBankAccountPassword, getBankPasswordCandidates, updateBankPasswordCandidates, recomputeBalances, redetectCreditBalances } from '../services/api';
 import api from '../services/api';
 import { formatCurrency, signedAccountBalance, hasAccountBalance, isEstimatedBalance, timeAgo } from '../utils/format';
 
@@ -54,11 +48,9 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 function Banks() {
   const location = useLocation();
   const [banks, setBanks] = useState([]);
-  const [gmailAccounts, setGmailAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [tabValue, setTabValue] = useState(0);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [refreshInterval, setRefreshInterval] = useState(2);
   const [refreshUnit, setRefreshUnit] = useState('hours');
@@ -87,10 +79,6 @@ function Banks() {
   const [passwordCandidates, setPasswordCandidates] = useState([]);
   const [newPasswordCandidate, setNewPasswordCandidate] = useState('');
   const [showCandidatePasswords, setShowCandidatePasswords] = useState(false);
-  
-  // Gmail Dialog
-  const [gmailDialog, setGmailDialog] = useState(false);
-  const [gmailEmail, setGmailEmail] = useState('');
   
   // PDF Upload Dialog
   const [pdfDialog, setPdfDialog] = useState(false);
@@ -169,22 +157,6 @@ function Banks() {
     } finally {
       setLoading(false);
     }
-
-    try {
-      const gmailRes = await getGmailAccounts().catch(() => []);
-      setGmailAccounts(gmailRes || []);
-    } catch (err) {
-      console.error('Failed to load Gmail accounts:', err);
-    }
-
-    try {
-      const statusResponse = await getGmailAccountsStatus();
-      if (statusResponse?.accounts) {
-        setGmailAccounts(statusResponse.accounts);
-      }
-    } catch (statusError) {
-      console.error('Failed to refresh Gmail status:', statusError);
-    }
   };
 
   const handleAddBank = async () => {
@@ -238,28 +210,6 @@ function Banks() {
       fetchData();
     } catch (err) {
       setError(editMode ? 'Failed to update bank' : 'Failed to add bank');
-    }
-  };
-
-  const handleAddGmail = async () => {
-    try {
-      const authData = await getGmailAuthUrl();
-      // Open OAuth URL in new window
-      window.open(authData.auth_url, '_blank', 'width=600,height=600');
-      setGmailDialog(false);
-      setSuccess('Opening Gmail authorization... Please complete the authorization in the new window.');
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to initiate Gmail OAuth. Please ensure credentials.json is configured.');
-    }
-  };
-
-  const handleReauthGmail = async () => {
-    try {
-      const authData = await getGmailAuthUrl();
-      window.open(authData.auth_url, '_blank', 'width=600,height=600');
-      setSuccess('Opening Gmail re-authorization...');
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to start Gmail re-authorization');
     }
   };
 
@@ -499,13 +449,6 @@ function Banks() {
     setBankDialog(true);
   };
 
-  const formatConnectedDate = (value) => {
-    if (!value) return 'Unknown';
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return 'Unknown';
-    return parsed.toLocaleDateString();
-  };
-
   const handleOpenBankMenu = (event, bank) => {
     setBankMenuAnchor(event.currentTarget);
     setBankMenuTarget(bank);
@@ -731,14 +674,6 @@ function Banks() {
             Generate CSVs
           </Button>
           <Button
-            variant="outlined"
-            startIcon={<Email />}
-            onClick={() => setGmailDialog(true)}
-            sx={{ mr: 1 }}
-          >
-            Gmail
-          </Button>
-          <Button
             variant="contained"
             startIcon={<Add />}
             onClick={() => setBankDialog(true)}
@@ -751,13 +686,8 @@ function Banks() {
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
 
-      <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} sx={{ mb: 3 }}>
-        <Tab label="Banks" icon={<AccountBalance />} iconPosition="start" />
-        <Tab label="Gmail Accounts" icon={<Email />} iconPosition="start" />
-      </Tabs>
-
-      {/* Banks Tab */}
-      {tabValue === 0 && (
+      {/* Banks */}
+      {
         <Box>
           {banks.length === 0 ? (
             <Paper sx={{ p: 4, textAlign: 'center' }}>
@@ -812,7 +742,7 @@ function Banks() {
             </>
           )}
         </Box>
-      )}
+      }
 
       <Menu
         anchorEl={bankMenuAnchor}
@@ -887,41 +817,6 @@ function Banks() {
           <Button onClick={() => setPasswordViewDialog(false)}>Close</Button>
         </DialogActions>
       </Dialog>
-
-      {/* Gmail Accounts Tab */}
-      {tabValue === 1 && (
-        <Paper>
-          <List>
-            {gmailAccounts.length === 0 ? (
-              <ListItem>
-                <ListItemText
-                  primary="No Gmail accounts connected"
-                  secondary="Add a Gmail account to automatically sync bank statements"
-                />
-              </ListItem>
-            ) : (
-              gmailAccounts.map((account) => (
-                <ListItem key={account.id}>
-                  <ListItemText
-                    primary={account.email}
-                    secondary={`Connected: ${formatConnectedDate(account.created_at || account.last_synced)}`}
-                  />
-                  <ListItemSecondaryAction>
-                    <Chip
-                      label={account.is_active ? 'Active' : 'Needs Reauth'}
-                      color={account.is_active ? 'success' : 'warning'}
-                      size="small"
-                    />
-                    <Button size="small" sx={{ ml: 2 }} onClick={handleReauthGmail}>
-                      Reauthorize
-                    </Button>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              ))
-            )}
-          </List>
-        </Paper>
-      )}
 
       {/* Add/Edit Bank Dialog */}
       <Dialog open={bankDialog} onClose={() => { setBankDialog(false); setEditMode(false); }} maxWidth="sm" fullWidth>
@@ -1097,33 +992,6 @@ function Banks() {
           <Button onClick={() => { setBankDialog(false); setEditMode(false); setShowPassword(false); setExistingPasswordSet(false); setPasswordCandidates([]); setNewPasswordCandidate(''); }}>Cancel</Button>
           <Button onClick={handleAddBank} variant="contained" disabled={!newBank.name || !newBank.code || !newBank.sender_email}>
             {editMode ? 'Update Bank' : 'Add Bank'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Add Gmail Dialog */}
-      <Dialog open={gmailDialog} onClose={() => setGmailDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Connect Gmail Account</DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 2 }}>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              To connect a Gmail account, you need to configure OAuth2 credentials in the backend.
-              Please follow the setup guide in the documentation.
-            </Alert>
-            <TextField
-              fullWidth
-              label="Gmail Address"
-              type="email"
-              value={gmailEmail}
-              onChange={(e) => setGmailEmail(e.target.value)}
-              helperText="Enter the Gmail address to connect"
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setGmailDialog(false)}>Cancel</Button>
-          <Button onClick={handleAddGmail} variant="contained">
-            Connect
           </Button>
         </DialogActions>
       </Dialog>

@@ -277,12 +277,23 @@ class PDFParser:
                             logger.debug(f"Description too short: {description}")
                             continue
 
-                        # Determine transaction type. On HDFC credit-card statements a
-                        # credit is flagged by a leading 'C'/'+' or a trailing 'Cr'; a
-                        # trailing 'Dr' is an explicit debit and wins.
+                        # Determine transaction type. NOTE: a leading 'C' is NOT a credit
+                        # marker here — HDFC's table extraction garbles the ₹ glyph into a
+                        # literal 'C' that appears before EVERY amount (purchases and
+                        # payments alike), confirmed against raw extracted rows where a
+                        # plain dining charge reads "DISTRICT DINING ... C 50.00". Only an
+                        # explicit '+' prefix or trailing 'Cr' suffix are genuine credit
+                        # markers; a trailing 'Dr' is an explicit debit and wins.
+                        # Bare 'PAYMENT'/'CREDIT' are too broad — many merchants have those
+                        # words IN their business name ("Flipkart Payments Bangalore" is a
+                        # purchase, not a bill payment), so only specific bill-payment /
+                        # bank-transfer phrasings count as a genuine credit signal.
                         desc_upper = description.upper()
-                        is_credit_marker = prefix in ('C', 'c', '+') or suffix == 'cr'
-                        is_keyword_credit = any(k in desc_upper for k in ('PAYMENT', 'CREDIT', 'REVERSAL', 'REFUND', 'CASHBACK'))
+                        is_credit_marker = prefix == '+' or suffix == 'cr'
+                        is_keyword_credit = any(k in desc_upper for k in (
+                            'CC PAYMENT', 'CREDIT CARD PAYMENT', 'TRANSFER CREDIT',
+                            'REVERSAL', 'REFUND', 'CASHBACK',
+                        ))
                         if suffix == 'dr':
                             transaction_type = 'debit'
                         elif is_credit_marker or is_keyword_credit:

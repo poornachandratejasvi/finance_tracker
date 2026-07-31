@@ -362,7 +362,7 @@ function Dashboard() {
           return (
             <Grid item xs={6} sm={4} md={3} lg={2.4} key={b.id}>
               <Paper
-                onClick={() => navigate('/banks')}
+                onClick={() => navigate(`/transactions?bank_id=${b.id}`)}
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
@@ -547,7 +547,7 @@ function Dashboard() {
               return (
                 <Box
                   key={b.id}
-                  onClick={() => navigate('/banks')}
+                  onClick={() => navigate(`/transactions?bank_id=${b.id}`)}
                   sx={{
                     display: 'flex',
                     alignItems: 'center',

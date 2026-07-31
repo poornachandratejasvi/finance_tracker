@@ -104,19 +104,24 @@ export default function Jobs() {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>#</TableCell><TableCell>Type</TableCell><TableCell>Status</TableCell>
+              <TableCell>#</TableCell><TableCell>Type</TableCell><TableCell>Status</TableCell><TableCell>Account / Bank</TableCell>
               <TableCell align="right">Emails</TableCell><TableCell align="right">Txns</TableCell><TableCell align="right">Dupes</TableCell>
               <TableCell>Started</TableCell><TableCell>Completed</TableCell><TableCell>Details</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {recentSyncs.length === 0 ? (
-              <TableRow><TableCell colSpan={9}><Typography variant="body2" color="text.secondary">No jobs yet.</Typography></TableCell></TableRow>
+              <TableRow><TableCell colSpan={10}><Typography variant="body2" color="text.secondary">No jobs yet.</Typography></TableCell></TableRow>
             ) : recentSyncs.map((s) => (
               <TableRow key={s.sync_log_id}>
                 <TableCell>{s.sync_log_id}</TableCell>
                 <TableCell>{s.sync_type || 'sync'}</TableCell>
                 <TableCell><Chip label={s.status} size="small" color={statusColor(s.status)} /></TableCell>
+                <TableCell sx={{ maxWidth: 160, wordBreak: 'break-word' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    {[s.gmail_email, s.current_bank].filter(Boolean).join(' · ') || '—'}
+                  </Typography>
+                </TableCell>
                 <TableCell align="right">{s.emails_processed || 0}</TableCell>
                 <TableCell align="right">{s.transactions_added || 0}</TableCell>
                 <TableCell align="right">{s.duplicates_found || 0}</TableCell>
