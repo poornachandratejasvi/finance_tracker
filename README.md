@@ -63,32 +63,43 @@ finance-tracker/
 
 ### Prerequisites
 - Docker and Docker Compose installed
-- Gmail API credentials (for email integration)
+- Gmail API credentials (for email integration) — see [Gmail API Setup](#gmail-api-setup) below
 
-### Installation
+### Option A: Pull prebuilt images (fastest, recommended)
 
-1. Clone the repository and navigate to the project directory
+No local build tools needed — `docker-compose.prod.yml` pulls the published images
+instead of building from source.
 
-2. Copy the environment file and configure:
 ```bash
+git clone https://github.com/poornachandratejasvi/finance_tracker.git && cd finance_tracker
 cp .env.example .env
-# Edit .env with your configurations
+# Edit .env with your configuration (admin credentials, secret keys, etc.)
+
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-3. Build and start the containers:
+Images are multi-arch (amd64 + arm64) and published to GHCR on every release. Pin a
+specific version instead of `latest`:
 ```bash
+IMAGE_TAG=v0.2.0 docker compose -f docker-compose.prod.yml up -d
+```
+Browse available versions/tags: https://github.com/poornachandratejasvi/finance_tracker/pkgs/container/finance_tracker-backend
+
+### Option B: Build from source (for development)
+
+```bash
+git clone https://github.com/poornachandratejasvi/finance_tracker.git && cd finance_tracker
+cp .env.example .env
+# Edit .env with your configuration
+
 docker-compose up --build
 ```
+This bind-mounts `./backend` and `./frontend` into the containers, so code edits are
+picked up without rebuilding — see [Development](#development) below.
 
-   **Or**, skip building from source entirely and pull the prebuilt images
-   published to GHCR (no local build tools needed, still requires step 2's `.env`):
-   ```bash
-   docker compose -f docker-compose.prod.yml pull
-   docker compose -f docker-compose.prod.yml up -d
-   ```
-   Pin a specific release instead of `latest`: `IMAGE_TAG=v0.2.0 docker compose -f docker-compose.prod.yml up -d`
+### Access the application
 
-4. Access the application:
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
 - API Docs: http://localhost:8000/docs
