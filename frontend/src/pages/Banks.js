@@ -39,7 +39,7 @@ import {
 import { Avatar, Divider, Tooltip } from '@mui/material';
 import InputAdornment from '@mui/material/InputAdornment';
 import { useLocation } from 'react-router-dom';
-import { getBanks, createBank, updateBank, deleteBank, startSync, emailLatestBankCSV, generateAllCSV, reprocessAllPDFs, getBankAccountPassword, getBankPasswordCandidates, updateBankPasswordCandidates, recomputeBalances, redetectCreditBalances } from '../services/api';
+import { getBanks, createBank, updateBank, deleteBank, startSync, emailLatestBankCSV, generateAllCSV, reprocessAllPDFs, getBankAccountPassword, getBankPasswordCandidates, updateBankPasswordCandidates, recomputeBalances, redetectCreditBalances, checkStaleCreditCards } from '../services/api';
 import api from '../services/api';
 import { formatCurrency, signedAccountBalance, hasAccountBalance, isEstimatedBalance, timeAgo } from '../utils/format';
 
@@ -387,6 +387,25 @@ function Banks() {
     }
   };
 
+  // Flag/zero credit cards with no transaction in 60+ days, right now instead of
+  // waiting for the once-a-day scheduled check.
+  const handleCheckStaleCreditCards = async () => {
+    try {
+      setLoading(true);
+      const result = await checkStaleCreditCards();
+      setSuccess(
+        result.flagged
+          ? `${result.flagged} card${result.flagged === 1 ? '' : 's'} had no activity in 60+ days — balance reset to 0.`
+          : 'No dormant credit cards found — all balances reflect recent activity.'
+      );
+      fetchData();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to check for dormant credit cards');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openPdfDialog = (bank) => {
     setSelectedBank(bank);
     setPdfDialog(true);
@@ -658,6 +677,18 @@ function Banks() {
                 disabled={loading}
               >
                 Redetect Credit Balances
+              </Button>
+            </span>
+          </Tooltip>
+          <Tooltip title="Check now for credit cards with no transaction in 60+ days and reset their balance to 0 (normally runs automatically once a day)">
+            <span>
+              <Button
+                variant="outlined"
+                onClick={handleCheckStaleCreditCards}
+                sx={{ mr: 1 }}
+                disabled={loading}
+              >
+                Check Dormant Cards
               </Button>
             </span>
           </Tooltip>

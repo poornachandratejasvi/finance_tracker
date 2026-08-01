@@ -350,6 +350,10 @@ export const recomputeBalances = async () => (await api.post('/api/banks/recompu
 export const redetectCreditBalances = async (useAi = true) =>
   (await api.post('/api/banks/redetect-credit-balances', null, { params: { use_ai: useAi } })).data;
 
+// Manually run the 60+ day no-activity credit card check right now, instead of
+// waiting for the once-a-day scheduled run.
+export const checkStaleCreditCards = async () => (await api.post('/api/banks/check-stale-credit-cards')).data;
+
 export const getPDFFields = async (pdfId) => {
   const response = await api.get(`/api/pdfs/${pdfId}/fields`);
   return response.data;

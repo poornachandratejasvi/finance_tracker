@@ -121,6 +121,20 @@ def redetect_credit_balances(
     return {"banks": reports}
 
 
+@router.post("/check-stale-credit-cards")
+def check_stale_credit_cards_now(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Manually run the 60+ day no-activity credit card check for the caller's
+    household right now, instead of waiting for the once-a-day scheduled run."""
+    from app.tasks.credit_balance_tasks import check_stale_credit_cards
+
+    household_ids = household_user_ids(db, current_user)
+    result = check_stale_credit_cards(db, user_ids=household_ids)
+    return result
+
+
 @router.get("/password-candidates")
 def list_password_candidates(
     db: Session = Depends(get_db),
