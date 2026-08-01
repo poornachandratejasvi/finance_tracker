@@ -1,0 +1,152 @@
+version: '3.8'
+
+# Quick-start deployment — pulls the prebuilt images published to GHCR by
+# .github/workflows/docker-build.yml instead of building from source. No
+# checkout of backend/frontend needed beyond this file and your .env.
+#
+# Usage:
+#   cp .env.example .env   # fill in secrets first
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Pin a specific release instead of latest: IMAGE_TAG=v0.2.0 docker compose -f docker-compose.prod.yml up -d
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: finance_tracker_db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-financeuser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-financepass}
+      - POSTGRES_DB=${POSTGRES_DB:-financedb}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financeuser -d financedb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finance-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: finance_tracker_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finance-network
+
+  backend:
+    image: ghcr.io/poornachandratejasvi/finance_tracker-backend:${IMAGE_TAG:-latest}
+    container_name: finance_tracker_backend
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-financeuser}:${POSTGRES_PASSWORD:-financepass}@db:5432/${POSTGRES_DB:-financedb}
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - backend_uploads:/app/uploads
+      - gmail_credentials:/app/credentials
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        labels: "service=backend"
+    networks:
+      - finance-network
+
+  worker:
+    image: ghcr.io/poornachandratejasvi/finance_tracker-backend:${IMAGE_TAG:-latest}
+    container_name: finance_tracker_worker
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-financeuser}:${POSTGRES_PASSWORD:-financepass}@db:5432/${POSTGRES_DB:-financedb}
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - backend_uploads:/app/uploads
+      - gmail_credentials:/app/credentials
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app:celery_app worker --loglevel=info --concurrency=2
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        labels: "service=worker"
+    networks:
+      - finance-network
+
+  beat:
+    image: ghcr.io/poornachandratejasvi/finance_tracker-backend:${IMAGE_TAG:-latest}
+    container_name: finance_tracker_beat
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-financeuser}:${POSTGRES_PASSWORD:-financepass}@db:5432/${POSTGRES_DB:-financedb}
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - backend_uploads:/app/uploads
+      - gmail_credentials:/app/credentials
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app:celery_app beat --loglevel=info
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        labels: "service=beat"
+    networks:
+      - finance-network
+
+  frontend:
+    image: ghcr.io/poornachandratejasvi/finance_tracker-frontend:${IMAGE_TAG:-latest}
+    container_name: finance_tracker_frontend
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - finance-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_uploads:
+  gmail_credentials:
+
+networks:
+  finance-network:
+    driver: bridge

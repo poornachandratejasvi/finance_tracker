@@ -80,6 +80,14 @@ cp .env.example .env
 docker-compose up --build
 ```
 
+   **Or**, skip building from source entirely and pull the prebuilt images
+   published to GHCR (no local build tools needed, still requires step 2's `.env`):
+   ```bash
+   docker compose -f docker-compose.prod.yml pull
+   docker compose -f docker-compose.prod.yml up -d
+   ```
+   Pin a specific release instead of `latest`: `IMAGE_TAG=v0.2.0 docker compose -f docker-compose.prod.yml up -d`
+
 4. Access the application:
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
