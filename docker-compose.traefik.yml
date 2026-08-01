@@ -1,0 +1,165 @@
+version: '3.8'
+
+# Standalone deployment for running behind an existing Traefik reverse proxy
+# (e.g. the SpaceInvaderOne-style stack with an external `t2_proxy` network and
+# a wildcard cert via DNS challenge). No ports are published on the host —
+# only Traefik reaches the app, over the shared external network. db/redis
+# are internal-only.
+#
+# Usage:
+#   cp .env.example .env
+#   # Set in .env:
+#   #   TRAEFIK_DOMAIN=finance.yourdomain.com
+#   #   REACT_APP_API_URL=https://finance.yourdomain.com
+#   #   BACKEND_URL=https://finance.yourdomain.com
+#   #   FRONTEND_URL=https://finance.yourdomain.com
+#   #   ALLOWED_ORIGINS=https://finance.yourdomain.com
+#   docker compose -f docker-compose.traefik.yml pull
+#   docker compose -f docker-compose.traefik.yml up -d
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-financeuser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-financepass}
+      - POSTGRES_DB=${POSTGRES_DB:-financedb}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financeuser -d financedb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finance-network
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finance-network
+
+  backend:
+    image: ghcr.io/poornachandratejasvi/finance_tracker-backend:${IMAGE_TAG:-latest}
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-financeuser}:${POSTGRES_PASSWORD:-financepass}@db:5432/${POSTGRES_DB:-financedb}
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - backend_uploads:/app/uploads
+      - gmail_credentials:/app/credentials
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --log-level info
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        labels: "service=backend"
+    networks:
+      - finance-network
+      - t2_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.finance-backend-rtr.entrypoints=https"
+      - "traefik.http.routers.finance-backend-rtr.rule=Host(`${TRAEFIK_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))"
+      - "traefik.http.routers.finance-backend-rtr.tls=true"
+      - "traefik.http.routers.finance-backend-rtr.priority=10"
+      - "traefik.http.routers.finance-backend-rtr.service=finance-backend-svc"
+      - "traefik.http.services.finance-backend-svc.loadbalancer.server.port=8000"
+
+  worker:
+    image: ghcr.io/poornachandratejasvi/finance_tracker-backend:${IMAGE_TAG:-latest}
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-financeuser}:${POSTGRES_PASSWORD:-financepass}@db:5432/${POSTGRES_DB:-financedb}
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - backend_uploads:/app/uploads
+      - gmail_credentials:/app/credentials
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app:celery_app worker --loglevel=info --concurrency=2
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        labels: "service=worker"
+    networks:
+      - finance-network
+
+  beat:
+    image: ghcr.io/poornachandratejasvi/finance_tracker-backend:${IMAGE_TAG:-latest}
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-financeuser}:${POSTGRES_PASSWORD:-financepass}@db:5432/${POSTGRES_DB:-financedb}
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - backend_uploads:/app/uploads
+      - gmail_credentials:/app/credentials
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app:celery_app beat --loglevel=info
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        labels: "service=beat"
+    networks:
+      - finance-network
+
+  frontend:
+    image: ghcr.io/poornachandratejasvi/finance_tracker-frontend:${IMAGE_TAG:-latest}
+    environment:
+      - REACT_APP_API_URL=${REACT_APP_API_URL}
+    depends_on:
+      - backend
+    networks:
+      - finance-network
+      - t2_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.finance-frontend-rtr.entrypoints=https"
+      - "traefik.http.routers.finance-frontend-rtr.rule=Host(`${TRAEFIK_DOMAIN}`)"
+      - "traefik.http.routers.finance-frontend-rtr.tls=true"
+      - "traefik.http.routers.finance-frontend-rtr.priority=1"
+      - "traefik.http.routers.finance-frontend-rtr.service=finance-frontend-svc"
+      - "traefik.http.services.finance-frontend-svc.loadbalancer.server.port=3000"
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_uploads:
+  gmail_credentials:
+
+networks:
+  finance-network:
+    driver: bridge
+  t2_proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK:-t2_proxy}

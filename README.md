@@ -98,6 +98,36 @@ docker-compose up --build
 This bind-mounts `./backend` and `./frontend` into the containers, so code edits are
 picked up without rebuilding — see [Development](#development) below.
 
+### Option C: Behind an existing Traefik reverse proxy
+
+If you already run Traefik (e.g. the common `t2_proxy` external-network setup with a
+wildcard cert), use `docker-compose.traefik.yml` instead — no ports are published on the
+host, only Traefik reaches the app.
+
+```bash
+git clone https://github.com/poornachandratejasvi/finance_tracker.git && cd finance_tracker
+cp .env.example .env
+# Edit .env:
+#   TRAEFIK_DOMAIN=finance.yourdomain.com
+#   TRAEFIK_NETWORK=t2_proxy   # only if your network name differs
+#   REACT_APP_API_URL=https://finance.yourdomain.com
+#   BACKEND_URL=https://finance.yourdomain.com
+#   FRONTEND_URL=https://finance.yourdomain.com
+#   ALLOWED_ORIGINS=https://finance.yourdomain.com
+
+docker compose -f docker-compose.traefik.yml pull
+docker compose -f docker-compose.traefik.yml up -d
+```
+
+Google OAuth (Gmail linking, Drive backup, Google sign-in) requires HTTPS for any
+non-loopback redirect, and a "Web application" (not "Desktop") OAuth client type. If you
+place `credentials.json` after the stack is already up, copy it directly into the named
+volume instead of a bind mount:
+```bash
+docker cp credentials.json $(docker compose -f docker-compose.traefik.yml ps -q backend):/app/credentials/credentials.json
+docker compose -f docker-compose.traefik.yml restart backend worker beat
+```
+
 ### Access the application
 
 - Frontend: http://localhost:3000
