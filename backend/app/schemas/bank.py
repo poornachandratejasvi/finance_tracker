@@ -36,6 +36,7 @@ class BankBase(BaseModel):
     csv_email: Optional[str] = None
     current_balance: Optional[float] = None
     balance_updated_at: Optional[datetime] = None
+    balance_source: Optional[str] = None
     currency_code: Optional[str] = None
     color: Optional[str] = None
     exclude_from_stats: Optional[bool] = None
@@ -59,6 +60,7 @@ class BankUpdate(BaseModel):
     csv_email: Optional[str] = None
     current_balance: Optional[float] = None
     balance_updated_at: Optional[datetime] = None
+    balance_source: Optional[str] = None
     currency_code: Optional[str] = None
     color: Optional[str] = None
     exclude_from_stats: Optional[bool] = None

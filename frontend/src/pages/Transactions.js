@@ -7,12 +7,12 @@ import {
   Alert, CircularProgress, Tooltip, Checkbox, FormControlLabel,
 } from '@mui/material';
 import {
-  Edit, Delete, Refresh, Add, Comment, FileDownload, ContentCopy, DeleteSweep,
+  Edit, Delete, Refresh, Add, Comment, FileDownload, ContentCopy, DeleteSweep, CheckCircleOutline,
 } from '@mui/icons-material';
 import api, {
   getTransactions, deleteTransaction,
   getBanks, getLabels, getCategories, getCurrencies, bulkLabelTransactions, createAutoLabelRule,
-  bulkDeleteTransactions,
+  bulkDeleteTransactions, bulkConfirmTransactions,
 } from '../services/api';
 import BulkEditDialog from '../components/BulkEditDialog.jsx';
 import FilterSidebar from '../components/FilterSidebar.jsx';
@@ -29,6 +29,7 @@ const INITIAL_FILTERS = {
   recordTypes: [],
   amountMin: null,
   amountMax: null,
+  confirmationStatus: 'all',
 };
 
 const SORT_OPTIONS = [
@@ -158,6 +159,9 @@ function Transactions() {
       if (filters.recordTypes.length) params.transaction_type = filters.recordTypes.join(',');
       if (filters.amountMin != null && filters.amountMin !== '') params.min_amount = filters.amountMin;
       if (filters.amountMax != null && filters.amountMax !== '') params.max_amount = filters.amountMax;
+      if (filters.confirmationStatus && filters.confirmationStatus !== 'all') {
+        params.is_confirmed = filters.confirmationStatus === 'confirmed';
+      }
       if (debouncedSearch) params.search = debouncedSearch;
       const res = await getTransactions(params);
       setTransactions(res.items || []);
@@ -171,7 +175,7 @@ function Transactions() {
   }, [
     page, rowsPerPage, sortBy, sortDir, debouncedSearch,
     filters.accountIds, filters.categoryNames, filters.labelIds,
-    filters.recordTypes, filters.amountMin, filters.amountMax,
+    filters.recordTypes, filters.amountMin, filters.amountMax, filters.confirmationStatus,
   ]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -273,6 +277,22 @@ function Transactions() {
     }
   };
 
+  const handleBulkConfirm = async () => {
+    const ids = selectedTransactions.map((t) => t.id);
+    if (!ids.length) return;
+    try {
+      setLoading(true);
+      const { confirmed } = await bulkConfirmTransactions(ids);
+      setSuccess(`Confirmed ${confirmed} transaction(s)`);
+      setSelectedTransactions([]);
+      fetchData();
+    } catch (err) {
+      setError('Failed to confirm selected transactions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRemoveDuplicates = async () => {
     if (window.confirm('Remove all duplicate transactions? This will keep the first occurrence of each duplicate.')) {
       try {
@@ -339,6 +359,9 @@ function Transactions() {
         if (filters.recordTypes.length) params.transaction_type = filters.recordTypes.join(',');
         if (filters.amountMin != null && filters.amountMin !== '') params.min_amount = filters.amountMin;
         if (filters.amountMax != null && filters.amountMax !== '') params.max_amount = filters.amountMax;
+        if (filters.confirmationStatus && filters.confirmationStatus !== 'all') {
+          params.is_confirmed = filters.confirmationStatus === 'confirmed';
+        }
         if (debouncedSearch) params.search = debouncedSearch;
         const res = await getTransactions(params);
         rows = res.items || [];
@@ -457,7 +480,7 @@ function Transactions() {
           categories={categories}
           labels={labels}
           amountBound={amountBound}
-          show={['search', 'accounts', 'categories', 'labels', 'recordTypes', 'amount']}
+          show={['search', 'accounts', 'categories', 'labels', 'recordTypes', 'amount', 'confirmationStatus']}
         />
 
         <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
@@ -481,6 +504,7 @@ function Transactions() {
 
               <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
                 <Button size="small" variant="outlined" startIcon={<Edit />} disabled={selectedTransactions.length === 0} onClick={() => setBulkEditOpen(true)}>Edit</Button>
+                <Button size="small" variant="outlined" color="success" startIcon={<CheckCircleOutline />} disabled={selectedTransactions.length === 0} onClick={handleBulkConfirm}>Mark Confirmed</Button>
                 <Button size="small" variant="outlined" startIcon={<FileDownload />} onClick={handleExportCSV}>Export</Button>
                 <Button size="small" variant="outlined" color="error" startIcon={<Delete />} disabled={selectedTransactions.length === 0} onClick={handleBulkDelete}>Delete</Button>
                 <Button size="small" variant="outlined" color="warning" startIcon={<ContentCopy />} onClick={handleFindDuplicates}>Solve Duplicities</Button>
@@ -541,7 +565,14 @@ function Transactions() {
                           />
                           <CategoryIcon name={t.category} size={36} />
                           <Box sx={{ minWidth: 0, flex: 1 }}>
-                            <Typography noWrap fontWeight={600}>{t.category || 'Uncategorized'}</Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                              <Typography noWrap fontWeight={600}>{t.category || 'Uncategorized'}</Typography>
+                              {t.is_confirmed === false && (
+                                <Tooltip title="From a real-time bank alert — not yet matched to the official statement">
+                                  <Chip label="Pending" size="small" color="warning" variant="outlined" sx={{ height: 18, fontSize: 11 }} />
+                                </Tooltip>
+                              )}
+                            </Box>
                             {t.description && (
                               <Typography noWrap variant="body2" color="text.secondary">{t.description}</Typography>
                             )}

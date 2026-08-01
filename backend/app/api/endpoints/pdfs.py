@@ -20,7 +20,7 @@ from app.services.transaction_service import TransactionService
 from app.services.pdf_storage import get_preferred_pdf_path, ensure_decrypted_with_candidates, ensure_decrypted_pdf
 from app.services.balance_service import apply_statement_balance
 from app.services import ai_transaction_extraction
-from app.services.transaction_hooks import apply_auto_rules_and_notify
+from app.services.transaction_hooks import apply_auto_rules_and_notify, create_or_reconcile_transaction
 import logging
 
 router = APIRouter()
@@ -514,13 +514,9 @@ def reprocess_pdf(
                     trans_data['description']
                 )
             
-            transaction = Transaction(
-                user_id=current_user.id,
-                bank_id=bank.id,
-                pdf_statement_id=pdf.id,
-                **trans_data
+            transaction, _reconciled = create_or_reconcile_transaction(
+                db, current_user.id, bank.id, trans_data, pdf_statement_id=pdf.id
             )
-            db.add(transaction)
             apply_auto_rules_and_notify(db, current_user.id, transaction)
             transactions_added += 1
 
@@ -637,13 +633,9 @@ def _reprocess_pdf_worker(pdf_id: int, user_id: int) -> dict:
                 trans_data['category'] = TransactionService.categorize_transaction(
                     trans_data['description']
                 )
-            transaction = Transaction(
-                user_id=user_id,
-                bank_id=bank.id,
-                pdf_statement_id=pdf.id,
-                **trans_data
+            transaction, _reconciled = create_or_reconcile_transaction(
+                db, user_id, bank.id, trans_data, pdf_statement_id=pdf.id
             )
-            db.add(transaction)
             apply_auto_rules_and_notify(db, user_id, transaction)
             transactions_added += 1
 

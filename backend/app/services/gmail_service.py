@@ -2,6 +2,7 @@ import os
 import base64
 import pickle
 import re
+import html as _html
 from typing import List, Optional, Dict
 from datetime import datetime
 from google.auth.transport.requests import Request
@@ -46,6 +47,40 @@ def credentials_from_dict(data: dict) -> Credentials:
             expiry = expiry.replace(tzinfo=None)
         creds.expiry = expiry
     return creds
+
+
+def _decode_part(data: str) -> str:
+    return base64.urlsafe_b64decode(data + '=' * (-len(data) % 4)).decode('utf-8', errors='replace')
+
+
+def _html_to_text(raw: str) -> str:
+    raw = re.sub(r'<style[^>]*>.*?</style>', ' ', raw, flags=re.DOTALL | re.IGNORECASE)
+    raw = re.sub(r'<script[^>]*>.*?</script>', ' ', raw, flags=re.DOTALL | re.IGNORECASE)
+    raw = re.sub(r'<!--.*?-->', ' ', raw, flags=re.DOTALL)
+    raw = re.sub(r'<[^>]+>', ' ', raw)
+    raw = _html.unescape(raw)
+    return re.sub(r'\s+', ' ', raw).strip()
+
+
+def _extract_body_text(payload: dict) -> Optional[str]:
+    """Recursively walk a Gmail message payload for a text/plain part; falls
+    back to text/html (stripped of markup) if no plain part exists."""
+    def find(part, mime_wanted):
+        if part.get('mimeType') == mime_wanted and part.get('body', {}).get('data'):
+            return _decode_part(part['body']['data'])
+        for sub in part.get('parts', []) or []:
+            found = find(sub, mime_wanted)
+            if found:
+                return found
+        return None
+
+    plain = find(payload, 'text/plain')
+    if plain:
+        return plain
+    html_body = find(payload, 'text/html')
+    if html_body:
+        return _html_to_text(html_body)
+    return None
 
 
 class GmailService:
@@ -205,7 +240,49 @@ class GmailService:
             # Propagate so the caller records the sync as failed.
             logger.error(f"Gmail API error for query '{query}': {error}")
             raise
-    
+
+    def search_messages_with_body(
+        self,
+        query: str,
+        max_results: int = 100,
+        after_date: Optional[datetime] = None,
+    ) -> List[Dict]:
+        """Like search_messages, but each result also carries its body text
+        (extracted from the SAME full-format fetch, not a second API call) —
+        used for real-time alert emails, which have no PDF attachment and so
+        need their body parsed, unlike the statement-sync path."""
+        if not self.service:
+            if not self.authenticate():
+                return []
+
+        if after_date:
+            query = f"{query} after:{after_date.strftime('%Y/%m/%d')}"
+
+        message_ids = []
+        page_token = None
+        while len(message_ids) < max_results:
+            results = self.service.users().messages().list(
+                userId='me', q=query,
+                maxResults=min(100, max_results - len(message_ids)),
+                pageToken=page_token,
+            ).execute()
+            message_ids.extend(results.get('messages', []))
+            page_token = results.get('nextPageToken')
+            if not page_token:
+                break
+
+        detailed = []
+        for m in message_ids[:max_results]:
+            try:
+                full = self.service.users().messages().get(userId='me', id=m['id'], format='full').execute()
+            except HttpError as error:
+                logger.warning(f"Failed to fetch message {m['id']}: {error}")
+                continue
+            parsed = self._parse_message(full)
+            parsed['body'] = _extract_body_text(full.get('payload', {})) or ''
+            detailed.append(parsed)
+        return detailed
+
     def get_message(self, message_id: str) -> Optional[Dict]:
         """Get full message details"""
         if not self.service:
@@ -222,6 +299,23 @@ class GmailService:
         
         except HttpError as error:
             logger.error(f"Error fetching message {message_id}: {error}")
+            return None
+
+    def get_message_body(self, message_id: str) -> Optional[str]:
+        """Fetch a message and return its readable body text (plain-text part
+        preferred; HTML stripped of style/script/tags as a fallback) — used to
+        parse real-time bank spend/credit alert emails, which have no PDF
+        attachment so the normal statement-sync path never looks at their body."""
+        if not self.service:
+            if not self.authenticate():
+                return None
+        try:
+            message = self.service.users().messages().get(
+                userId='me', id=message_id, format='full'
+            ).execute()
+            return _extract_body_text(message.get('payload', {}))
+        except HttpError as error:
+            logger.error(f"Error fetching message body {message_id}: {error}")
             return None
     
     def _parse_message(self, message: Dict) -> Dict:

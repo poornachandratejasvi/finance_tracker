@@ -18,6 +18,7 @@ from app.schemas.transaction import (
 )
 from app.services.transaction_service import TransactionService
 from app.utils.parsing import parse_csv_list as _parse_csv_list
+from app.core.household import household_user_ids
 
 router = APIRouter()
 
@@ -53,14 +54,17 @@ def list_transactions(
     min_amount: Optional[float] = None,
     max_amount: Optional[float] = None,
     search: Optional[str] = None,
+    is_confirmed: Optional[bool] = None,
     sort_by: str = Query("date", pattern="^(date|amount|description|category)$"),
     sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """List user's transactions with filters"""
+    """List transactions visible to the caller — their own plus any household
+    member's (a shared family/couple wallet), see app.core.household."""
     from sqlalchemy import asc as _asc
-    query = db.query(Transaction).filter(Transaction.user_id == current_user.id)
+    household_ids = household_user_ids(db, current_user)
+    query = db.query(Transaction).filter(Transaction.user_id.in_(household_ids))
 
     bank_ids = _parse_csv_list(bank_id, int)
     if bank_ids:
@@ -94,6 +98,9 @@ def list_transactions(
     if max_amount is not None:
         query = query.filter(Transaction.amount <= max_amount)
 
+    if is_confirmed is not None:
+        query = query.filter(Transaction.is_confirmed.is_(is_confirmed))
+
     if search:
         query = query.filter(
             or_(
@@ -116,7 +123,7 @@ def list_transactions(
 
     # Currency for accounts, so a transaction with no explicit currency inherits its account's.
     from app.services.currency_service import bank_currency_map
-    bank_cur = bank_currency_map(db, current_user.id)
+    bank_cur = bank_currency_map(db, household_ids)
 
     # Add bank name, currency and labels (with colors) to response
     result = []
@@ -280,6 +287,13 @@ def create_transaction(
     try:
         from app.services.notification_rules import check_match
         check_match(db, current_user.id, transaction)
+    except Exception:
+        db.rollback()
+
+    try:
+        from app.services.transaction_hooks import check_transaction_watchers
+        check_transaction_watchers(db, current_user.id, transaction)
+        db.commit()
     except Exception:
         db.rollback()
 
@@ -552,6 +566,32 @@ def bulk_delete_transactions(
     )
     db.commit()
     return {"deleted": deleted}
+
+
+@router.post("/bulk-confirm")
+def bulk_confirm_transactions(
+    payload: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Mark many Pending transactions as Confirmed at once — the manual fallback for
+    when automatic reconciliation (matching a statement/alert transaction) never finds
+    a match for a given pending row (e.g. a cash-only spend, or a merchant description
+    too different for the amount+date window to catch)."""
+    ids = payload.transaction_ids or []
+    if not ids:
+        return {"confirmed": 0}
+    confirmed = (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == current_user.id,
+            Transaction.id.in_(ids),
+            Transaction.is_confirmed.is_(False),
+        )
+        .update({"is_confirmed": True, "confirmed_at": utcnow()}, synchronize_session=False)
+    )
+    db.commit()
+    return {"confirmed": confirmed}
 
 
 @router.post("/{transaction_id}/mark-not-duplicate", response_model=TransactionResponse)

@@ -71,6 +71,33 @@ def get_gmail_accounts_status(
     return {"accounts": results, "total": len(results)}
 
 
+@router.post("/sync-alerts-now")
+def sync_alerts_now(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Manually check for new real-time bank spend/credit alert emails right
+    now, instead of waiting for the next 15-minute beat tick — creates
+    'Pending' transactions from any new alerts found (see alert_sync_service.py)."""
+    from datetime import timedelta
+    from app.core.time_utils import utcnow
+    from app.models.models import Bank
+    from app.services.alert_sync_service import sync_alert_emails
+
+    accounts = db.query(GmailAccount).filter(GmailAccount.user_id == current_user.id).all()
+    banks = db.query(Bank).filter(Bank.user_id == current_user.id).all()
+    if not accounts or not banks:
+        return {"created": 0}
+
+    total_created = 0
+    for account in accounts:
+        try:
+            total_created += sync_alert_emails(db, account, banks, after_date=utcnow() - timedelta(days=2))
+        except Exception:
+            logger.warning("Manual alert-email sync failed for account %s", account.id, exc_info=True)
+    return {"created": total_created}
+
+
 @router.post("/{account_id}/check-now", response_model=GmailAccountResponse)
 def check_gmail_account_now(
     account_id: int,

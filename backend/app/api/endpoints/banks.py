@@ -27,7 +27,8 @@ from app.services.pdf_storage import ensure_decrypted_pdf
 from app.services.balance_service import apply_statement_balance, recompute_all_balances
 from app.services.credit_balance_service import redetect_all_credit_balances
 from app.services import ai_transaction_extraction
-from app.services.transaction_hooks import apply_auto_rules_and_notify
+from app.services.transaction_hooks import apply_auto_rules_and_notify, create_or_reconcile_transaction
+from app.core.household import household_user_ids
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +45,13 @@ def list_banks(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """List all banks"""
+    """List all banks visible to the caller — their own plus any household member's
+    (a shared family/couple wallet), see app.core.household."""
+    household_ids = household_user_ids(db, current_user)
     query = db.query(Bank).filter(
-        Bank.user_id == current_user.id
+        Bank.user_id.in_(household_ids)
     )
-    
+
     if is_active is not None:
         query = query.filter(Bank.is_active == is_active)
 
@@ -75,7 +78,7 @@ def list_banks(
         credit_sum = func.sum(case((Transaction.transaction_type == TransactionType.CREDIT, Transaction.amount), else_=0.0))
         txn_rows = (
             db.query(Transaction.bank_id, debit_sum, credit_sum, func.max(Transaction.transaction_date))
-            .filter(Transaction.bank_id.in_(bank_ids), Transaction.user_id == current_user.id)
+            .filter(Transaction.bank_id.in_(bank_ids), Transaction.user_id.in_(household_ids))
             .group_by(Transaction.bank_id)
             .all()
         )
@@ -266,18 +269,18 @@ def get_bank(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get bank by ID"""
+    """Get bank by ID (own or any household member's)"""
     bank = db.query(Bank).filter(
         Bank.id == bank_id,
-        Bank.user_id == current_user.id
+        Bank.user_id.in_(household_user_ids(db, current_user))
     ).first()
-    
+
     if not bank:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Bank not found"
         )
-    
+
     return bank
 
 
@@ -376,7 +379,15 @@ def update_bank(
         del update_data['account_password']
     for field, value in update_data.items():
         setattr(bank, field, value)
-    
+
+    # A manually-entered balance should stick until the user either edits it
+    # again or explicitly clicks "Redetect Credit Balances" — the automatic
+    # periodic redetection (credit_balance_tasks.py) checks this flag and skips
+    # any card marked 'manual' so it can never silently overwrite it.
+    if 'current_balance' in update_data:
+        bank.balance_source = 'manual'
+        bank.balance_updated_at = utcnow()
+
     db.commit()
     db.refresh(bank)
     return bank    
@@ -628,13 +639,9 @@ async def upload_bank_pdf(
                     trans_data['description']
                 )
             
-            transaction = Transaction(
-                user_id=current_user.id,
-                bank_id=bank.id,
-                pdf_statement_id=pdf_statement.id,
-                **trans_data
+            transaction, _reconciled = create_or_reconcile_transaction(
+                db, current_user.id, bank.id, trans_data, pdf_statement_id=pdf_statement.id
             )
-            db.add(transaction)
             apply_auto_rules_and_notify(db, current_user.id, transaction)
             transactions_added += 1
 

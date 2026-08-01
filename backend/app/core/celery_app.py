@@ -13,7 +13,11 @@ celery_app = Celery(
     "finance_tracker",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.tasks.sync_tasks", "app.tasks.backup_tasks", "app.tasks.notification_tasks", "app.tasks.gmail_health_tasks"],
+    include=[
+        "app.tasks.sync_tasks", "app.tasks.backup_tasks", "app.tasks.notification_tasks",
+        "app.tasks.gmail_health_tasks", "app.tasks.alert_sync_tasks", "app.tasks.credit_balance_tasks",
+        "app.tasks.watcher_tasks",
+    ],
 )
 
 celery_app.conf.update(
@@ -54,5 +58,33 @@ celery_app.conf.beat_schedule = {
     "gmail-health-check": {
         "task": "gmail.check_health",
         "schedule": 2 * 60 * 60.0,
+    },
+    # Real-time spend/credit alert emails — checked often since the whole point
+    # is near-real-time visibility well before the monthly statement PDF arrives.
+    "alert-email-sync": {
+        "task": "alerts.sync_all",
+        "schedule": 15 * 60.0,
+    },
+    # Keeps credit-card outstanding balances fresh without anyone needing to
+    # remember to click "Redetect Credit Balances" — a no-op ("unchanged") if
+    # the latest statement hasn't changed, and skips any card the user has
+    # manually set (balance_source='manual') so it never overwrites that.
+    "credit-balance-redetect": {
+        "task": "credit_balance.redetect_all",
+        "schedule": 24 * 60 * 60.0,
+    },
+    # Flags credit cards with no transaction in 60+ days: Discord notification, a
+    # visible Jobs-page entry, and a one-time balance reset to 0 (see
+    # credit_balance_tasks.notify_stale_credit_cards for the self-limiting guard).
+    "credit-balance-stale-check": {
+        "task": "credit_balance.notify_stale_cards",
+        "schedule": 24 * 60 * 60.0,
+    },
+    # Creates each active TransactionWatcher's Google Task for its current period
+    # (daily/weekly/monthly/yearly) — hourly, not pinned to exact boundaries, so a
+    # daily/weekly watcher's task shows up promptly and a missed run self-heals.
+    "watcher-monthly-tasks": {
+        "task": "watchers.create_monthly_tasks",
+        "schedule": 60 * 60.0,
     },
 }

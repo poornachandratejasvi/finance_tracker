@@ -6,9 +6,11 @@ import {
   TextField, MenuItem, FormControlLabel, Switch, CircularProgress, Stack,
 } from '@mui/material';
 import {
-  Add, Edit, Delete, PersonAddAlt1, PhotoCamera, Lock,
+  Add, Edit, Delete, PersonAddAlt1, PhotoCamera, Lock, GroupAdd, PersonOff,
 } from '@mui/icons-material';
-import { getUsers, createUser, updateUser, deleteUser } from '../../services/api';
+import {
+  getUsers, createUser, updateUser, deleteUser, shareHousehold, leaveHousehold,
+} from '../../services/api';
 import { formatDate } from '../../utils/format';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -87,6 +89,11 @@ export default function UsersPanel() {
   // Delete confirm dialog
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+
+  // Household sharing dialog
+  const [shareTarget, setShareTarget] = useState(null);
+  const [shareWithId, setShareWithId] = useState('');
+  const [shareBusy, setShareBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -214,6 +221,45 @@ export default function UsersPanel() {
     }
   };
 
+  // ----- Household sharing -----
+  // Members sharing `u`'s household_id (excluding `u` itself) — computed from the
+  // already-loaded user list rather than a separate endpoint.
+  const householdMates = (u) => users.filter((other) => other.id !== u.id && other.household_id === u.household_id);
+
+  const openShare = (u) => {
+    setShareTarget(u);
+    setShareWithId('');
+    setError('');
+    setSuccess('');
+  };
+
+  const submitShare = async () => {
+    if (!shareTarget || !shareWithId) return;
+    setShareBusy(true);
+    setError('');
+    try {
+      await shareHousehold(shareTarget.id, shareWithId);
+      setSuccess(`"${shareTarget.username}" now shares accounts with "${users.find((u) => u.id === Number(shareWithId))?.username}"`);
+      setShareTarget(null);
+      await load();
+    } catch (e) {
+      setError(apiError(e, 'Failed to share household'));
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const handleMakePrivate = async (u) => {
+    if (!window.confirm(`Stop "${u.username}" from sharing accounts with anyone else?`)) return;
+    try {
+      await leaveHousehold(u.id);
+      setSuccess(`"${u.username}" now has a private (unshared) wallet`);
+      await load();
+    } catch (e) {
+      setError(apiError(e, 'Failed to update household'));
+    }
+  };
+
   if (forbidden) {
     return (
       <Box sx={{ p: 1 }}>
@@ -252,19 +298,20 @@ export default function UsersPanel() {
                 <TableCell>Full name</TableCell>
                 <TableCell>Role</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell>Household</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                     <CircularProgress size={28} />
                   </TableCell>
                 </TableRow>
               ) : users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
                       No users found.
                     </Typography>
@@ -272,6 +319,7 @@ export default function UsersPanel() {
                 </TableRow>
               ) : users.map((u) => {
                 const isSelf = currentUser && u.id === currentUser.id;
+                const mates = householdMates(u);
                 return (
                   <TableRow key={u.id} hover>
                     <TableCell>
@@ -305,7 +353,28 @@ export default function UsersPanel() {
                         variant={u.is_active ? 'filled' : 'outlined'}
                       />
                     </TableCell>
+                    <TableCell>
+                      {mates.length === 0 ? (
+                        <Typography variant="caption" color="text.secondary">Private</Typography>
+                      ) : (
+                        <Tooltip title={`Shares accounts with ${mates.map((m) => m.username).join(', ')}`}>
+                          <Chip size="small" color="primary" variant="outlined" label={`Shared (${mates.length + 1})`} />
+                        </Tooltip>
+                      )}
+                    </TableCell>
                     <TableCell align="right">
+                      <Tooltip title="Share accounts with another user">
+                        <IconButton size="small" onClick={() => openShare(u)}>
+                          <GroupAdd fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      {mates.length > 0 && (
+                        <Tooltip title="Make private (stop sharing)">
+                          <IconButton size="small" onClick={() => handleMakePrivate(u)}>
+                            <PersonOff fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       <Tooltip title="Edit user">
                         <IconButton size="small" onClick={() => openEdit(u)}>
                           <Edit fontSize="small" />
@@ -452,6 +521,36 @@ export default function UsersPanel() {
             startIcon={editSaving ? <CircularProgress size={16} color="inherit" /> : <Edit />}
           >
             Save changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Share household dialog */}
+      <Dialog open={!!shareTarget} onClose={() => !shareBusy && setShareTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Share accounts</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Group <strong>{shareTarget?.username}</strong> into another user's household —
+            from then on they'll see each other's banks and transactions (a shared
+            family/couple wallet). Personal settings (Gmail, AI keys, Discord, API tokens)
+            stay separate either way.
+          </Typography>
+          <TextField
+            label="Share with" select value={shareWithId} fullWidth
+            onChange={(e) => setShareWithId(e.target.value)}
+          >
+            {users.filter((u) => u.id !== shareTarget?.id).map((u) => (
+              <MenuItem key={u.id} value={u.id}>{u.username}</MenuItem>
+            ))}
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShareTarget(null)} disabled={shareBusy}>Cancel</Button>
+          <Button
+            variant="contained" onClick={submitShare} disabled={!shareWithId || shareBusy}
+            startIcon={shareBusy ? <CircularProgress size={16} color="inherit" /> : <GroupAdd />}
+          >
+            Share
           </Button>
         </DialogActions>
       </Dialog>

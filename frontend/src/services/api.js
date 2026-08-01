@@ -165,6 +165,9 @@ export const deleteTransaction = async (id) => {
 export const bulkDeleteTransactions = async (ids) =>
   (await api.post('/api/transactions/bulk-delete', { transaction_ids: ids })).data;
 
+export const bulkConfirmTransactions = async (ids) =>
+  (await api.post('/api/transactions/bulk-confirm', { transaction_ids: ids })).data;
+
 export const getDuplicates = async () => {
   const response = await api.get('/api/transactions/duplicates');
   return response.data;
@@ -238,6 +241,7 @@ export const getGmailAuthUrl = async () => {
 
 export const checkGmailAccountNow = async (id) => (await api.post(`/api/gmail-accounts/${id}/check-now`)).data;
 export const testGmailNotification = async (id) => (await api.post(`/api/gmail-accounts/${id}/test-notification`)).data;
+export const syncAlertsNow = async () => (await api.post('/api/gmail-accounts/sync-alerts-now')).data;
 export const disconnectGmailAccount = async (id) => { await api.delete(`/api/gmail-accounts/${id}`); };
 export const getGoogleCredentialsStatus = async () => (await api.get('/api/gmail-accounts/google-credentials/status')).data;
 export const uploadGoogleCredentials = async (file) => {
@@ -622,6 +626,15 @@ export const updateDiscordWebhook = async (webhookUrl) =>
   (await api.put('/api/notifications/discord', { webhook_url: webhookUrl })).data;
 export const testDiscordWebhook = async () => (await api.post('/api/notifications/discord/test')).data;
 
+// Transaction watchers (named recurring-transaction expectations that get a fresh
+// Google Task each month and auto-complete it when a matching transaction appears)
+export const getWatchers = async () => (await api.get('/api/watchers/')).data;
+export const createWatcher = async (data) => (await api.post('/api/watchers/', data)).data;
+export const updateWatcher = async (id, data) => (await api.put(`/api/watchers/${id}`, data)).data;
+export const deleteWatcher = async (id) => (await api.delete(`/api/watchers/${id}`)).data;
+export const runWatchersNow = async () => (await api.post('/api/watchers/run-now')).data;
+export const detectRecurringTransactions = async () => (await api.get('/api/watchers/detect-recurring')).data;
+
 // AI (Claude / Gemini)
 export const getAIConfig = async () => (await api.get('/api/ai/config')).data;
 export const updateAIConfig = async (data) => (await api.put('/api/ai/config', data)).data;
@@ -706,6 +719,10 @@ export const getUsers = async () => (await api.get('/api/users/')).data;
 export const createUser = async (data) => (await api.post('/api/users/', data)).data;
 export const updateUser = async (id, data) => (await api.put(`/api/users/${id}`, data)).data;
 export const deleteUser = async (id) => { await api.delete(`/api/users/${id}`); };
+export const shareHousehold = async (userId, otherUserId) =>
+  (await api.post(`/api/users/${userId}/share-household-with/${otherUserId}`)).data;
+export const leaveHousehold = async (userId) =>
+  (await api.post(`/api/users/${userId}/leave-household`)).data;
 
 // Backup (Google Drive)
 export const getBackupStatus = async () => (await api.get('/api/backup/status')).data;

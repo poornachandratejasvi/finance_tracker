@@ -191,13 +191,23 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
     if missing:
         return {"created": False, "error": f"missing/invalid fields: {', '.join(missing)}"}
 
-    # Per-record account override: resolve a bank by name (case-insensitive) for this user.
+    # Per-record account override: resolve a bank by name for this user. Shortcuts users
+    # naturally type a short form ("HDFC") rather than the exact configured Bank.name
+    # ("HDFC Bank - Updated"), so try, in order: exact name, name contains, exact code —
+    # falling back to the default/External bank (and noting the miss) rather than
+    # silently guessing wrong.
+    unmatched_account_name = None
     if account_name:
-        b = db.query(Bank).filter(
-            Bank.user_id == user.id, func.lower(Bank.name) == account_name.lower()
-        ).first()
+        low_name = account_name.lower()
+        b = (
+            db.query(Bank).filter(Bank.user_id == user.id, func.lower(Bank.name) == low_name).first()
+            or db.query(Bank).filter(Bank.user_id == user.id, func.lower(Bank.name).contains(low_name)).first()
+            or db.query(Bank).filter(Bank.user_id == user.id, func.lower(Bank.code) == low_name).first()
+        )
         if b:
             default_bank_id = b.id
+        else:
+            unmatched_account_name = account_name
 
     ttype = _coerce_type(target.get("transaction_type"))
     if ttype is None:
@@ -217,6 +227,11 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
         if existing:
             return {"created": False, "skipped_duplicate": True, "transaction_id": existing[0]}
 
+    notes = str(target["notes"]) if target.get("notes") is not None else None
+    if unmatched_account_name:
+        miss_note = f"Account '{unmatched_account_name}' didn't match any bank — filed under the default account for review."
+        notes = f"{notes}\n{miss_note}" if notes else miss_note
+
     txn = Transaction(
         user_id=user.id,
         bank_id=default_bank_id,
@@ -229,9 +244,14 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
         category=category,
         from_account=str(target["from_account"]) if target.get("from_account") is not None else None,
         to_account=str(target["to_account"]) if target.get("to_account") is not None else None,
-        notes=str(target["notes"]) if target.get("notes") is not None else None,
+        notes=notes,
         is_manual=True,
         source="ingest",
+        # Ingested rows are best-effort (no statement to cross-check against yet) — they
+        # start Pending like alert-email transactions do, and get auto-confirmed by the
+        # same reconciliation path (create_or_reconcile_transaction) once the real
+        # statement transaction shows up, or manually via the Pending bulk-confirm action.
+        is_confirmed=False,
         custom_fields=json.dumps(extras) if extras else None,
     )
     db.add(txn)
@@ -255,6 +275,13 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
     try:
         from app.services.notification_rules import check_match
         check_match(db, user.id, txn)
+    except Exception:
+        db.rollback()
+
+    try:
+        from app.services.transaction_hooks import check_transaction_watchers
+        check_transaction_watchers(db, user.id, txn)
+        db.commit()
     except Exception:
         db.rollback()
 

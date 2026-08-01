@@ -40,3 +40,12 @@ def create_task(creds_dict: dict, title: str, notes: Optional[str] = None) -> st
         body["notes"] = notes[:8192]
     created = service.tasks().insert(tasklist=list_id, body=body).execute()
     return created.get('id')
+
+
+def complete_task(creds_dict: dict, task_id: str) -> None:
+    """Mark a task in the 'Finance Tracker Alerts' list as completed. Looks the list id
+    up again rather than requiring the caller to store it — it's a single cheap
+    tasklists().list() call, and the list is stable (created once, reused after)."""
+    service = _tasks_service(creds_dict)
+    list_id = _ensure_task_list(service)
+    service.tasks().patch(tasklist=list_id, task=task_id, body={"status": "completed"}).execute()

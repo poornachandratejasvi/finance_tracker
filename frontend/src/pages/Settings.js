@@ -687,16 +687,7 @@ function Settings() {
                     key={item.key}
                     selected={active === item.key}
                     onClick={() => setActive(item.key)}
-                    sx={{
-                      mx: 1,
-                      borderRadius: 1.5,
-                      '&.Mui-selected': {
-                        bgcolor: 'primary.main',
-                        color: 'primary.contrastText',
-                        '& .MuiListItemIcon-root': { color: 'primary.contrastText' },
-                        '&:hover': { bgcolor: 'primary.dark' },
-                      },
-                    }}
+                    sx={{ mx: 1, borderRadius: 1.5 }}
                   >
                     <ListItemIcon sx={{ minWidth: 38, color: 'inherit' }}>
                       {item.icon}

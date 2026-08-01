@@ -39,8 +39,11 @@ def to_base(amount: Optional[float], code: Optional[str], rate_map: Dict[str, fl
     return float(amount) * (rate if rate else 1.0)
 
 
-def bank_currency_map(db: Session, user_id: int) -> Dict[int, str]:
+def bank_currency_map(db: Session, user_id) -> Dict[int, str]:
     """{bank_id: currency_code} so transaction rows (which may have a NULL
-    currency_code) can inherit their account's currency."""
-    rows = db.query(Bank.id, Bank.currency_code).filter(Bank.user_id == user_id).all()
+    currency_code) can inherit their account's currency. Accepts a single user id
+    or a list (e.g. a household's member ids) — callers showing household-shared
+    transactions need every member's banks covered, not just their own."""
+    ids = user_id if isinstance(user_id, (list, tuple, set)) else [user_id]
+    rows = db.query(Bank.id, Bank.currency_code).filter(Bank.user_id.in_(ids)).all()
     return {bid: (code or "INR") for bid, code in rows}

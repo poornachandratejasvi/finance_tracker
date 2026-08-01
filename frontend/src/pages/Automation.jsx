@@ -10,11 +10,12 @@ import {
 import {
   Send, Download, Refresh,
   Add, Delete, Schedule, NotificationsActive, AccountBalance,
-  SelectAll, Deselect,
+  SelectAll, Deselect, TaskAlt,
 } from '@mui/icons-material';
-import { getBanks, emailLatestBankCSV, generateAllCSV, startSync } from '../services/api';
+import { getBanks, emailLatestBankCSV, generateAllCSV, startSync, syncAlertsNow } from '../services/api';
 import api from '../services/api';
 import { useActivity } from '../contexts/ActivityContext';
+import WatchersPanel from '../components/settings/WatchersPanel.jsx';
 
 function TabPanel({ children, value, index }) {
   return value === index ? <Box sx={{ pt: 3 }}>{children}</Box> : null;
@@ -180,6 +181,21 @@ export default function Automation() {
     }
   };
 
+  const [checkingAlerts, setCheckingAlerts] = useState(false);
+  const [alertsResult, setAlertsResult] = useState(null);
+  const handleCheckAlertsNow = async () => {
+    setCheckingAlerts(true);
+    setAlertsResult(null);
+    try {
+      const data = await syncAlertsNow();
+      setAlertsResult({ ok: true, message: `Found ${data.created} new pending transaction${data.created === 1 ? '' : 's'}.` });
+    } catch (err) {
+      setAlertsResult({ ok: false, message: err?.response?.data?.detail || 'Failed to check for new alerts.' });
+    } finally {
+      setCheckingAlerts(false);
+    }
+  };
+
   // ── CSV Export handlers ────────────────────────────────────────────────
   const handleSendCSV = async () => {
     if (!selectedBankId) return;
@@ -327,6 +343,7 @@ export default function Automation() {
           <Tab icon={<Send />} iconPosition="start" label="CSV Export & Email" />
           <Tab icon={<NotificationsActive />} iconPosition="start" label="Budget Alerts" />
           <Tab icon={<AccountBalance />} iconPosition="start" label="Discord" />
+          <Tab icon={<TaskAlt />} iconPosition="start" label="Reminders" />
           <Tab label="Job History" />
         </Tabs>
 
@@ -392,19 +409,35 @@ export default function Automation() {
               </Grid>
 
               <Grid item xs={12}>
-                <Box sx={{ display: 'flex', gap: 2 }}>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                   <Button variant="contained" onClick={handleSaveSchedule} disabled={scheduleLoading}>
                     {scheduleSaved ? '✓ Saved' : 'Save Schedule'}
                   </Button>
                   <Button variant="outlined" onClick={handleManualSync} startIcon={<Refresh />}>
                     Run Sync Now
                   </Button>
+                  <Button
+                    variant="outlined" color="warning" onClick={handleCheckAlertsNow}
+                    disabled={checkingAlerts}
+                    startIcon={checkingAlerts ? <CircularProgress size={16} /> : <NotificationsActive />}
+                  >
+                    {checkingAlerts ? 'Checking…' : 'Check for New Alerts Now'}
+                  </Button>
                 </Box>
               </Grid>
 
+              {alertsResult && (
+                <Grid item xs={12}>
+                  <Alert severity={alertsResult.ok ? 'success' : 'error'} onClose={() => setAlertsResult(null)}>
+                    {alertsResult.message}
+                  </Alert>
+                </Grid>
+              )}
+
               <Grid item xs={12}>
                 <Alert severity="info">
-                  <strong>Note:</strong> The scheduler runs automatically — saved schedules take effect within about a minute, no restart needed. Times are in UTC. You can always trigger a manual sync with "Run Sync Now".
+                  <strong>Note:</strong> The scheduler runs automatically — saved schedules take effect within about a minute, no restart needed. Times are in UTC. You can always trigger a manual sync with "Run Sync Now", or check for new real-time
+                  spend/credit alert emails (normally checked every 15 minutes) immediately with "Check for New Alerts Now".
                 </Alert>
               </Grid>
             </Grid>
@@ -777,8 +810,15 @@ export default function Automation() {
           </Box>
         </TabPanel>
 
-        {/* ══ Tab 4: Job History ══ */}
+        {/* ══ Tab 4: Reminders (transaction watchers → Google Tasks) ══ */}
         <TabPanel value={tab} index={4}>
+          <Box sx={{ px: 3, pb: 3 }}>
+            <WatchersPanel />
+          </Box>
+        </TabPanel>
+
+        {/* ══ Tab 5: Job History ══ */}
+        <TabPanel value={tab} index={5}>
           <Box sx={{ px: 3, pb: 3 }}>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
               <Typography variant="h6">Job History (last 20 syncs)</Typography>

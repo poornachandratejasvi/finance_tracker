@@ -17,9 +17,25 @@ class TransactionType(str, enum.Enum):
     CREDIT = "credit"
 
 
+class Household(Base):
+    """A shared visibility group — members see each other's banks/transactions
+    (a family/couple's shared wallet), while everything personal to an individual
+    (Gmail/Drive OAuth, AI provider keys, Discord webhook, API tokens) stays
+    per-user regardless of household membership. Every user belongs to exactly
+    one household; a brand-new user gets a private one-person household of their
+    own until an admin groups them with someone else."""
+    __tablename__ = "households"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+    members = relationship("User", back_populates="household")
+
+
 class User(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(100), unique=True, index=True, nullable=False)
@@ -28,14 +44,16 @@ class User(Base):
     avatar_url = Column(Text)  # profile photo (data URL or path)
     role = Column(SQLEnum(UserRole), default=UserRole.USER, nullable=False)
     is_active = Column(Boolean, default=True)
+    household_id = Column(Integer, ForeignKey("households.id", ondelete="SET NULL"), index=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
-    
+
     # Relationships
     gmail_accounts = relationship("GmailAccount", back_populates="user", cascade="all, delete-orphan")
     transactions = relationship("Transaction", back_populates="user")
     labels = relationship("Label", back_populates="user", cascade="all, delete-orphan")
     banks = relationship("Bank", back_populates="user", cascade="all, delete-orphan")
+    household = relationship("Household", back_populates="members")
 
 
 class GmailAccount(Base):
@@ -78,6 +96,11 @@ class Bank(Base):
     csv_email = Column(String(255))
     current_balance = Column(Float)
     balance_updated_at = Column(DateTime)
+    # 'auto' (from statement redetection) | 'manual' (user set it via Edit Bank) —
+    # the automatic periodic redetection (credit_balance_tasks.py) skips 'manual'
+    # cards so it never silently overwrites a value the user just set; the
+    # explicit "Redetect Credit Balances" button still overrides it on request.
+    balance_source = Column(String(10), default="auto")
     currency_code = Column(String(3), default='INR')  # ISO 4217 currency of this account
     color = Column(String(7))  # hex tile/dot color; NULL -> derived from bank_type
     exclude_from_stats = Column(Boolean, default=False)  # hide from dashboard/analytics totals
@@ -122,8 +145,11 @@ class BankEmail(Base):
     received_date = Column(DateTime)
     has_attachment = Column(Boolean, default=False)
     is_processed = Column(Boolean, default=False)
+    # 'statement' (has a PDF, the original/default meaning) | 'alert' (a real-time
+    # spend/credit notification email, no PDF — see alert_email_service.py).
+    email_type = Column(String(20), default="statement")
     created_at = Column(DateTime, default=utcnow)
-    
+
     # Relationships
     gmail_account = relationship("GmailAccount", back_populates="bank_emails")
     bank = relationship("Bank", back_populates="bank_emails")
@@ -180,7 +206,14 @@ class Transaction(Base):
     duplicate_group_id = Column(String(50))
     is_manual = Column(Boolean, default=False)  # Manually entered transaction
     custom_fields = Column(Text)  # JSON string for custom fields
-    source = Column(String(50))  # Origin of the row: 'pdf', 'manual', 'ingest', etc.
+    source = Column(String(50))  # Origin of the row: 'pdf', 'manual', 'ingest', 'alert', etc.
+
+    # 'alert' rows (parsed from a real-time bank SMS/email alert, before the official
+    # statement arrives) start life unconfirmed; everything else defaults confirmed.
+    # Still included in every total/analysis — this only drives the "Pending" UI badge
+    # and the statement-arrival reconciliation match (see transaction_hooks.py).
+    is_confirmed = Column(Boolean, default=True)
+    confirmed_at = Column(DateTime)
 
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
@@ -550,5 +583,39 @@ class SavedFilter(Base):
     payload = Column(Text)  # JSON of the filter value
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")
+
+
+class TransactionWatcher(Base):
+    """A named recurring-transaction expectation (e.g. "Sreenivasa Gowda rent") that
+    gets a fresh Google Task each month and auto-completes it the moment a
+    transaction whose description matches shows up — pending or confirmed alike,
+    since this is a lightweight bookkeeping reminder, not a budget/notification
+    rule. See google_tasks_service.py and transaction_hooks.check_transaction_watchers."""
+    __tablename__ = "transaction_watchers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    # JSON array of strings, same storage convention as NotificationRule.keywords —
+    # matches (case-insensitive substring vs Transaction.description) if ANY one hits,
+    # since a real recurring transfer's description often varies slightly run to run
+    # (reference numbers, minor wording changes) and one fixed phrase isn't enough.
+    match_keywords = Column(Text, nullable=False)
+    # Optional — many recurring transfers (e.g. a generic "MonthlyTrans CHARGES FOR"
+    # IMPS description with no payee name at all) are only reliably identified by
+    # keyword + amount together; null means keyword alone is enough.
+    match_amount = Column(Float)
+    # daily | weekly | monthly | yearly — controls both the Google Task cadence and
+    # the current_period label format ('YYYY-MM-DD' / 'YYYY-Www' / 'YYYY-MM' / 'YYYY').
+    frequency = Column(String(10), default="monthly")
+    is_active = Column(Boolean, default=True)
+    # The currently-open Google Task for this watcher, if any — period label format
+    # depends on frequency (see watcher_tasks.period_label).
+    current_period = Column(String(10))
+    current_task_id = Column(String(100))
+    cleared_at = Column(DateTime)
+    created_at = Column(DateTime, default=utcnow)
 
     user = relationship("User")

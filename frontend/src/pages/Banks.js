@@ -546,7 +546,11 @@ function Banks() {
             >
               {formatCurrency(signed, { currency: bank.currency_code })}
             </Typography>
-            {isEstimatedBalance(bank) && (
+            {bank.balance_source === 'manual' ? (
+              <Tooltip title="Manually set — won't be overwritten by automatic statement redetection until you edit it again or click Redetect Credit Balances">
+                <Typography variant="caption" color="text.secondary">manual</Typography>
+              </Tooltip>
+            ) : isEstimatedBalance(bank) && (
               <Typography variant="caption" color="text.secondary">est.</Typography>
             )}
           </Box>
@@ -891,11 +895,15 @@ function Banks() {
             />
             <TextField
               fullWidth
-              label="Current Balance (Optional)"
+              label={newBank.bank_type === 'credit' ? 'Current Outstanding Amount (Optional)' : 'Current Balance (Optional)'}
               type="number"
               value={newBank.current_balance}
               onChange={(e) => setNewBank({ ...newBank, current_balance: e.target.value })}
-              helperText="Overrides the auto-detected balance"
+              helperText={
+                newBank.bank_type === 'credit'
+                  ? "What you currently owe on this card. Overrides the auto-detected Total Amount Due — set this any time the automatic statement detection is stale or wrong."
+                  : "Overrides the auto-detected balance"
+              }
               sx={{ mb: 2 }}
             />
             <TextField

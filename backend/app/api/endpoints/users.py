@@ -25,6 +25,7 @@ def _user_dict(u: User) -> dict:
         "id": u.id, "username": u.username, "email": u.email,
         "full_name": u.full_name, "avatar_url": u.avatar_url,
         "role": u.role, "is_active": u.is_active, "created_at": u.created_at,
+        "household_id": u.household_id,
     }
 
 
@@ -156,6 +157,52 @@ def list_users(
     return [_user_dict(u) for u in db.query(User).order_by(User.id).all()]
 
 
+@router.post("/{user_id}/share-household-with/{other_user_id}")
+def share_household(
+    user_id: int,
+    other_user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Group `user_id` into `other_user_id`'s household — from then on they see
+    each other's banks/transactions (a shared family/couple wallet). Personal
+    settings (Gmail/Drive OAuth, AI keys, Discord webhook, API tokens) stay
+    per-user regardless. The household `user_id` was in before is left as-is —
+    if it's now empty, it's just an unused row, harmless."""
+    _require_admin(current_user)
+    u = db.query(User).filter(User.id == user_id).first()
+    other = db.query(User).filter(User.id == other_user_id).first()
+    if not u or not other:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not other.household_id:
+        raise HTTPException(status_code=400, detail=f"{other.username} has no household to join")
+    u.household_id = other.household_id
+    db.commit()
+    return {"success": True, "household_id": u.household_id}
+
+
+@router.post("/{user_id}/leave-household")
+def leave_household(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Give `user_id` a fresh private household of their own, detaching them from
+    whoever they were sharing with."""
+    from app.models.models import Household
+    _require_admin(current_user)
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    household = Household(name=f"{u.username}'s Household")
+    db.add(household)
+    db.commit()
+    db.refresh(household)
+    u.household_id = household.id
+    db.commit()
+    return {"success": True, "household_id": u.household_id}
+
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
 def create_user(
     data: AdminUserCreate,
@@ -181,6 +228,8 @@ def create_user(
         seed_user_defaults(db, u.id)
     except Exception:
         db.rollback()
+    from app.core.household import ensure_household
+    ensure_household(db, u)
     return _user_dict(u)
 
 

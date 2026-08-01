@@ -304,6 +304,8 @@ def google_login_callback(code: str, state: str, db: Session = Depends(get_db)):
                 seed_user_defaults(db, user.id)
             except Exception:
                 db.rollback()
+            from app.core.household import ensure_household
+            ensure_household(db, user)
         elif not user.avatar_url and info.get('picture'):
             user.avatar_url = info.get('picture'); db.commit()
 

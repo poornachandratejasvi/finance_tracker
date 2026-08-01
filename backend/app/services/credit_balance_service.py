@@ -107,11 +107,16 @@ def redetect_credit_card_balance(db: Session, uid: int, bank: Bank, use_ai: bool
         return report
 
     if bank.current_balance == new_balance:
+        # Value didn't change, but a manual override still needs to be cleared here —
+        # this path runs for both the explicit "Redetect" button and the periodic auto
+        # task, and the caller distinguishes them by whether 'manual' banks were queried.
+        bank.balance_source = "auto"
         report["source"] = "unchanged"
         return report
 
     bank.current_balance = new_balance
     bank.balance_updated_at = pdf.statement_period_end or pdf.created_at
+    bank.balance_source = "auto"  # re-detecting explicitly supersedes any earlier manual override
     report["new_balance"] = new_balance
     report["source"] = source
     return report

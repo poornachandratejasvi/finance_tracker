@@ -134,6 +134,7 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "color", "ALTER TABLE banks ADD COLUMN color VARCHAR(7)")
         _add_column_if_missing(columns, "exclude_from_stats", "ALTER TABLE banks ADD COLUMN exclude_from_stats BOOLEAN DEFAULT FALSE")
         _add_column_if_missing(columns, "is_archived", "ALTER TABLE banks ADD COLUMN is_archived BOOLEAN DEFAULT FALSE")
+        _add_column_if_missing(columns, "balance_source", "ALTER TABLE banks ADD COLUMN balance_source VARCHAR(10) DEFAULT 'auto'")
 
     if "pdf_statements" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("pdf_statements")}
@@ -144,6 +145,7 @@ def _ensure_columns() -> None:
     if "bank_emails" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("bank_emails")}
         _add_column_if_missing(columns, "from_email", "ALTER TABLE bank_emails ADD COLUMN from_email VARCHAR(255)")
+        _add_column_if_missing(columns, "email_type", "ALTER TABLE bank_emails ADD COLUMN email_type VARCHAR(20) DEFAULT 'statement'")
 
     if "sync_logs" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("sync_logs")}
@@ -158,10 +160,32 @@ def _ensure_columns() -> None:
         columns = {col["name"] for col in inspector.get_columns("transactions")}
         _add_column_if_missing(columns, "source", "ALTER TABLE transactions ADD COLUMN source VARCHAR(50)")
         _add_column_if_missing(columns, "currency_code", "ALTER TABLE transactions ADD COLUMN currency_code VARCHAR(3)")
+        # DEFAULT TRUE backfills every existing (statement-derived) row as already
+        # confirmed — only newly-created 'alert' rows are inserted with False.
+        _add_column_if_missing(columns, "is_confirmed", "ALTER TABLE transactions ADD COLUMN is_confirmed BOOLEAN DEFAULT TRUE")
+        _add_column_if_missing(columns, "confirmed_at", "ALTER TABLE transactions ADD COLUMN confirmed_at TIMESTAMP")
 
     if "users" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("users")}
         _add_column_if_missing(columns, "avatar_url", "ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500)")
+        _add_column_if_missing(columns, "household_id", "ALTER TABLE users ADD COLUMN household_id INTEGER REFERENCES households(id) ON DELETE SET NULL")
+        if "household_id" not in columns and "households" in existing_tables:
+            # Every existing user gets their own private household so nothing
+            # changes for them until an admin explicitly groups two users together.
+            with engine.begin() as connection:
+                userless = connection.execute(text(
+                    "SELECT id, username FROM users WHERE household_id IS NULL"
+                )).fetchall()
+                for uid, uname in userless:
+                    result = connection.execute(text(
+                        "INSERT INTO households (name, created_at) VALUES (:name, now()) RETURNING id"
+                    ), {"name": f"{uname}'s Household"})
+                    hid = result.scalar()
+                    connection.execute(text(
+                        "UPDATE users SET household_id = :hid WHERE id = :uid"
+                    ), {"hid": hid, "uid": uid})
+            if userless:
+                logger.info("Created a private household for %d existing user(s)", len(userless))
 
     if "templates" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("templates")}
@@ -185,6 +209,50 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "amount_value_max", "ALTER TABLE notification_rules ADD COLUMN amount_value_max FLOAT")
         _add_column_if_missing(columns, "amount_negate", "ALTER TABLE notification_rules ADD COLUMN amount_negate BOOLEAN DEFAULT FALSE")
         _add_column_if_missing(columns, "condition_logic", "ALTER TABLE notification_rules ADD COLUMN condition_logic VARCHAR(3) DEFAULT 'and'")
+
+    if "transaction_watchers" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("transaction_watchers")}
+        _add_column_if_missing(columns, "match_amount", "ALTER TABLE transaction_watchers ADD COLUMN match_amount FLOAT")
+        # match_keyword (single string) -> match_keywords (JSON array) — a watcher's
+        # description often needs more than one alternate phrasing to reliably match.
+        # The old column is left in place (unused) rather than dropped, same as every
+        # other migration here; existing single values are backfilled as one-item lists.
+        needs_keywords_backfill = "match_keywords" not in columns and "match_keyword" in columns
+        _add_column_if_missing(columns, "match_keywords", "ALTER TABLE transaction_watchers ADD COLUMN match_keywords TEXT")
+        if needs_keywords_backfill:
+            import json as _json
+            with engine.begin() as connection:
+                rows = connection.execute(text(
+                    "SELECT id, match_keyword FROM transaction_watchers WHERE match_keyword IS NOT NULL"
+                )).fetchall()
+                for wid, kw in rows:
+                    connection.execute(
+                        text("UPDATE transaction_watchers SET match_keywords = :kws WHERE id = :id"),
+                        {"kws": _json.dumps([kw]), "id": wid},
+                    )
+            if rows:
+                logger.info("Backfilled match_keywords for %d transaction watcher(s)", len(rows))
+        if "match_keyword" in columns:
+            # The ORM model no longer sets this (superseded by match_keywords), but
+            # the live column is still NOT NULL from its original creation — relax
+            # it so new INSERTs (which never populate it) don't get rejected.
+            try:
+                with engine.begin() as connection:
+                    connection.execute(text(
+                        "ALTER TABLE transaction_watchers ALTER COLUMN match_keyword DROP NOT NULL"
+                    ))
+            except Exception:
+                logger.warning("Failed to relax transaction_watchers.match_keyword NOT NULL", exc_info=True)
+        _add_column_if_missing(columns, "frequency", "ALTER TABLE transaction_watchers ADD COLUMN frequency VARCHAR(10) DEFAULT 'monthly'")
+        # current_period widened from 'YYYY-MM' (7 chars) to fit 'YYYY-Www' (8 chars)
+        # now that weekly/daily/yearly frequencies are supported.
+        try:
+            with engine.begin() as connection:
+                connection.execute(text(
+                    "ALTER TABLE transaction_watchers ALTER COLUMN current_period TYPE VARCHAR(10)"
+                ))
+        except Exception:
+            logger.warning("Failed to widen transaction_watchers.current_period", exc_info=True)
 
     # Widen columns that now hold encrypted values (ciphertext is longer than plaintext).
     _widen_to_text(inspector, existing_tables, "users", "avatar_url")  # holds base64 data URLs

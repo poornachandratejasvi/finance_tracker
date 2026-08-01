@@ -44,6 +44,8 @@ class TransactionResponse(TransactionBase):
     is_duplicate: bool
     duplicate_group_id: Optional[str] = None
     is_manual: bool = False
+    is_confirmed: bool = True
+    source: Optional[str] = None
     labels: List[str] = []
     label_details: List[dict] = []  # [{id,name,color}] for colored chips
     created_at: datetime

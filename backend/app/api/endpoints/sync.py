@@ -25,7 +25,7 @@ from app.services.discord_notifier import discord_notifier
 from app.services.pdf_storage import get_preferred_pdf_path, ensure_decrypted_with_candidates, ensure_decrypted_pdf
 from app.services.balance_service import apply_statement_balance
 from app.services import ai_transaction_extraction
-from app.services.transaction_hooks import apply_auto_rules_and_notify
+from app.services.transaction_hooks import apply_auto_rules_and_notify, create_or_reconcile_transaction
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -160,14 +160,9 @@ def _process_pdf_task(
                 trans_data["category"] = TransactionService.categorize_transaction(
                     trans_data["description"]
                 )
-            transaction = Transaction(
-                user_id=user_id,
-                bank_id=bank.id,
-                pdf_statement_id=pdf_statement.id,
-                source="pdf",
-                **trans_data,
+            transaction, _reconciled = create_or_reconcile_transaction(
+                db, user_id, bank.id, trans_data, pdf_statement_id=pdf_statement.id, source="pdf"
             )
-            db.add(transaction)
             apply_auto_rules_and_notify(db, user_id, transaction)
             transactions_added += 1
 
@@ -1010,13 +1005,9 @@ def resync_pdfs(
                             trans_data['description']
                         )
                     
-                    transaction = Transaction(
-                        user_id=current_user.id,
-                        bank_id=bank.id,
-                        pdf_statement_id=pdf_statement.id,
-                        **trans_data
+                    transaction, _reconciled = create_or_reconcile_transaction(
+                        db, current_user.id, bank.id, trans_data, pdf_statement_id=pdf_statement.id
                     )
-                    db.add(transaction)
                     apply_auto_rules_and_notify(db, current_user.id, transaction)
                     transactions_added += 1
 
@@ -1228,11 +1219,9 @@ def update_pdf_password(
     for trans_data in parse_result["transactions"]:
         if not trans_data.get("category"):
             trans_data["category"] = TransactionService.categorize_transaction(trans_data["description"])
-        transaction = Transaction(
-            user_id=current_user.id, bank_id=bank.id, pdf_statement_id=pdf_statement.id,
-            source="pdf", **trans_data
+        transaction, _reconciled = create_or_reconcile_transaction(
+            db, current_user.id, bank.id, trans_data, pdf_statement_id=pdf_statement.id, source="pdf"
         )
-        db.add(transaction)
         apply_auto_rules_and_notify(db, current_user.id, transaction)
         transactions_added += 1
     apply_statement_balance(bank, parse_result, ai_context={"db": db, "user_id": current_user.id})

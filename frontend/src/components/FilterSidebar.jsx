@@ -18,6 +18,7 @@ export const DEFAULT_FILTERS = {
   includeTransfers: true,
   recordStates: [],
   paymentTypes: [],
+  confirmationStatus: 'all',
 };
 
 const RECORD_TYPE_OPTS = [
@@ -37,6 +38,11 @@ const PAYMENT_TYPE_OPTS = [
 const TRANSFER_OPTS = [
   { value: true, label: 'Include transfers' },
   { value: false, label: 'Exclude transfers' },
+];
+const CONFIRMATION_STATUS_OPTS = [
+  { value: 'all', label: 'All' },
+  { value: 'pending', label: 'Pending only' },
+  { value: 'confirmed', label: 'Confirmed only' },
 ];
 
 // A reusable Wallet-style left filter panel. Controlled via { value, onChange }.
@@ -238,6 +244,21 @@ export default function FilterSidebar({
           PAYMENT_TYPE_OPTS,
           v.paymentTypes,
           (sel) => set({ paymentTypes: sel })
+        )}
+
+        {has('confirmationStatus') && (
+          <FormControl size="small" fullWidth>
+            <InputLabel>Confirmation status</InputLabel>
+            <Select
+              value={v.confirmationStatus}
+              label="Confirmation status"
+              onChange={(e) => set({ confirmationStatus: e.target.value })}
+            >
+              {CONFIRMATION_STATUS_OPTS.map((o) => (
+                <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         )}
 
         <Divider />

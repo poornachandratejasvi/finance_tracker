@@ -8,16 +8,17 @@ import {
   WarningAmber, Summarize, CreditCard, Savings, AccountBalance, AccountBalanceWallet,
 } from '@mui/icons-material';
 import {
-  ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Bar,
+  ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Bar, Area,
   XAxis, YAxis, Tooltip as ReTooltip, CartesianGrid,
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import CategoryIcon from '../components/CategoryIcon.jsx';
+import RecurringTransactionsCard from '../components/RecurringTransactionsCard.jsx';
 import { formatCurrency, formatDate, signedAccountBalance, timeAgo } from '../utils/format';
 import { useCategoryMeta } from '../utils/categories';
 import api, {
   getBanks, getTransactions, getAnalyticsComparison, getAnalyticsCashflow,
-  getPredictions, getAIInsights, getAnomalies, getAISummary,
+  getPredictions, getAIInsights, getAnomalies, getAISummary, getNetWorth,
 } from '../services/api';
 
 const MONTHS = [
@@ -122,6 +123,9 @@ function Dashboard() {
   const [aiSummary, setAiSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
 
+  // Net worth trend (daily balance snapshots, period-independent).
+  const [netWorth, setNetWorth] = useState(null);
+
   // Derived period boundaries (current + previous month) + labels.
   const periods = useMemo(() => {
     const y = monthDate.getFullYear();
@@ -145,6 +149,13 @@ function Dashboard() {
     getBanks()
       .then((b) => setBanks(Array.isArray(b) ? b : []))
       .catch(() => setBanks([]));
+  }, []);
+
+  // Net worth trend is also period-independent (its own 180-day window).
+  useEffect(() => {
+    getNetWorth(180)
+      .then((d) => setNetWorth(d))
+      .catch(() => setNetWorth(null));
   }, []);
 
   // Period-dependent data.
@@ -610,6 +621,50 @@ function Dashboard() {
               </ResponsiveContainer>
             )}
           </Paper>
+        </Grid>
+
+        {/* ── Net worth trend ── */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1, flexWrap: 'wrap', gap: 1 }}>
+              <Typography variant="h6">Net Worth</Typography>
+              {netWorth?.current && (
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                  {money(netWorth.current.net_worth)}
+                </Typography>
+              )}
+            </Box>
+            {!netWorth || netWorth.series.length === 0 ? (
+              <Typography color="text.secondary" sx={{ py: 4 }}>
+                Not enough history yet — net worth is snapshotted daily.
+              </Typography>
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <ComposedChart data={netWorth.series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="netWorthFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={theme.palette.primary.main} stopOpacity={0.28} />
+                      <stop offset="100%" stopColor={theme.palette.primary.main} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} vertical={false} />
+                  <XAxis dataKey="date" tickFormatter={dayTick} tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={moneyC} tick={{ fontSize: 11 }} width={60} />
+                  <ReTooltip formatter={(v) => money(v)} contentStyle={tooltipStyle} />
+                  <Area
+                    type="monotone" dataKey="net_worth" name="Net Worth"
+                    stroke={theme.palette.primary.main} strokeWidth={2}
+                    fill="url(#netWorthFill)"
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </Paper>
+        </Grid>
+
+        {/* ── Detected recurring transactions ── */}
+        <Grid item xs={12}>
+          <RecurringTransactionsCard />
         </Grid>
 
         {/* ── Recent transactions ── */}
