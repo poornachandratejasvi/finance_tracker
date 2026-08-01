@@ -127,7 +127,7 @@ services:
   frontend:
     image: ghcr.io/poornachandratejasvi/finance_tracker-frontend:${IMAGE_TAG:-latest}
     environment:
-      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_API_URL=${REACT_APP_API_URL:-http://localhost:8000}
     ports:
       - "3000:3000"
     depends_on:
