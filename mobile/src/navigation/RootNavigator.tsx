@@ -1,0 +1,75 @@
+import React from "react";
+import { ActivityIndicator, Text, View } from "react-native";
+import { NavigationContainer } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+
+import { useAuth } from "../context/AuthContext";
+import LoginScreen from "../screens/LoginScreen";
+import DashboardScreen from "../screens/DashboardScreen";
+import TransactionsScreen from "../screens/TransactionsScreen";
+import AddTransactionScreen from "../screens/AddTransactionScreen";
+
+export type RootStackParamList = {
+  Login: undefined;
+  Tabs: undefined;
+};
+
+export type TabParamList = {
+  Dashboard: undefined;
+  Transactions: undefined;
+  Add: undefined;
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<TabParamList>();
+
+function tabIcon(emoji: string) {
+  return () => <Text style={{ fontSize: 20 }}>{emoji}</Text>;
+}
+
+function AppTabs() {
+  return (
+    <Tab.Navigator screenOptions={{ headerTitleAlign: "center" }}>
+      <Tab.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{ tabBarIcon: tabIcon("📊") }}
+      />
+      <Tab.Screen
+        name="Transactions"
+        component={TransactionsScreen}
+        options={{ tabBarIcon: tabIcon("📒") }}
+      />
+      <Tab.Screen
+        name="Add"
+        component={AddTransactionScreen}
+        options={{ tabBarIcon: tabIcon("➕"), title: "Add Transaction" }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+export default function RootNavigator() {
+  const { loading, isAuthenticated } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {isAuthenticated ? (
+          <Stack.Screen name="Tabs" component={AppTabs} />
+        ) : (
+          <Stack.Screen name="Login" component={LoginScreen} />
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}

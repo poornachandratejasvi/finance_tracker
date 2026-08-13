@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Finance Tracker",
+    "slug": "finance-tracker-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.poornachandratejasvi.financetracker"
+    },
+    "android": {
+      "package": "com.poornachandratejasvi.financetracker"
+    }
+  }
+}

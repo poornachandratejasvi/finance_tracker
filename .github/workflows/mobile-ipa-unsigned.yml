@@ -1,0 +1,83 @@
+name: Build Unsigned Mobile IPA
+
+# Produces an UNSIGNED iOS .ipa for the Expo app in mobile/ — for personal sideloading via
+# LiveContainer (which loads unsigned app bundles itself, so no Apple Developer Program
+# membership or code-signing certificate is needed anywhere in this pipeline). Not suitable
+# for the App Store or TestFlight — those require Apple's real signing process.
+#
+# Manual trigger only: macOS runners consume Actions minutes at a 10x multiplier, so this
+# never fires on an ordinary push — run it deliberately from the Actions tab when you want
+# a fresh build.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned-ipa:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Generate native iOS project (expo prebuild)
+        run: npx expo prebuild --platform ios --clean --non-interactive
+
+      - name: Install CocoaPods dependencies
+        working-directory: mobile/ios
+        run: pod install --repo-update
+
+      - name: Build unsigned .app (code signing disabled)
+        working-directory: mobile/ios
+        run: |
+          set -euo pipefail
+          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" | head -1)
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          echo "Building workspace=$WORKSPACE scheme=$SCHEME"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            build
+          echo "SCHEME=$SCHEME" >> "$GITHUB_ENV"
+
+      - name: Package Payload/App.app into an .ipa
+        working-directory: mobile/ios
+        run: |
+          set -euo pipefail
+          APP_PATH=$(find build/Build/Products -maxdepth 1 -name "*.app" | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app product found under build/Build/Products" >&2
+            find build/Build/Products -maxdepth 2 >&2 || true
+            exit 1
+          fi
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r "../${SCHEME}-unsigned.ipa" Payload
+
+      - name: Upload .ipa artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-ipa
+          path: mobile/*-unsigned.ipa
+          retention-days: 14
