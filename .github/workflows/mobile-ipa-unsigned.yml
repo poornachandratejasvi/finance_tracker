@@ -25,16 +25,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # React Native 0.76 (this app's pinned version, from late 2024) ships a version of the
-      # `fmt` C++ library that fails to compile under the much newer Clang in recent Xcode
-      # (macos-latest keeps moving forward — e.g. Xcode 26.x — while RN 0.76 was only ever
-      # built/tested against Xcode ~16.x). Pin to a contemporaneous Xcode instead of chasing
-      # this per-runner-update; bump this once the app's Expo/React Native versions are updated.
-      - name: Select Xcode 16.2 (matches React Native 0.76-era tooling)
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: "16.2"
-
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
