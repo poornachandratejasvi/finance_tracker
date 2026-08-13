@@ -65,10 +65,12 @@ jobs:
         working-directory: mobile/ios
         run: |
           set -euo pipefail
-          APP_PATH=$(find build/Build/Products -maxdepth 1 -name "*.app" | head -1)
+          # Product lives at build/Build/Products/Release-iphoneos/<Scheme>.app -- two
+          # levels down from build/Build/Products, not one.
+          APP_PATH=$(find build/Build/Products -maxdepth 2 -name "*.app" | head -1)
           if [ -z "$APP_PATH" ]; then
             echo "No .app product found under build/Build/Products" >&2
-            find build/Build/Products -maxdepth 2 >&2 || true
+            find build/Build/Products -maxdepth 3 >&2 || true
             exit 1
           fi
           mkdir -p Payload
