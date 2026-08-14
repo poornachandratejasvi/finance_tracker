@@ -49,6 +49,13 @@ export async function clearSession(): Promise<void> {
   ]);
 }
 
+/** Full reset (Settings > Personal data & privacy) -- also forgets the saved server URL,
+ * unlike a plain logout which keeps it prefilled for convenience. */
+export async function clearAllLocalData(): Promise<void> {
+  await clearSession();
+  await SecureStore.deleteItemAsync(KEYS.serverUrl);
+}
+
 /** Load a previously-saved server URL + access token into the shared axios instance.
  * Returns true if a session was restored (caller should still expect the first request
  * to 401-refresh transparently if the access token has since expired). */

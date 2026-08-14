@@ -166,6 +166,85 @@ export interface UserPreferences {
   auto_logout: boolean;
 }
 
+export interface Currency {
+  id: number;
+  user_id: number;
+  code: string;
+  symbol: string;
+  name: string | null;
+  rate_to_base: number;
+  is_base: boolean;
+  created_at: string;
+}
+
+export interface Template {
+  id: number;
+  user_id: number;
+  name: string;
+  bank_id: number | null;
+  category: string | null;
+  amount: number | null;
+  transaction_type: string;
+  description: string | null;
+  notes: string | null;
+  currency_code: string | null;
+  label_ids: number[];
+  created_at: string;
+}
+
+export interface ApiToken {
+  id: number;
+  name: string | null;
+  token_prefix: string | null;
+  is_active: boolean;
+  last_used_at: string | null;
+  created_at: string | null;
+}
+
+export interface AdminUser {
+  id: number;
+  username: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  role: "ADMIN" | "USER" | "VIEWER";
+  is_active: boolean;
+  created_at: string;
+  household_id: number | null;
+}
+
+export interface GmailAccountStatus {
+  id: number;
+  email: string;
+  is_active: boolean;
+  last_synced: string | null;
+  created_at: string;
+  last_checked_at: string | null;
+  last_error: string | null;
+  status: "connected" | "error" | "reauth_required";
+}
+
+export interface BackupConfig {
+  enabled: boolean;
+  frequency: "hourly" | "daily" | "weekly";
+  destination: "local" | "drive";
+  last_run_at: string | null;
+}
+
+export interface BackupHistoryEntry {
+  filename: string;
+  size: number;
+  destination: "local" | "drive";
+  drive_file_id: string | null;
+  created_at: string;
+}
+
+export interface BackupStatus {
+  drive_connected: boolean;
+  last_backup: BackupHistoryEntry | null;
+  config: BackupConfig;
+}
+
 export interface AIConfig {
   providers: string[];
   claude: { model: string };
