@@ -10,6 +10,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (serverUrl: string, username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -44,8 +45,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    const me = await fetchCurrentUser();
+    setUser(me);
+  };
+
   const value = useMemo(
-    () => ({ user, loading, isAuthenticated: !!user, login, logout }),
+    () => ({ user, loading, isAuthenticated: !!user, login, logout, refreshUser }),
     [user, loading]
   );
 

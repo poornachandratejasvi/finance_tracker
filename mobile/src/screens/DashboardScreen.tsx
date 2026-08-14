@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 
@@ -15,7 +14,7 @@ import { DashboardSummary } from "../types";
 import { formatCurrency } from "../utils/format";
 
 export default function DashboardScreen() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [monthLabel, setMonthLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,9 +73,6 @@ export default function DashboardScreen() {
           <Text style={styles.greeting}>Hi, {user?.full_name || user?.username}</Text>
           {monthLabel && <Text style={styles.period}>{monthLabel}</Text>}
         </View>
-        <TouchableOpacity onPress={logout}>
-          <Text style={styles.logout}>Log out</Text>
-        </TouchableOpacity>
       </View>
 
       {error && <Text style={styles.error}>{error}</Text>}

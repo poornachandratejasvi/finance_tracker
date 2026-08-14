@@ -9,6 +9,7 @@ import LoginScreen from "../screens/LoginScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import TransactionsScreen from "../screens/TransactionsScreen";
 import AddTransactionScreen from "../screens/AddTransactionScreen";
+import SettingsNavigator from "./SettingsNavigator";
 
 export type RootStackParamList = {
   Login: undefined;
@@ -19,6 +20,7 @@ export type TabParamList = {
   Dashboard: undefined;
   Transactions: undefined;
   Add: undefined;
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -45,6 +47,11 @@ function AppTabs() {
         name="Add"
         component={AddTransactionScreen}
         options={{ tabBarIcon: tabIcon("➕"), title: "Add Transaction" }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsNavigator}
+        options={{ tabBarIcon: tabIcon("⚙️"), headerShown: false }}
       />
     </Tab.Navigator>
   );

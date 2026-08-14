@@ -21,6 +21,7 @@ export interface Bank {
   current_balance: number | null;
   computed_balance: number | null;
   is_active: boolean;
+  is_archived: boolean | null;
 }
 
 export interface Category {
@@ -102,4 +103,83 @@ export interface TokenResponse {
   access_token: string;
   refresh_token: string;
   token_type: string;
+}
+
+export interface Label {
+  id: number;
+  user_id: number;
+  name: string;
+  color: string;
+  auto_keywords: string[] | null;
+  created_at: string;
+}
+
+export type RecordType = "any" | "debit" | "credit" | "transfer";
+
+export interface AutoRule {
+  id: number;
+  user_id: number;
+  name: string;
+  keywords: string[];
+  record_type: RecordType | null;
+  category: string | null;
+  label_ids: number[];
+  priority: number | null;
+  is_active: boolean | null;
+  notify_discord: boolean | null;
+  created_at: string;
+}
+
+export type AmountOperator = "none" | "eq" | "gte" | "lte" | "between";
+export type ConditionLogic = "and" | "or";
+
+export interface NotificationRule {
+  id: number;
+  user_id: number;
+  name: string;
+  trigger_type: "match" | "absence";
+  keywords: string[];
+  keyword_negate: boolean | null;
+  record_type: RecordType | null;
+  bank_id: number | null;
+  bank_name: string | null;
+  amount_operator: AmountOperator | null;
+  amount_value: number | null;
+  amount_value_max: number | null;
+  amount_negate: boolean | null;
+  condition_logic: ConditionLogic | null;
+  check_day_of_month: number | null;
+  notify_discord: boolean | null;
+  notify_email: boolean | null;
+  email_to: string | null;
+  notify_task: boolean | null;
+  is_active: boolean | null;
+  last_triggered_at: string | null;
+  last_triggered_month: string | null;
+  created_at: string;
+}
+
+export interface UserPreferences {
+  language: string;
+  default_interval: string;
+  hide_decimals: boolean;
+  auto_logout: boolean;
+}
+
+export interface AIConfig {
+  providers: string[];
+  claude: { model: string };
+  gemini: { model: string };
+  ollama: { model: string; base_url: string };
+  features: {
+    categorize: boolean;
+    insights: boolean;
+    predict: boolean;
+    query: boolean;
+    anomalies: boolean;
+    summary: boolean;
+  };
+  claude_key_set: boolean;
+  gemini_key_set: boolean;
+  available: { ollama: boolean; claude: boolean; gemini: boolean };
 }
