@@ -5,6 +5,9 @@ dist/
 # never commit them (they're large and go stale immediately).
 /ios/
 /android/
+# Generated from APIConfig.swift.template by the CI workflow, contains a real API token --
+# never commit the filled-in version.
+ios-native/APIConfig.swift
 npm-debug.*
 *.jks
 *.p8

@@ -16,6 +16,17 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1b6b4c"
       }
-    }
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      "./plugins/withAppIntents"
+    ]
   }
 }

@@ -1,0 +1,13 @@
+// Generated at CI build time from GitHub Actions secrets -- see
+// .github/workflows/mobile-ipa-unsigned.yml, which substitutes the placeholders below and
+// writes the result to APIConfig.swift (gitignored, never committed with real values).
+//
+// This intentionally bakes the server URL + API token in at build time rather than sharing
+// them at runtime with the RN app's own login session (which would need an iOS "App Group"
+// entitlement -- a feature normally gated behind a paid Apple Developer Program provisioning
+// profile, which this unsigned/sideloaded build deliberately avoids). Rotating the token
+// means re-running the CI build, not just tapping something in the app.
+enum APIConfig {
+    static let serverURL = "__FINANCE_SERVER_URL__"
+    static let apiKey = "__FINANCE_API_TOKEN__"
+}

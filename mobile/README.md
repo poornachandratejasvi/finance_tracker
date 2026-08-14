@@ -66,16 +66,57 @@ your `.ipa`, ready to import into LiveContainer.
 It's manual-trigger-only (`workflow_dispatch`) on purpose: macOS runners consume GitHub
 Actions minutes at a 10x multiplier, so it never fires on an ordinary push.
 
-This app has no custom native modules (navigation, secure-store, and axios are all
-Expo-Go-safe), so there's nothing exotic for the build to compile — but this pipeline
-hasn't been run end-to-end yet, so the first attempt may need a small fix (e.g. a scheme
-name or CocoaPods quirk specific to the Expo SDK version in use at build time).
+## 4. "Add Transaction" Siri Shortcuts action (App Intent)
 
-## 4. Project layout
+Beyond the plain screens, the compiled app (not Expo Go — this needs a real build) exposes
+a native **App Intent** called "Add Transaction". Once installed, it shows up directly in
+the iOS Shortcuts action picker — including as a target for iOS's built-in **Transaction**
+Automation trigger (Shortcuts app → Automations → + → Transaction), which fires
+automatically on Apple Pay taps and hands over `Amount`/`Merchant` as inputs. Map those to
+this intent's `Amount`/`Merchant` parameters and transactions get logged with no manual
+step at all — the same idea as Wallet by BudgetBakers' Apple Pay integration.
+
+This intent (`mobile/ios-native/AddTransactionIntent.swift`) doesn't share your logged-in
+session with the rest of the app — sharing runtime data between the RN app and native
+Swift code needs an iOS "App Group" entitlement, which is normally gated behind a paid
+Apple Developer Program provisioning profile (exactly what this unsigned/LiveContainer
+setup avoids). Instead, the server URL + a dedicated API token are **baked in at CI build
+time** from GitHub Actions secrets, using the same `X-API-Key` ingestion path the
+[iOS Shortcut integration](../docs/ios-shortcut.md) already uses.
+
+**One-time setup, before running the IPA build workflow:**
+
+1. Create a dedicated API token: in the app (or via `curl`), `POST /api/api-tokens/` with a
+   JWT session — see [docs/ios-shortcut.md § 1](../docs/ios-shortcut.md) for the exact
+   command. Give it a name like "iOS App Intent".
+2. In the GitHub repo: **Settings → Secrets and variables → Actions → New repository
+   secret**, add:
+   - `FINANCE_SERVER_URL` — e.g. `https://finance.yourdomain.com` (no trailing slash)
+   - `FINANCE_API_TOKEN` — the token from step 1
+3. Run the **Build Unsigned Mobile IPA** workflow as usual (§ 3 above).
+
+Rotating the token later means creating a new one and updating the `FINANCE_API_TOKEN`
+secret, then re-running the build — there's no in-app way to change it without a rebuild,
+by design (see the tradeoff above).
+
+`mobile/ios-native/APIConfig.swift.template` has the placeholders the CI workflow fills
+in; the real `APIConfig.swift` it generates is gitignored and never committed.
+
+Because of this feature, the build now has genuine custom native code to compile (not just
+JS/RN), and the deployment target is bumped to iOS 16.4 (App Intents require iOS 16+, and
+Expo SDK 57 itself won't go below 16.4) — so **this pipeline is more likely to need one or
+two fix-and-retry rounds** than a plain-JS Expo build would, since I can't compile or
+validate Swift locally at all (only the config-plugin's file-copying and Xcode-project
+wiring were verified locally — the actual Swift content is unverified until a real
+macOS build runs).
+
+## 5. Project layout
 
 ```
 mobile/
 ├── App.tsx                  # providers + navigation root
+├── ios-native/               # Swift App Intent source, injected into ios/ at prebuild time
+├── plugins/                  # Expo config plugin wiring ios-native/ into the Xcode project
 ├── src/
 │   ├── api/                 # axios client (auth/refresh) + typed endpoint wrappers
 │   ├── context/AuthContext.tsx
@@ -85,7 +126,7 @@ mobile/
 │   └── utils/format.ts
 ```
 
-## 5. Notes
+## 6. Notes
 
 - This app authenticates with the same JWT session endpoints the web frontend uses
   (`/api/auth/login`, `/api/auth/refresh`, `/api/users/me`), not the API-token

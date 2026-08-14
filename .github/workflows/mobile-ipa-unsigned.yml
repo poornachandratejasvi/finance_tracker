@@ -33,6 +33,26 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      - name: Generate APIConfig.swift from secrets
+        env:
+          FINANCE_SERVER_URL: ${{ secrets.FINANCE_SERVER_URL }}
+          FINANCE_API_TOKEN: ${{ secrets.FINANCE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FINANCE_SERVER_URL:-}" ] || [ -z "${FINANCE_API_TOKEN:-}" ]; then
+            echo "::error::FINANCE_SERVER_URL and/or FINANCE_API_TOKEN repository secrets are not set. Add them under Settings > Secrets and variables > Actions before running this workflow."
+            exit 1
+          fi
+          python3 -c "
+          import os
+          with open('ios-native/APIConfig.swift.template') as f:
+              content = f.read()
+          content = content.replace('__FINANCE_SERVER_URL__', os.environ['FINANCE_SERVER_URL'])
+          content = content.replace('__FINANCE_API_TOKEN__', os.environ['FINANCE_API_TOKEN'])
+          with open('ios-native/APIConfig.swift', 'w') as f:
+              f.write(content)
+          "
+
       - name: Generate native iOS project (expo prebuild)
         run: npx expo prebuild --platform ios --clean --non-interactive
 
