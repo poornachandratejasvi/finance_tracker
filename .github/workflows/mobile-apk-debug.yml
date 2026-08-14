@@ -1,0 +1,86 @@
+name: Build Debug Android APK
+
+# Produces a debug-signed APK for the Expo app in mobile/ -- Android needs no code-signing
+# ceremony to sideload at all (unlike iOS): a debug build is signed with Gradle's
+# well-known default debug keystore and installs directly via "Install unknown apps",
+# no LiveContainer-equivalent, no Apple-Developer-Program-equivalent gatekeeping.
+#
+# Runs on ubuntu-latest (no macOS needed -- Android tooling is cross-platform), so this is
+# both cheaper and faster than the iOS workflow. Manual trigger only, for consistency with
+# the iOS workflow, though there's no cost reason to require that here.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Generate ApiConfig.kt from secrets
+        env:
+          FINANCE_SERVER_URL: ${{ secrets.FINANCE_SERVER_URL }}
+          FINANCE_API_TOKEN: ${{ secrets.FINANCE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FINANCE_SERVER_URL:-}" ] || [ -z "${FINANCE_API_TOKEN:-}" ]; then
+            echo "::error::FINANCE_SERVER_URL and/or FINANCE_API_TOKEN repository secrets are not set. Add them under Settings > Secrets and variables > Actions before running this workflow."
+            exit 1
+          fi
+          python3 -c "
+          import os
+          with open('android-native/ApiConfig.kt.template') as f:
+              content = f.read()
+          content = content.replace('__FINANCE_SERVER_URL__', os.environ['FINANCE_SERVER_URL'])
+          content = content.replace('__FINANCE_API_TOKEN__', os.environ['FINANCE_API_TOKEN'])
+          with open('android-native/ApiConfig.kt', 'w') as f:
+              f.write(content)
+          "
+
+      - name: Generate native Android project (expo prebuild)
+        run: npx expo prebuild --platform android --clean --non-interactive
+
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Locate APK
+        working-directory: mobile/android
+        run: |
+          set -euo pipefail
+          APK_PATH=$(find app/build/outputs/apk/debug -maxdepth 1 -name "*.apk" | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "No .apk found under app/build/outputs/apk/debug" >&2
+            find app/build/outputs -maxdepth 3 >&2 || true
+            exit 1
+          fi
+          cp "$APK_PATH" "../FinanceTracker-debug.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: mobile/FinanceTracker-debug.apk
+          retention-days: 14

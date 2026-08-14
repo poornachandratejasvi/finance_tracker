@@ -97,7 +97,8 @@ time** from GitHub Actions secrets, using the same `X-API-Key` ingestion path th
 
 Rotating the token later means creating a new one and updating the `FINANCE_API_TOKEN`
 secret, then re-running the build — there's no in-app way to change it without a rebuild,
-by design (see the tradeoff above).
+by design (see the tradeoff above). **This same token/secret pair also powers the Android
+SMS receiver below** — one token, both platforms.
 
 `mobile/ios-native/APIConfig.swift.template` has the placeholders the CI workflow fills
 in; the real `APIConfig.swift` it generates is gitignored and never committed.
@@ -110,23 +111,59 @@ validate Swift locally at all (only the config-plugin's file-copying and Xcode-p
 wiring were verified locally — the actual Swift content is unverified until a real
 macOS build runs).
 
-## 5. Project layout
+## 5. Android: debug APK + SMS auto-detection
+
+Android needs none of the iOS ceremony above: a **debug-signed APK** installs directly via
+"Install unknown apps" — no LiveContainer-style container app, no Apple-Developer-Program
+equivalent. [.github/workflows/mobile-apk-debug.yml](../.github/workflows/mobile-apk-debug.yml)
+builds one on a plain `ubuntu-latest` runner (Android tooling needs no macOS), same
+`workflow_dispatch` pattern as the iOS workflow — trigger it from the **Actions** tab and
+download the `debug-apk` artifact.
+
+It requires the **same** `FINANCE_SERVER_URL` / `FINANCE_API_TOKEN` repository secrets as
+the iOS build (§ 4) — set those up once and both platforms are covered.
+
+Android also gets a capability iOS categorically cannot have: Apple never allows reading
+SMS content, but Android does, so `mobile/android-native/SmsReceiver.kt` listens for
+incoming SMS, and if it looks like a bank transaction alert (regex-matches an amount,
+guesses debit/credit from keywords like "credited"/"debited"), POSTs it straight to
+`/api/ingest/transaction` — mirroring what the backend's alert-email parsing
+(`app/services/alert_email_service.py`) already does for email, but for SMS instead. It
+runs even when the app isn't open (a manifest-registered `BroadcastReceiver`, not a
+JS-side listener), and uses only `java.net`/`org.json` (Android's standard library) rather
+than adding an HTTP client dependency.
+
+This needs the `RECEIVE_SMS`/`READ_SMS` (and `POST_NOTIFICATIONS`, for later use) runtime
+permissions, requested once after login (`src/utils/androidPermissions.ts`) — declining
+them just means SMS auto-detection never fires, nothing else breaks.
+
+**Unverified beyond static review**: unlike iOS, this environment has no Android
+SDK/emulator either, so — same caveat as the App Intent — the config plugin's file-copying
+and manifest-merging were verified locally (confirmed via a real `expo prebuild
+--platform android` run: both Kotlin files land in the right package directory, and the
+manifest gets the right permissions + receiver registration), but the actual Kotlin
+compiles for the first time in CI. The SMS regex is also a first-pass heuristic tuned for
+common Indian bank SMS phrasing ("Rs. 500 debited...") — expect it to need tuning against
+your actual bank's SMS format once you can see real messages come through (or not).
+
+## 6. Project layout
 
 ```
 mobile/
 ├── App.tsx                  # providers + navigation root
 ├── ios-native/               # Swift App Intent source, injected into ios/ at prebuild time
-├── plugins/                  # Expo config plugin wiring ios-native/ into the Xcode project
+├── android-native/           # Kotlin SMS receiver source, injected into android/ at prebuild time
+├── plugins/                  # Expo config plugins wiring the above into their native projects
 ├── src/
 │   ├── api/                 # axios client (auth/refresh) + typed endpoint wrappers
 │   ├── context/AuthContext.tsx
 │   ├── navigation/RootNavigator.tsx
-│   ├── screens/              # Login, Dashboard, Transactions, AddTransaction
+│   ├── screens/              # Login, Dashboard, Transactions, AddTransaction, Settings/*
 │   ├── types.ts               # shared types mirroring the backend Pydantic schemas
 │   └── utils/format.ts
 ```
 
-## 6. Notes
+## 7. Notes
 
 - This app authenticates with the same JWT session endpoints the web frontend uses
   (`/api/auth/login`, `/api/auth/refresh`, `/api/users/me`), not the API-token

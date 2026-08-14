@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import { fetchCurrentUser, logout as apiLogout } from "../api/auth";
 import { loginRequest, restoreSession } from "../api/client";
 import { User } from "../types";
+import { requestAndroidPermissions } from "../utils/androidPermissions";
 
 interface AuthContextValue {
   user: User | null;
@@ -26,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const me = await fetchCurrentUser();
           setUser(me);
+          await requestAndroidPermissions();
         } catch {
           setUser(null);
         }
@@ -38,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await loginRequest(serverUrl, username, password);
     const me = await fetchCurrentUser();
     setUser(me);
+    await requestAndroidPermissions();
   };
 
   const logout = async () => {

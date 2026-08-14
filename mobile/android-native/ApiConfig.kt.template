@@ -1,0 +1,13 @@
+package com.poornachandratejasvi.financetracker
+
+// Generated at CI build time from GitHub Actions secrets -- see
+// .github/workflows/mobile-apk-debug.yml, which substitutes the placeholders below and
+// writes the result to ApiConfig.kt (gitignored, never committed with real values). Same
+// build-time-baked-secret approach as mobile/ios-native/APIConfig.swift.template, and for
+// the same reason: sharing the RN app's own login session with this native SmsReceiver
+// would need cross-process storage access that's more fragile than just baking in a
+// dedicated, rotatable API token.
+object ApiConfig {
+    const val SERVER_URL = "__FINANCE_SERVER_URL__"
+    const val API_KEY = "__FINANCE_API_TOKEN__"
+}
