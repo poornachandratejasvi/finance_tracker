@@ -5,12 +5,17 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.poornachandratejasvi.financetracker"
     },
     "android": {
-      "package": "com.poornachandratejasvi.financetracker"
+      "package": "com.poornachandratejasvi.financetracker",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1b6b4c"
+      }
     }
   }
 }
