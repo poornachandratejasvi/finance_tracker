@@ -114,31 +114,58 @@ Batch endpoint (optional): `POST /api/ingest/transactions` with a JSON array or
 
 ## 3. Build the interactive shortcut (recommended)
 
-Open the **Shortcuts** app → **+** (new shortcut) → **Add Action** for each step:
+This is the fiddliest part if you've never built a Shortcut before, since it's all done by
+tapping through the Shortcuts app rather than typing commands. Here's the shape of what
+you're building (7 actions, stacked top to bottom — this is a diagram of the structure, not
+an actual screenshot of the app, since every iOS version's Shortcuts UI looks a little
+different):
 
-1. **Ask for Input** → Prompt: `Amount` → Input Type: **Number**.
-   (Rename its output/magic-variable to `Amount` if you like.)
-2. **Ask for Input** → Prompt: `Description` → Input Type: **Text** → call it `Description`.
-3. *(optional)* **Ask for Input** → Prompt: `Category (blank = auto)` → Text → `Category`.
-4. *(optional)* **Choose from Menu** → `Expense` / `Income` — in each branch set a
-   **Text** action to `expense` or `income`; store as `Type`. (Skip this to always send
-   expenses.)
-5. **Dictionary** — add keys:
-   - `amount` → *Number* → the `Amount` variable
-   - `description` → *Text* → the `Description` variable
-   - `type` → *Text* → the `Type` variable (or literal `expense`)
-   - `category` → *Text* → the `Category` variable (leave value empty to auto-categorize)
-6. **Get Contents of URL**:
-   - URL: `http://YOUR_SERVER:8000/api/ingest/transaction`
-   - Method: **POST**
-   - Headers: add `X-API-Key` = *your token*; add `Content-Type` = `application/json`
-   - Request Body: **JSON** → select the **Dictionary** from step 5.
-7. **Get Dictionary from Input** (parses the response) → **Get Dictionary Value** for key
-   `created`.
-8. **Show Notification** / **Show Result**: e.g. `Saved ✓` (or show `transaction_id`).
+![Diagram of the Add Transaction shortcut's action sequence](assets/ios-shortcut-structure.png)
 
-Name the shortcut **"Add Transaction"**, give it an icon, and (optionally) **Add to Home
-Screen** or add it to a widget. Say *"Hey Siri, Add Transaction"* to run it hands‑free.
+**The one mechanic you'll repeat 7 times — adding an action:**
+
+1. Open the **Shortcuts** app → tap **+** (top-right) to start a new shortcut.
+2. Tap **Add Action** (or the **+** in the middle of the empty shortcut).
+3. A search bar appears at the top — **type the search term** shown in each box of the
+   diagram above (e.g. type `Ask for` to find "Ask for Input").
+4. Tap the matching result from the list to drop it into your shortcut.
+5. Tap on the action's own fields (prompt text, dropdowns, etc.) to configure it as
+   described.
+6. Repeat for the next action.
+
+**A second mechanic — "magic variables" (referencing an earlier action's output):**
+Whenever a later step needs an earlier one's answer (e.g. the Dictionary step in #4 needs
+the `Amount` from step #1), tap into that field and a bar of colored pill-shaped
+**variables** pops up above the keyboard — tap the pill named `Amount` (or whatever you
+renamed it to) to insert it. You never type these by hand.
+
+Now, action by action:
+
+1. **Ask for Input** — Prompt: `Amount`. Tap **Input Type** and change it from *Text* to
+   **Number**. Optionally tap the little "Amount" label under the action and rename it —
+   this is the pill you'll pick later.
+2. **Ask for Input** — Prompt: `Description`. Leave Input Type as **Text**. Rename to
+   `Description`.
+3. *(optional)* **Ask for Input** — Prompt: `Category (blank = auto)`. Text. Rename to
+   `Category`. Skip this action entirely if you're fine always auto-categorizing.
+4. **Dictionary** — tap **Add new item** four times, and for each row: tap the key field
+   and type the key name (`amount`, `description`, `type`, `category`), then tap the value
+   field and either type a literal (e.g. `expense`) or tap it and pick the matching
+   variable pill (`Amount` for the `amount` row, `Description` for `description`, etc.).
+   For the `amount` row specifically, tap the small type icon next to the value and set it
+   to **Number** instead of Text.
+5. **Get Contents of URL** — tap the URL field and type
+   `https://YOUR_SERVER/api/ingest/transaction`. Tap **Show More** to reveal Method/Headers/
+   Request Body. Set **Method: POST**. Under **Headers**, add two rows: `X-API-Key` → your
+   token, and `Content-Type` → `application/json`. Under **Request Body**, choose **JSON**,
+   then tap the body field and pick the **Dictionary** variable pill from step 4.
+6. **Get Dictionary Value** — tap **Get Value for Key**, type `created`. For the input, tap
+   the field and select the variable pill produced by step 5 (labeled "Contents of URL").
+7. **Show Notification** — tap the body field, type `Saved ✓`.
+
+Name the shortcut **"Add Transaction"** (tap the name at the top), give it an icon, and
+(optionally) **Add to Home Screen** or add it to a widget. Say *"Hey Siri, Add Transaction"*
+to run it hands‑free.
 
 > **Tip — omit empty keys.** If you leave Category/Type empty, that's fine: the server
 > auto‑categorizes via your Automatic Rules and defaults the type to expense.
