@@ -17,7 +17,7 @@ import { getServerUrl } from "../api/client";
 
 export default function LoginScreen() {
   const { login } = useAuth();
-  const [serverUrl, setServerUrl] = useState("http://192.168.1.50:8000");
+  const [serverUrl, setServerUrl] = useState("https://finance.061295.xyz");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
