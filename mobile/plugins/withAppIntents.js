@@ -49,8 +49,15 @@ function withAppIntentXcodeProject(config) {
     const groupKey = project.findPBXGroupKey({ name: projectName });
 
     for (const file of SOURCE_FILES) {
-      if (!project.hasFile(file)) {
-        project.addSourceFile(file, { target: targetUuid }, groupKey);
+      // pbxFile resolves this path relative to SRCROOT (ios/), not relative to whichever
+      // group it's visually nested under -- the group argument only affects the Xcode
+      // navigator's logical grouping, not where the build system looks for the file on
+      // disk. Since withAppIntentFiles copies these into ios/<projectName>/, the recorded
+      // path must include that prefix too, or xcodebuild fails with "Build input files
+      // cannot be found" even though the Sources build phase lists the file by name.
+      const relativePath = `${projectName}/${file}`;
+      if (!project.hasFile(relativePath)) {
+        project.addSourceFile(relativePath, { target: targetUuid }, groupKey);
       }
     }
 
