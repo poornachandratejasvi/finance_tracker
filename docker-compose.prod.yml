@@ -52,6 +52,7 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-financeuser}:${POSTGRES_PASSWORD:-financepass}@db:5432/${POSTGRES_DB:-financedb}
       - REDIS_URL=redis://redis:6379/0
       - PYTHONUNBUFFERED=1
+      - APP_VERSION=${IMAGE_TAG:-latest}
     volumes:
       - backend_uploads:/app/uploads
       - gmail_credentials:/app/credentials

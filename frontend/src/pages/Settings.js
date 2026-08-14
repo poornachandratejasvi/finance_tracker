@@ -49,6 +49,7 @@ import {
   DeleteSweep,
   AutoAwesome,
   Terminal,
+  Info,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -58,6 +59,7 @@ import {
   changePassword,
   getPreferences,
   updatePreferences,
+  getSystemSettings,
 } from '../services/api';
 
 // Panels built in parallel by other agents (self-contained default exports).
@@ -538,6 +540,48 @@ function HelpPanel() {
   );
 }
 
+function AboutPanel() {
+  const [info, setInfo] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    getSystemSettings()
+      .then(setInfo)
+      .catch(() => setError("Couldn't load version info."));
+  }, []);
+
+  return (
+    <InfoPanel title="About">
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      <Stack spacing={1} sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          Version: <strong>{info ? info.app_version : '…'}</strong>
+        </Typography>
+      </Stack>
+      <Stack spacing={1}>
+        <MuiLink
+          href="https://github.com/poornachandratejasvi/finance_tracker"
+          target="_blank"
+          rel="noopener"
+        >
+          View source on GitHub
+        </MuiLink>
+        <MuiLink
+          href="https://github.com/poornachandratejasvi/finance_tracker/pkgs/container/finance_tracker-backend"
+          target="_blank"
+          rel="noopener"
+        >
+          Browse release versions
+        </MuiLink>
+      </Stack>
+    </InfoPanel>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 /* Nav configuration                                                           */
 /* -------------------------------------------------------------------------- */
@@ -567,6 +611,7 @@ const NAV_SECTIONS = [
       { key: 'billing', label: 'Billing', icon: <CreditCard /> },
       { key: 'privacy', label: 'Personal data & privacy', icon: <PrivacyTip /> },
       { key: 'help', label: 'Help', icon: <HelpOutline /> },
+      { key: 'about', label: 'About', icon: <Info /> },
     ],
   },
 ];
@@ -627,6 +672,8 @@ function Settings() {
         return <PrivacyPanel />;
       case 'help':
         return <HelpPanel />;
+      case 'about':
+        return <AboutPanel />;
       case 'general':
       default:
         return <GeneralPanel setSuccess={setSuccess} setError={setError} />;
