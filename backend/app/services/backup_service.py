@@ -13,7 +13,9 @@ import os
 import gzip
 import json
 import logging
+import re
 from typing import Optional
+from urllib.parse import urlparse
 
 from google.oauth2.credentials import Credentials
 
@@ -44,6 +46,14 @@ def backups_dir() -> str:
     return os.path.join(settings.BASE_DIR, 'backups')
 
 
+def _instance_slug() -> str:
+    """Filesystem-safe hostname of this instance (from FRONTEND_URL, the address a
+    user actually recognizes), so a backup file downloaded from a multi-instance
+    setup still says which server it came from once it's just a file on disk."""
+    host = urlparse(settings.FRONTEND_URL).hostname or "local"
+    return re.sub(r"[^A-Za-z0-9.-]", "-", host)
+
+
 def create_snapshot(db, stamp: str = None):
     """Dump every ORM table to JSON and gzip it.
 
@@ -70,7 +80,7 @@ def create_snapshot(db, stamp: str = None):
     # default=str keeps datetimes/enums/Decimals serialisable without custom encoders.
     raw = json.dumps(payload, default=str, ensure_ascii=False).encode("utf-8")
     data = gzip.compress(raw)
-    filename = f"finance-backup-{stamp}.json.gz"
+    filename = f"finance-backup-{_instance_slug()}-{stamp}.json.gz"
     return filename, data
 
 

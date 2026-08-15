@@ -129,11 +129,17 @@ def _drive_connected(db: Session, uid: int) -> bool:
 # ──────────────────────────────────────────────────────────────────────────────
 def perform_backup(db: Session, user_id: int, destination: Optional[str] = None) -> dict:
     """Create a snapshot, always save it locally, optionally upload to Drive, and
-    record a history entry (newest first). Returns the created history entry.
+    record a history entry (newest first) plus a SyncLog row (so it shows up on
+    the Jobs page like every other background job). Returns the created history
+    entry.
 
-    Drive upload failures do not fail the backup — the local copy is always kept and
-    the entry records the destination that actually succeeded.
+    Drive upload failures do not fail the backup — the local copy is always kept
+    and the entry records the destination that actually succeeded, plus an
+    ``error`` field explaining why when it didn't match what was requested.
     """
+    from google.auth.exceptions import RefreshError
+    from app.models.models import SyncLog
+
     cfg = _get_cfg(db, user_id)
     dest = (destination or cfg.get("destination") or "local").lower()
 
@@ -143,6 +149,7 @@ def perform_backup(db: Session, user_id: int, destination: Optional[str] = None)
 
     drive_file_id = None
     actual_dest = "local"
+    error = None
     if dest == "drive":
         creds = _get_json(db, _creds_key(user_id), None)
         if isinstance(creds, dict) and creds:
@@ -151,20 +158,41 @@ def perform_backup(db: Session, user_id: int, destination: Optional[str] = None)
                 actual_dest = "drive"
                 # upload_to_drive may refresh the access token in place; persist it.
                 _set_json(db, _creds_key(user_id), creds)
+            except RefreshError:
+                # The stored refresh token is dead (revoked, or the OAuth consent
+                # screen is still in "Testing" mode, which Google auto-expires
+                # after 7 days) -- retrying with it will only ever fail the same
+                # way, so forget it now rather than silently falling back to
+                # local on every future run. Surfaces as "not connected" in the
+                # UI, prompting the user to reconnect.
+                logger.warning("Drive refresh token dead for user %s; disconnecting", user_id, exc_info=True)
+                _delete_key(db, _creds_key(user_id))
+                error = "Google Drive connection expired or was revoked — reconnect it in Settings → Backup."
             except Exception:
                 logger.warning(
                     "Drive upload failed for user %s; kept local copy", user_id, exc_info=True
                 )
+                error = "Google Drive upload failed — kept a local copy. Check Application Logs for details."
         else:
             logger.info("Drive requested for user %s but not connected; local only", user_id)
+            error = "Google Drive is not connected — kept a local copy."
 
     entry = {
         "filename": filename,
         "size": size,
         "destination": actual_dest,
         "drive_file_id": drive_file_id,
+        "error": error,
         "created_at": utcnow().isoformat(),
     }
+
+    db.add(SyncLog(
+        user_id=user_id, sync_type="backup",
+        status="success" if not error else "partial",
+        current_step=f"Backed up to {actual_dest}" + (f" — {error}" if error else ""),
+        started_at=utcnow(), completed_at=utcnow(),
+    ))
+    db.commit()
 
     history = _get_history(db, user_id)
     history.insert(0, entry)  # newest first

@@ -123,7 +123,7 @@ export default function BackupPanel() {
     try {
       const entry = await runBackup({ destination: 'drive' });
       if (entry?.destination !== 'drive') {
-        setError('Drive upload failed — kept a local copy instead.');
+        setError(entry?.error || 'Drive upload failed — kept a local copy instead.');
       } else {
         setSuccess(`Backed up to Google Drive (${humanSize(entry?.size)}).`);
       }
@@ -166,7 +166,7 @@ export default function BackupPanel() {
         const entry = await runBackup({ destination: 'drive' });
         results.push(entry?.destination === 'drive'
           ? `Drive backup done (${humanSize(entry?.size)})`
-          : 'Drive backup failed — kept a local copy');
+          : `Drive backup failed — kept a local copy${entry?.error ? ` (${entry.error})` : ''}`);
       } catch (e) {
         results.push(`Drive backup failed: ${apiError(e, 'unknown error')}`);
       }
@@ -185,7 +185,8 @@ export default function BackupPanel() {
       const entry = await runBackup({ destination: runDest });
       const where = destLabel(entry?.destination || runDest);
       if (runDest === 'drive' && entry?.destination !== 'drive') {
-        setSuccess(`Backup created locally (${humanSize(entry?.size)}). Drive upload was skipped or failed — kept a local copy.`);
+        setError(entry?.error || 'Backup was created locally, but the Google Drive upload was skipped or failed.');
+        setSuccess(`Backup created locally (${humanSize(entry?.size)}).`);
       } else {
         setSuccess(`Backup created to ${where} (${humanSize(entry?.size)}).`);
       }
