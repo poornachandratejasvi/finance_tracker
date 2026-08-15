@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import auth, users, banks, transactions, labels, sync, logs, oauth, pdfs, dashboard, field_mapping, settings, csv_exports, api_tokens, ingest, goals, categories, currencies, analytics, filters, templates, backup, ai, rules, notifications, notification_rules, gmail_accounts, watchers
+from app.api.endpoints import auth, users, banks, transactions, labels, sync, logs, oauth, pdfs, dashboard, field_mapping, settings, csv_exports, api_tokens, ingest, goals, categories, currencies, analytics, filters, templates, backup, ai, rules, notifications, notification_rules, gmail_accounts, watchers, imports
 
 api_router = APIRouter()
 
@@ -32,3 +32,4 @@ api_router.include_router(notifications.router, prefix="/notifications", tags=["
 api_router.include_router(notification_rules.router, prefix="/notification-rules", tags=["Notification Rules"])
 api_router.include_router(gmail_accounts.router, prefix="/gmail-accounts", tags=["Gmail Accounts"])
 api_router.include_router(watchers.router, prefix="/watchers", tags=["Transaction Watchers"])
+api_router.include_router(imports.router, prefix="/imports", tags=["Imports"])

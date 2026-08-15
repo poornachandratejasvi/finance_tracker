@@ -5,6 +5,7 @@ import BanksHubScreen from "../screens/banks/BanksHubScreen";
 import BankStatementsScreen from "../screens/banks/BankStatementsScreen";
 import PdfsScreen from "../screens/banks/PdfsScreen";
 import CsvExportsScreen from "../screens/banks/CsvExportsScreen";
+import ImportsScreen from "../screens/banks/ImportsScreen";
 import BanksScreen from "../screens/settings/BanksScreen";
 import BankFormScreen from "../screens/settings/BankFormScreen";
 import { Bank } from "../types";
@@ -16,6 +17,7 @@ export type BanksStackParamList = {
   Statements: undefined;
   Pdfs: { bankId?: number; bankName?: string } | undefined;
   CsvExports: { bankId?: number; bankName?: string } | undefined;
+  Imports: undefined;
 };
 
 const Stack = createNativeStackNavigator<BanksStackParamList>();
@@ -29,6 +31,7 @@ export default function BanksNavigator() {
       <Stack.Screen name="Statements" component={BankStatementsScreen} options={{ title: "Bank Statements" }} />
       <Stack.Screen name="Pdfs" component={PdfsScreen} options={{ title: "Statements" }} />
       <Stack.Screen name="CsvExports" component={CsvExportsScreen} options={{ title: "CSV Exports" }} />
+      <Stack.Screen name="Imports" component={ImportsScreen} options={{ title: "Imports" }} />
     </Stack.Navigator>
   );
 }

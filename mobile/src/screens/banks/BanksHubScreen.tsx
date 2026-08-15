@@ -24,6 +24,7 @@ const ROWS: Row[] = [
   },
   { key: "Pdfs", label: "Browse Statement PDFs", icon: "📄", hint: "All received PDFs, reprocess, unlock" },
   { key: "CsvExports", label: "CSV Exports", icon: "📊", hint: "Generate, email, or download CSV statements" },
+  { key: "Imports", label: "Imports", icon: "📥", hint: "Import transactions from a CSV or Excel file" },
 ];
 
 export default function BanksHubScreen({ navigation }: Props) {

@@ -33,6 +33,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import TuneIcon from '@mui/icons-material/Tune';
 import KeyIcon from '@mui/icons-material/Key';
 import SettingsIcon from '@mui/icons-material/Settings';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 
 const DRAWER_WIDTH = 236;
 
@@ -52,6 +53,7 @@ const NAV_GROUPS = [
     { label: 'Statements', path: '/bank-statements', icon: <DescriptionIcon /> },
     { label: 'PDFs', path: '/pdfs', icon: <PictureAsPdfIcon /> },
     { label: 'CSV Exports', path: '/csv', icon: <TableChartIcon /> },
+    { label: 'Imports', path: '/imports', icon: <UploadFileIcon /> },
   ] },
   { heading: 'System', items: [
     { label: 'Jobs', path: '/jobs', icon: <WorkIcon /> },

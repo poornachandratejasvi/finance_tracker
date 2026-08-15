@@ -487,6 +487,20 @@ export const deleteGoal = async (id) => {
   await api.delete(`/api/goals/${id}`);
 };
 
+// Imports (CSV/Excel -> transactions, via column mapping)
+export const previewImportFile = async (file) => {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await api.post('/api/imports/preview', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+};
+export const commitImport = async (payload) => {
+  const response = await api.post('/api/imports/commit', payload);
+  return response.data;
+};
+
 // Net worth history
 export const getNetWorth = async (days = 180) => {
   const response = await api.get(`/api/dashboard/net-worth?days=${days}`);
