@@ -3,8 +3,11 @@ import Constants from "expo-constants";
 import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity } from "react-native";
 
 import { api } from "../../api/client";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 
 export default function AboutScreen() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [backendVersion, setBackendVersion] = useState<string | null>(null);
 
   useEffect(() => {
@@ -42,10 +45,11 @@ export default function AboutScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  appName: { fontSize: 20, fontWeight: "700", marginBottom: 16 },
-  row: { fontSize: 14, color: "#444", marginBottom: 8 },
-  link: { marginTop: 12 },
-  linkText: { fontSize: 14, color: "#1b6b4c", fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    appName: { fontSize: 20, fontWeight: "700", marginBottom: 16, color: c.text },
+    row: { fontSize: 14, color: c.text, marginBottom: 8 },
+    link: { marginTop: 12 },
+    linkText: { fontSize: 14, color: c.primary, fontWeight: "600" },
+  });

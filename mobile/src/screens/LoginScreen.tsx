@@ -13,10 +13,13 @@ import {
 } from "react-native";
 
 import { useAuth } from "../context/AuthContext";
+import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { getServerUrl } from "../api/client";
 
 export default function LoginScreen() {
   const { login } = useAuth();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [serverUrl, setServerUrl] = useState("https://finance.061295.xyz");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -63,6 +66,7 @@ export default function LoginScreen() {
           value={serverUrl}
           onChangeText={setServerUrl}
           placeholder="http://192.168.1.50:8000"
+          placeholderTextColor={colors.textSecondary}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="url"
@@ -104,28 +108,31 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: { flexGrow: 1, justifyContent: "center", padding: 24 },
-  title: { fontSize: 28, fontWeight: "700", textAlign: "center", color: "#1b6b4c" },
-  subtitle: { fontSize: 14, textAlign: "center", color: "#666", marginBottom: 32 },
-  label: { fontSize: 13, fontWeight: "600", color: "#333", marginBottom: 4, marginTop: 12 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  hint: { fontSize: 11, color: "#888", marginTop: 4 },
-  button: {
-    marginTop: 28,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    flex: { flex: 1, backgroundColor: c.background },
+    container: { flexGrow: 1, justifyContent: "center", padding: 24 },
+    title: { fontSize: 28, fontWeight: "700", textAlign: "center", color: c.primary },
+    subtitle: { fontSize: 14, textAlign: "center", color: c.textSecondary, marginBottom: 32 },
+    label: { fontSize: 13, fontWeight: "600", color: c.text, marginBottom: 4, marginTop: 12 },
+    input: {
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.text,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+    },
+    hint: { fontSize: 11, color: c.textSecondary, marginTop: 4 },
+    button: {
+      marginTop: 28,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  });

@@ -13,11 +13,14 @@ import {
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { createCurrency, deleteCurrency, updateCurrency } from "../../api/currencies";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
 
 type Props = NativeStackScreenProps<SettingsStackParamList, "CurrencyForm">;
 
 export default function CurrencyFormScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const existing = route.params?.currency;
 
   const [code, setCode] = useState(existing?.code || "");
@@ -86,15 +89,28 @@ export default function CurrencyFormScreen({ route, navigation }: Props) {
         value={code}
         onChangeText={setCode}
         placeholder="USD"
+        placeholderTextColor={colors.textSecondary}
         autoCapitalize="characters"
         maxLength={3}
       />
 
       <Text style={styles.label}>Symbol</Text>
-      <TextInput style={styles.input} value={symbol} onChangeText={setSymbol} placeholder="$" />
+      <TextInput
+        style={styles.input}
+        value={symbol}
+        onChangeText={setSymbol}
+        placeholder="$"
+        placeholderTextColor={colors.textSecondary}
+      />
 
       <Text style={styles.label}>Name (optional)</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="US Dollar" />
+      <TextInput
+        style={styles.input}
+        value={name}
+        onChangeText={setName}
+        placeholder="US Dollar"
+        placeholderTextColor={colors.textSecondary}
+      />
 
       <Text style={styles.label}>Rate to base currency</Text>
       <TextInput
@@ -122,32 +138,35 @@ export default function CurrencyFormScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  label: { fontSize: 13, fontWeight: "600", color: "#333", marginTop: 16, marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  switchRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 8,
-  },
-  button: {
-    marginTop: 28,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  deleteButton: { marginTop: 14, paddingVertical: 12, alignItems: "center" },
-  deleteButtonText: { color: "#b3261e", fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 16, marginBottom: 6 },
+    input: {
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.text,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+    },
+    switchRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 8,
+    },
+    button: {
+      marginTop: 28,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+    deleteButton: { marginTop: 14, paddingVertical: 12, alignItems: "center" },
+    deleteButtonText: { color: c.danger, fontWeight: "600" },
+  });

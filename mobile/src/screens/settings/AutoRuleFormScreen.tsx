@@ -14,6 +14,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { createAutoRule, deleteAutoRule, updateAutoRule } from "../../api/autoRules";
 import { listLabels } from "../../api/labels";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
 import { Label, RecordType } from "../../types";
 
@@ -22,6 +23,8 @@ type Props = NativeStackScreenProps<SettingsStackParamList, "AutoRuleForm">;
 const RECORD_TYPES: RecordType[] = ["any", "debit", "credit", "transfer"];
 
 export default function AutoRuleFormScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const existing = route.params?.rule;
 
   const [name, setName] = useState(existing?.name || "");
@@ -104,7 +107,13 @@ export default function AutoRuleFormScreen({ route, navigation }: Props) {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.label}>Name</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. Swiggy orders" />
+      <TextInput
+        style={styles.input}
+        value={name}
+        onChangeText={setName}
+        placeholder="e.g. Swiggy orders"
+        placeholderTextColor={colors.textSecondary}
+      />
 
       <Text style={styles.label}>Keywords (comma-separated)</Text>
       <TextInput
@@ -112,6 +121,7 @@ export default function AutoRuleFormScreen({ route, navigation }: Props) {
         value={keywords}
         onChangeText={setKeywords}
         placeholder="swiggy, zomato"
+        placeholderTextColor={colors.textSecondary}
         autoCapitalize="none"
       />
 
@@ -129,7 +139,13 @@ export default function AutoRuleFormScreen({ route, navigation }: Props) {
       </View>
 
       <Text style={styles.label}>Category (optional)</Text>
-      <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder="Food & Dining" />
+      <TextInput
+        style={styles.input}
+        value={category}
+        onChangeText={setCategory}
+        placeholder="Food & Dining"
+        placeholderTextColor={colors.textSecondary}
+      />
 
       {labels.length > 0 && (
         <>
@@ -172,37 +188,40 @@ export default function AutoRuleFormScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  label: { fontSize: 13, fontWeight: "600", color: "#333", marginTop: 16, marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#f0f0f0" },
-  chipActive: { backgroundColor: "#1b6b4c" },
-  chipText: { color: "#333", fontSize: 13, textTransform: "capitalize" },
-  chipTextActive: { color: "#fff", fontWeight: "600" },
-  switchRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  button: {
-    marginTop: 28,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  deleteButton: { marginTop: 14, paddingVertical: 12, alignItems: "center" },
-  deleteButtonText: { color: "#b3261e", fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 16, marginBottom: 6 },
+    input: {
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.text,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+    },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.chipBg },
+    chipActive: { backgroundColor: c.primary },
+    chipText: { color: c.text, fontSize: 13, textTransform: "capitalize" },
+    chipTextActive: { color: "#fff", fontWeight: "600" },
+    switchRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 4,
+    },
+    button: {
+      marginTop: 28,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+    deleteButton: { marginTop: 14, paddingVertical: 12, alignItems: "center" },
+    deleteButtonText: { color: c.danger, fontWeight: "600" },
+  });

@@ -2,8 +2,11 @@ import React, { useEffect, useState } from "react";
 import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity } from "react-native";
 
 import { getServerUrl } from "../../api/client";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 
 export default function HelpScreen() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [serverUrl, setServerUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,8 +35,9 @@ export default function HelpScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  body: { fontSize: 14, color: "#444", lineHeight: 20, marginBottom: 20 },
-  link: { fontSize: 14, color: "#1b6b4c", fontWeight: "600", marginBottom: 14 },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    body: { fontSize: 14, color: c.text, lineHeight: 20, marginBottom: 20 },
+    link: { fontSize: 14, color: c.primary, fontWeight: "600", marginBottom: 14 },
+  });

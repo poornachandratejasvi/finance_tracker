@@ -12,12 +12,15 @@ import {
 } from "react-native";
 
 import { listCategories } from "../../api/categories";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
 import { Category } from "../../types";
 
 type Props = NativeStackScreenProps<SettingsStackParamList, "Categories">;
 
 export default function CategoriesScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,7 +52,7 @@ export default function CategoriesScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -83,27 +86,28 @@ export default function CategoriesScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  list: { padding: 16, flexGrow: 1 },
-  empty: { color: "#888", textAlign: "center", marginTop: 40 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#ddd",
-  },
-  dot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
-  name: { flex: 1, fontSize: 15, fontWeight: "600", color: "#222" },
-  meta: { fontSize: 12, color: "#777", textTransform: "capitalize" },
-  addButton: {
-    margin: 16,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  addButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    flex: { flex: 1, backgroundColor: c.background },
+    center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
+    list: { padding: 16, flexGrow: 1 },
+    empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border,
+    },
+    dot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
+    name: { flex: 1, fontSize: 15, fontWeight: "600", color: c.text },
+    meta: { fontSize: 12, color: c.textSecondary, textTransform: "capitalize" },
+    addButton: {
+      margin: 16,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    addButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  });

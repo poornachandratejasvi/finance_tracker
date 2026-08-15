@@ -12,6 +12,7 @@ import {
 } from "react-native";
 
 import { listBanks } from "../../api/banks";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
 import { Bank } from "../../types";
 import { formatCurrency } from "../../utils/format";
@@ -19,6 +20,8 @@ import { formatCurrency } from "../../utils/format";
 type Props = NativeStackScreenProps<SettingsStackParamList, "Banks">;
 
 export default function BanksScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -50,7 +53,7 @@ export default function BanksScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -68,7 +71,7 @@ export default function BanksScreen({ navigation }: Props) {
             style={styles.row}
             onPress={() => navigation.navigate("BankForm", { bank: item })}
           >
-            <View style={[styles.dot, { backgroundColor: item.color || "#1b6b4c" }]} />
+            <View style={[styles.dot, { backgroundColor: item.color || colors.primary }]} />
             <View style={styles.rowMain}>
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.meta}>{item.bank_type || "other"}</Text>
@@ -89,29 +92,30 @@ export default function BanksScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  list: { padding: 16, flexGrow: 1 },
-  empty: { color: "#888", textAlign: "center", marginTop: 40 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#ddd",
-  },
-  dot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
-  rowMain: { flex: 1 },
-  name: { fontSize: 15, fontWeight: "600", color: "#222" },
-  meta: { fontSize: 12, color: "#777", marginTop: 2, textTransform: "capitalize" },
-  balance: { fontSize: 14, fontWeight: "600" },
-  addButton: {
-    margin: 16,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  addButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    flex: { flex: 1, backgroundColor: c.background },
+    center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
+    list: { padding: 16, flexGrow: 1 },
+    empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border,
+    },
+    dot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
+    rowMain: { flex: 1 },
+    name: { fontSize: 15, fontWeight: "600", color: c.text },
+    meta: { fontSize: 12, color: c.textSecondary, marginTop: 2, textTransform: "capitalize" },
+    balance: { fontSize: 14, fontWeight: "600", color: c.text },
+    addButton: {
+      margin: 16,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    addButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  });

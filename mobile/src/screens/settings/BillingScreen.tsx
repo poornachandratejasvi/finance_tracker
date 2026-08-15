@@ -1,7 +1,11 @@
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
+
 export default function BillingScreen() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.body}>
@@ -15,9 +19,10 @@ export default function BillingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  body: { fontSize: 14, color: "#444", lineHeight: 20, marginBottom: 16 },
-  successBox: { backgroundColor: "#e8f5e9", borderRadius: 10, padding: 14 },
-  successText: { fontSize: 13, color: "#1b6b4c" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    body: { fontSize: 14, color: c.text, lineHeight: 20, marginBottom: 16 },
+    successBox: { backgroundColor: c.chipBg, borderRadius: 10, padding: 14 },
+    successText: { fontSize: 13, color: c.primary },
+  });

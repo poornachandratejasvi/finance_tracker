@@ -10,8 +10,11 @@ import {
 } from "react-native";
 
 import { getBackendLogs, getSystemInfo } from "../../api/logs";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 
 export default function LogsScreen() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [system, setSystem] = useState<{ cpu_percent: number; memory_percent: number; disk_percent: number } | null>(
     null
   );
@@ -49,7 +52,7 @@ export default function LogsScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -77,6 +80,8 @@ export default function LogsScreen() {
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   return (
     <View style={styles.stat}>
       <Text style={styles.statValue}>{value}</Text>
@@ -85,14 +90,15 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  container: { padding: 16, paddingBottom: 48 },
-  statsRow: { flexDirection: "row", gap: 12, marginBottom: 20 },
-  stat: { flex: 1, backgroundColor: "#f7f7f7", borderRadius: 10, padding: 12, alignItems: "center" },
-  statValue: { fontSize: 18, fontWeight: "700" },
-  statLabel: { fontSize: 11, color: "#777", marginTop: 2 },
-  section: { fontSize: 14, fontWeight: "700", marginBottom: 8 },
-  logBox: { backgroundColor: "#1e1e1e", borderRadius: 10, padding: 12 },
-  logText: { color: "#d4d4d4", fontSize: 11, fontFamily: "monospace" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    statsRow: { flexDirection: "row", gap: 12, marginBottom: 20 },
+    stat: { flex: 1, backgroundColor: c.card, borderRadius: 10, padding: 12, alignItems: "center" },
+    statValue: { fontSize: 18, fontWeight: "700", color: c.text },
+    statLabel: { fontSize: 11, color: c.textSecondary, marginTop: 2 },
+    section: { fontSize: 14, fontWeight: "700", marginBottom: 8, color: c.text },
+    logBox: { backgroundColor: "#1e1e1e", borderRadius: 10, padding: 12 },
+    logText: { color: "#d4d4d4", fontSize: 11, fontFamily: "monospace" },
+  });

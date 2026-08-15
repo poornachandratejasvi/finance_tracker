@@ -13,6 +13,7 @@ import {
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { createBank, deleteBank, updateBank } from "../../api/banks";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
 
 type Props = NativeStackScreenProps<SettingsStackParamList, "BankForm">;
@@ -21,6 +22,8 @@ const BANK_TYPES = ["savings", "credit", "other"];
 const COLORS = ["#1b6b4c", "#b3261e", "#0b5fff", "#b8860b", "#7d3fc4", "#008080"];
 
 export default function BankFormScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const existing = route.params?.bank;
 
   const [name, setName] = useState(existing?.name || "");
@@ -84,7 +87,13 @@ export default function BankFormScreen({ route, navigation }: Props) {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.label}>Name</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. HDFC Savings" />
+      <TextInput
+        style={styles.input}
+        value={name}
+        onChangeText={setName}
+        placeholder="e.g. HDFC Savings"
+        placeholderTextColor={colors.textSecondary}
+      />
 
       <Text style={styles.label}>Type</Text>
       <View style={styles.chipRow}>
@@ -107,6 +116,7 @@ export default function BankFormScreen({ route, navigation }: Props) {
         autoCapitalize="characters"
         maxLength={3}
         placeholder="INR"
+        placeholderTextColor={colors.textSecondary}
       />
 
       <Text style={styles.label}>Color</Text>
@@ -127,6 +137,7 @@ export default function BankFormScreen({ route, navigation }: Props) {
         onChangeText={setCurrentBalance}
         keyboardType="decimal-pad"
         placeholder="0.00"
+        placeholderTextColor={colors.textSecondary}
       />
 
       {existing && (
@@ -149,39 +160,42 @@ export default function BankFormScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  label: { fontSize: 13, fontWeight: "600", color: "#333", marginTop: 16, marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#f0f0f0" },
-  chipActive: { backgroundColor: "#1b6b4c" },
-  chipText: { color: "#333", fontSize: 13, textTransform: "capitalize" },
-  chipTextActive: { color: "#fff", fontWeight: "600" },
-  swatch: { width: 32, height: 32, borderRadius: 16 },
-  swatchActive: { borderWidth: 3, borderColor: "#333" },
-  switchRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 8,
-  },
-  button: {
-    marginTop: 28,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  deleteButton: { marginTop: 14, paddingVertical: 12, alignItems: "center" },
-  deleteButtonText: { color: "#b3261e", fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 16, marginBottom: 6 },
+    input: {
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.text,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+    },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.chipBg },
+    chipActive: { backgroundColor: c.primary },
+    chipText: { color: c.text, fontSize: 13, textTransform: "capitalize" },
+    chipTextActive: { color: "#fff", fontWeight: "600" },
+    swatch: { width: 32, height: 32, borderRadius: 16 },
+    swatchActive: { borderWidth: 3, borderColor: c.text },
+    switchRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 8,
+    },
+    button: {
+      marginTop: 28,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+    deleteButton: { marginTop: 14, paddingVertical: 12, alignItems: "center" },
+    deleteButtonText: { color: c.danger, fontWeight: "600" },
+  });

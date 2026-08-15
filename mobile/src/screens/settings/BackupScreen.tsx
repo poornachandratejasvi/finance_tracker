@@ -21,12 +21,15 @@ import {
   runBackup,
   updateBackupConfig,
 } from "../../api/backup";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { BackupHistoryEntry, BackupStatus } from "../../types";
 import { formatDateTime } from "../../utils/format";
 
 const FREQUENCIES: Array<BackupStatus["config"]["frequency"]> = ["hourly", "daily", "weekly"];
 
 export default function BackupScreen() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [status, setStatus] = useState<BackupStatus | null>(null);
   const [history, setHistory] = useState<BackupHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +124,7 @@ export default function BackupScreen() {
   if (loading || !status) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -173,11 +176,11 @@ export default function BackupScreen() {
         <Text style={styles.meta}>{status.drive_connected ? "Connected" : "Not connected"}</Text>
         {status.drive_connected ? (
           <TouchableOpacity style={styles.smallButtonOutline} onPress={onDisconnectDrive}>
-            <Text style={[styles.smallButtonOutlineText, { color: "#b3261e" }]}>Disconnect</Text>
+            <Text style={[styles.smallButtonOutlineText, { color: colors.danger }]}>Disconnect</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.smallButtonOutline} onPress={onConnectDrive} disabled={connecting}>
-            {connecting ? <ActivityIndicator size="small" /> : <Text style={styles.smallButtonOutlineText}>Connect</Text>}
+            {connecting ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={styles.smallButtonOutlineText}>Connect</Text>}
           </TouchableOpacity>
         )}
       </View>
@@ -201,46 +204,47 @@ export default function BackupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  container: { padding: 16, paddingBottom: 48 },
-  card: { backgroundColor: "#f7f7f7", borderRadius: 12, padding: 14, marginBottom: 14 },
-  cardTitle: { fontSize: 15, fontWeight: "700" },
-  section: { fontSize: 15, fontWeight: "700", marginTop: 8, marginBottom: 10 },
-  label: { fontSize: 13, fontWeight: "600", color: "#333", marginTop: 12, marginBottom: 6 },
-  meta: { fontSize: 12, color: "#777", marginTop: 4 },
-  empty: { color: "#888", textAlign: "center", marginTop: 12 },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#fff" },
-  chipActive: { backgroundColor: "#1b6b4c" },
-  chipText: { color: "#333", fontSize: 13, textTransform: "capitalize" },
-  chipTextActive: { color: "#fff", fontWeight: "600" },
-  switchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  button: {
-    marginTop: 4,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  smallButtonOutline: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: "center",
-  },
-  smallButtonOutlineText: { color: "#1b6b4c", fontWeight: "600", fontSize: 13 },
-  historyRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#ddd",
-  },
-  rowMain: { flex: 1, paddingRight: 8 },
-  name: { fontSize: 13, fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 14 },
+    cardTitle: { fontSize: 15, fontWeight: "700", color: c.text },
+    section: { fontSize: 15, fontWeight: "700", marginTop: 8, marginBottom: 10, color: c.text },
+    label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 12, marginBottom: 6 },
+    meta: { fontSize: 12, color: c.textSecondary, marginTop: 4 },
+    empty: { color: c.textSecondary, textAlign: "center", marginTop: 12 },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.chipBg },
+    chipActive: { backgroundColor: c.primary },
+    chipText: { color: c.text, fontSize: 13, textTransform: "capitalize" },
+    chipTextActive: { color: "#fff", fontWeight: "600" },
+    switchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    button: {
+      marginTop: 4,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+    smallButtonOutline: {
+      marginTop: 10,
+      borderWidth: 1,
+      borderColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 8,
+      alignItems: "center",
+    },
+    smallButtonOutlineText: { color: c.primary, fontWeight: "600", fontSize: 13 },
+    historyRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingVertical: 8,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border,
+    },
+    rowMain: { flex: 1, paddingRight: 8 },
+    name: { fontSize: 13, fontWeight: "600", color: c.text },
+  });

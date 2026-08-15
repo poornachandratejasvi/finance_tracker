@@ -15,10 +15,13 @@ import {
 import { listBanks } from "../api/banks";
 import { listCategories } from "../api/categories";
 import { createTransaction } from "../api/transactions";
+import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { Bank, Category, TransactionType } from "../types";
 import { todayIsoDate } from "../utils/format";
 
 export default function AddTransactionScreen() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
@@ -94,7 +97,7 @@ export default function AddTransactionScreen() {
   if (loadingOptions) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -116,6 +119,7 @@ export default function AddTransactionScreen() {
           value={amount}
           onChangeText={setAmount}
           placeholder="0.00"
+          placeholderTextColor={colors.textSecondary}
           keyboardType="decimal-pad"
         />
 
@@ -125,6 +129,7 @@ export default function AddTransactionScreen() {
           value={description}
           onChangeText={setDescription}
           placeholder="e.g. Swiggy dinner"
+          placeholderTextColor={colors.textSecondary}
         />
 
         <Text style={styles.label}>Account</Text>
@@ -151,6 +156,7 @@ export default function AddTransactionScreen() {
           value={date}
           onChangeText={setDate}
           placeholder="YYYY-MM-DD"
+          placeholderTextColor={colors.textSecondary}
           autoCapitalize="none"
         />
 
@@ -187,6 +193,8 @@ function Segment({
   active: boolean;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   return (
     <TouchableOpacity
       style={[styles.segment, active && styles.segmentActive]}
@@ -206,6 +214,8 @@ function ChipRow({
   selected: string | number | null;
   onSelect: (key: string | number) => void;
 }) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
       {options.map((o) => {
@@ -224,50 +234,53 @@ function ChipRow({
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  container: { padding: 16, paddingBottom: 48 },
-  label: { fontSize: 13, fontWeight: "600", color: "#333", marginTop: 16, marginBottom: 6 },
-  hint: { fontSize: 12, color: "#888" },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  multiline: { minHeight: 70, textAlignVertical: "top" },
-  segmentRow: { flexDirection: "row", gap: 8, marginTop: 4 },
-  segment: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: "center",
-    backgroundColor: "#f0f0f0",
-  },
-  segmentActive: { backgroundColor: "#1b6b4c" },
-  segmentText: { fontWeight: "600", color: "#333" },
-  segmentTextActive: { color: "#fff" },
-  chipRow: { flexDirection: "row" },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#f0f0f0",
-    marginRight: 8,
-  },
-  chipActive: { backgroundColor: "#1b6b4c" },
-  chipText: { color: "#333", fontSize: 13 },
-  chipTextActive: { color: "#fff", fontWeight: "600" },
-  button: {
-    marginTop: 28,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    flex: { flex: 1, backgroundColor: c.background },
+    center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
+    container: { padding: 16, paddingBottom: 48 },
+    label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 16, marginBottom: 6 },
+    hint: { fontSize: 12, color: c.textSecondary },
+    input: {
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.text,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+    },
+    multiline: { minHeight: 70, textAlignVertical: "top" },
+    segmentRow: { flexDirection: "row", gap: 8, marginTop: 4 },
+    segment: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 8,
+      alignItems: "center",
+      backgroundColor: c.chipBg,
+    },
+    segmentActive: { backgroundColor: c.primary },
+    segmentText: { fontWeight: "600", color: c.text },
+    segmentTextActive: { color: "#fff" },
+    chipRow: { flexDirection: "row" },
+    chip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: c.chipBg,
+      marginRight: 8,
+    },
+    chipActive: { backgroundColor: c.primary },
+    chipText: { color: c.text, fontSize: 13 },
+    chipTextActive: { color: "#fff", fontWeight: "600" },
+    button: {
+      marginTop: 28,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  });

@@ -12,12 +12,15 @@ import {
 } from "react-native";
 
 import { listUsers } from "../../api/adminUsers";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
 import { AdminUser } from "../../types";
 
 type Props = NativeStackScreenProps<SettingsStackParamList, "Users">;
 
 export default function UsersScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,7 +52,7 @@ export default function UsersScreen({ navigation }: Props) {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -80,29 +83,30 @@ export default function UsersScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  list: { padding: 16, flexGrow: 1 },
-  empty: { color: "#888", textAlign: "center", marginTop: 40 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#ddd",
-  },
-  rowMain: { flex: 1 },
-  name: { fontSize: 15, fontWeight: "600", color: "#222" },
-  meta: { fontSize: 12, color: "#777", marginTop: 2 },
-  role: { fontSize: 12, color: "#1b6b4c", fontWeight: "700", marginRight: 8, textTransform: "capitalize" },
-  inactive: { fontSize: 11, color: "#b3261e", fontWeight: "700" },
-  addButton: {
-    margin: 16,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  addButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    flex: { flex: 1, backgroundColor: c.background },
+    center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
+    list: { padding: 16, flexGrow: 1 },
+    empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border,
+    },
+    rowMain: { flex: 1 },
+    name: { fontSize: 15, fontWeight: "600", color: c.text },
+    meta: { fontSize: 12, color: c.textSecondary, marginTop: 2 },
+    role: { fontSize: 12, color: c.primary, fontWeight: "700", marginRight: 8, textTransform: "capitalize" },
+    inactive: { fontSize: 11, color: c.danger, fontWeight: "700" },
+    addButton: {
+      margin: 16,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    addButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  });

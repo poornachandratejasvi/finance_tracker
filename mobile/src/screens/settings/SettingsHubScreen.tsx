@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-nati
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { useAuth } from "../../context/AuthContext";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
 
 type Props = NativeStackScreenProps<SettingsStackParamList, "SettingsHub">;
@@ -41,6 +42,8 @@ const GENERAL_ROWS: Row[] = [
 
 export default function SettingsHubScreen({ navigation }: Props) {
   const { user, logout } = useAuth();
+  const { colors, mode, setMode } = useTheme();
+  const styles = makeStyles(colors);
   const isAdmin = user?.role === "ADMIN";
 
   const renderSection = (title: string, rows: Row[]) => {
@@ -71,6 +74,21 @@ export default function SettingsHubScreen({ navigation }: Props) {
       <Text style={styles.greeting}>{user?.full_name || user?.username}</Text>
       <Text style={styles.email}>{user?.email}</Text>
 
+      <Text style={styles.sectionTitle}>Appearance</Text>
+      <View style={styles.themeRow}>
+        {(["system", "light", "dark"] as const).map((m) => (
+          <TouchableOpacity
+            key={m}
+            style={[styles.themeChip, mode === m && styles.themeChipActive]}
+            onPress={() => setMode(m)}
+          >
+            <Text style={[styles.themeChipText, mode === m && styles.themeChipTextActive]}>
+              {m}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {renderSection("Wallet", WALLET_ROWS)}
       {renderSection("General", GENERAL_ROWS)}
 
@@ -81,33 +99,52 @@ export default function SettingsHubScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  greeting: { fontSize: 20, fontWeight: "700", marginTop: 8 },
-  email: { fontSize: 13, color: "#666", marginBottom: 20 },
-  sectionTitle: { fontSize: 12, fontWeight: "700", color: "#888", textTransform: "uppercase", marginBottom: 8, marginTop: 16 },
-  list: {
-    backgroundColor: "#f7f7f7",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#ddd",
-  },
-  icon: { fontSize: 18, width: 30 },
-  label: { flex: 1, fontSize: 15, color: "#222" },
-  chevron: { fontSize: 20, color: "#999" },
-  logoutButton: {
-    marginTop: 28,
-    paddingVertical: 14,
-    alignItems: "center",
-    backgroundColor: "#f7f7f7",
-    borderRadius: 8,
-  },
-  logoutText: { color: "#b3261e", fontWeight: "600", fontSize: 15 },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    greeting: { fontSize: 20, fontWeight: "700", marginTop: 8, color: c.text },
+    email: { fontSize: 13, color: c.textSecondary, marginBottom: 20 },
+    sectionTitle: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: c.textSecondary,
+      textTransform: "uppercase",
+      marginBottom: 8,
+      marginTop: 16,
+    },
+    themeRow: { flexDirection: "row", gap: 8 },
+    themeChip: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 8,
+      alignItems: "center",
+      backgroundColor: c.chipBg,
+    },
+    themeChipActive: { backgroundColor: c.primary },
+    themeChipText: { color: c.text, fontSize: 13, textTransform: "capitalize" },
+    themeChipTextActive: { color: "#fff", fontWeight: "600" },
+    list: {
+      backgroundColor: c.card,
+      borderRadius: 12,
+      overflow: "hidden",
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 14,
+      paddingHorizontal: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border,
+    },
+    icon: { fontSize: 18, width: 30 },
+    label: { flex: 1, fontSize: 15, color: c.text },
+    chevron: { fontSize: 20, color: c.textSecondary },
+    logoutButton: {
+      marginTop: 28,
+      paddingVertical: 14,
+      alignItems: "center",
+      backgroundColor: c.card,
+      borderRadius: 8,
+    },
+    logoutText: { color: c.danger, fontWeight: "600", fontSize: 15 },
+  });

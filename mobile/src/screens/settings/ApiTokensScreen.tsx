@@ -16,10 +16,13 @@ import {
 import * as Clipboard from "expo-clipboard";
 
 import { createApiToken, listApiTokens, revokeApiToken } from "../../api/apiTokens";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { ApiToken } from "../../types";
 import { formatDate } from "../../utils/format";
 
 export default function ApiTokensScreen() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [tokens, setTokens] = useState<ApiToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,7 +97,7 @@ export default function ApiTokensScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -138,6 +141,7 @@ export default function ApiTokensScreen() {
               value={newTokenName}
               onChangeText={setNewTokenName}
               placeholder="e.g. iPhone Shortcut"
+              placeholderTextColor={colors.textSecondary}
               autoFocus={Platform.OS !== "web"}
             />
             <View style={styles.modalActions}>
@@ -175,52 +179,56 @@ export default function ApiTokensScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  hint: { fontSize: 12, color: "#888", padding: 16, paddingBottom: 0 },
-  list: { padding: 16, flexGrow: 1 },
-  empty: { color: "#888", textAlign: "center", marginTop: 40 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#ddd",
-  },
-  rowMain: { flex: 1 },
-  name: { fontSize: 15, fontWeight: "600", color: "#222" },
-  meta: { fontSize: 12, color: "#777", marginTop: 2 },
-  revoke: { color: "#b3261e", fontWeight: "600" },
-  addButton: {
-    margin: 16,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  addButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 },
-  modalCard: { backgroundColor: "#fff", borderRadius: 12, padding: 20 },
-  modalTitle: { fontSize: 16, fontWeight: "700", marginBottom: 12 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  tokenText: {
-    fontSize: 13,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    backgroundColor: "#f0f0f0",
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 10,
-  },
-  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 16, marginTop: 18, alignItems: "center" },
-  modalCancel: { color: "#666", fontWeight: "600" },
-  modalCreate: { backgroundColor: "#1b6b4c", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 16 },
-  modalCreateText: { color: "#fff", fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    flex: { flex: 1, backgroundColor: c.background },
+    center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
+    hint: { fontSize: 12, color: c.textSecondary, padding: 16, paddingBottom: 0 },
+    list: { padding: 16, flexGrow: 1 },
+    empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border,
+    },
+    rowMain: { flex: 1 },
+    name: { fontSize: 15, fontWeight: "600", color: c.text },
+    meta: { fontSize: 12, color: c.textSecondary, marginTop: 2 },
+    revoke: { color: c.danger, fontWeight: "600" },
+    addButton: {
+      margin: 16,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    addButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+    modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 },
+    modalCard: { backgroundColor: c.card, borderRadius: 12, padding: 20 },
+    modalTitle: { fontSize: 16, fontWeight: "700", marginBottom: 12, color: c.text },
+    input: {
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.text,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+    },
+    tokenText: {
+      fontSize: 13,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+      backgroundColor: c.chipBg,
+      color: c.text,
+      padding: 10,
+      borderRadius: 8,
+      marginTop: 10,
+    },
+    modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 16, marginTop: 18, alignItems: "center" },
+    modalCancel: { color: c.textSecondary, fontWeight: "600" },
+    modalCreate: { backgroundColor: c.primary, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 16 },
+    modalCreateText: { color: "#fff", fontWeight: "600" },
+  });

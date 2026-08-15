@@ -10,11 +10,14 @@ import {
 
 import { fetchDashboardSummary, fetchLatestMonth } from "../api/dashboard";
 import { useAuth } from "../context/AuthContext";
+import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { DashboardSummary } from "../types";
 import { formatCurrency } from "../utils/format";
 
 export default function DashboardScreen() {
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [monthLabel, setMonthLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,7 +61,7 @@ export default function DashboardScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -84,14 +87,14 @@ export default function DashboardScreen() {
             <Text
               style={[
                 styles.netValue,
-                { color: summary.net_balance >= 0 ? "#1b6b4c" : "#b3261e" },
+                { color: summary.net_balance >= 0 ? colors.primary : colors.danger },
               ]}
             >
               {formatCurrency(summary.net_balance)}
             </Text>
             <View style={styles.row}>
-              <Stat label="Income" value={formatCurrency(summary.total_credit)} color="#1b6b4c" />
-              <Stat label="Spent" value={formatCurrency(summary.total_debit)} color="#b3261e" />
+              <Stat label="Income" value={formatCurrency(summary.total_credit)} color={colors.primary} />
+              <Stat label="Spent" value={formatCurrency(summary.total_debit)} color={colors.danger} />
             </View>
           </View>
 
@@ -101,12 +104,12 @@ export default function DashboardScreen() {
               <Stat
                 label="Savings"
                 value={formatCurrency(summary.balances.savings_total)}
-                color="#1b6b4c"
+                color={colors.primary}
               />
               <Stat
                 label="Credit owed"
                 value={formatCurrency(summary.balances.credit_total)}
-                color="#b3261e"
+                color={colors.danger}
               />
             </View>
           </View>
@@ -145,6 +148,8 @@ export default function DashboardScreen() {
 }
 
 function Stat({ label, value, color }: { label: string; value: string; color: string }) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   return (
     <View style={styles.stat}>
       <Text style={styles.statLabel}>{label}</Text>
@@ -153,39 +158,40 @@ function Stat({ label, value, color }: { label: string; value: string; color: st
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  container: { padding: 16, paddingBottom: 32 },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 16,
-  },
-  greeting: { fontSize: 20, fontWeight: "700" },
-  period: { fontSize: 13, color: "#666", marginTop: 2 },
-  logout: { color: "#b3261e", fontWeight: "600" },
-  error: { color: "#b3261e", marginBottom: 12 },
-  card: {
-    backgroundColor: "#f7f7f7",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 14,
-  },
-  netLabel: { fontSize: 13, color: "#666" },
-  netValue: { fontSize: 30, fontWeight: "700", marginTop: 4, marginBottom: 12 },
-  sectionTitle: { fontSize: 15, fontWeight: "700", marginBottom: 10 },
-  row: { flexDirection: "row", gap: 16 },
-  stat: { flex: 1 },
-  statLabel: { fontSize: 12, color: "#666" },
-  statValue: { fontSize: 18, fontWeight: "700", marginTop: 2 },
-  listRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#ddd",
-  },
-  listLabel: { fontSize: 14, color: "#333" },
-  listValue: { fontSize: 14, fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
+    container: { padding: 16, paddingBottom: 32, backgroundColor: c.background },
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: 16,
+    },
+    greeting: { fontSize: 20, fontWeight: "700", color: c.text },
+    period: { fontSize: 13, color: c.textSecondary, marginTop: 2 },
+    logout: { color: c.danger, fontWeight: "600" },
+    error: { color: c.danger, marginBottom: 12 },
+    card: {
+      backgroundColor: c.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 14,
+    },
+    netLabel: { fontSize: 13, color: c.textSecondary },
+    netValue: { fontSize: 30, fontWeight: "700", marginTop: 4, marginBottom: 12 },
+    sectionTitle: { fontSize: 15, fontWeight: "700", marginBottom: 10, color: c.text },
+    row: { flexDirection: "row", gap: 16 },
+    stat: { flex: 1 },
+    statLabel: { fontSize: 12, color: c.textSecondary },
+    statValue: { fontSize: 18, fontWeight: "700", marginTop: 2 },
+    listRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingVertical: 6,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border,
+    },
+    listLabel: { fontSize: 14, color: c.text },
+    listValue: { fontSize: 14, fontWeight: "600", color: c.text },
+  });

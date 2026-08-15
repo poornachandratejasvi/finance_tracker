@@ -3,9 +3,12 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity } from "react-nat
 
 import { clearAllLocalData } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 
 export default function PrivacyScreen() {
   const { logout } = useAuth();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   const onRemoveLocalData = () => {
     Alert.alert(
@@ -40,15 +43,16 @@ export default function PrivacyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  body: { fontSize: 14, color: "#444", lineHeight: 20, marginBottom: 20 },
-  button: {
-    borderWidth: 1,
-    borderColor: "#b3261e",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonText: { color: "#b3261e", fontSize: 15, fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    body: { fontSize: 14, color: c.text, lineHeight: 20, marginBottom: 20 },
+    button: {
+      borderWidth: 1,
+      borderColor: c.danger,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonText: { color: c.danger, fontSize: 15, fontWeight: "600" },
+  });

@@ -9,12 +9,15 @@ import {
 } from "react-native";
 
 import { listTransactions } from "../api/transactions";
+import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { Transaction } from "../types";
 import { formatCurrency, formatDate } from "../utils/format";
 
 const PAGE_SIZE = 30;
 
 export default function TransactionsScreen() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [items, setItems] = useState<Transaction[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -68,13 +71,14 @@ export default function TransactionsScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
     <FlatList
+      style={styles.flex}
       data={items}
       keyExtractor={(item) => String(item.id)}
       contentContainerStyle={styles.list}
@@ -97,6 +101,8 @@ export default function TransactionsScreen() {
 }
 
 function TransactionRow({ txn }: { txn: Transaction }) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const isCredit = txn.transaction_type === "credit";
   return (
     <View style={styles.row}>
@@ -110,7 +116,7 @@ function TransactionRow({ txn }: { txn: Transaction }) {
         </Text>
         {!txn.is_confirmed && <Text style={styles.pending}>Pending</Text>}
       </View>
-      <Text style={[styles.amount, { color: isCredit ? "#1b6b4c" : "#b3261e" }]}>
+      <Text style={[styles.amount, { color: isCredit ? colors.primary : colors.danger }]}>
         {isCredit ? "+" : "-"}
         {formatCurrency(Math.abs(txn.amount), txn.currency_code)}
       </Text>
@@ -118,22 +124,24 @@ function TransactionRow({ txn }: { txn: Transaction }) {
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  list: { padding: 16, flexGrow: 1 },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#ddd",
-  },
-  rowLeft: { flex: 1, paddingRight: 12 },
-  description: { fontSize: 15, fontWeight: "600", color: "#222" },
-  meta: { fontSize: 12, color: "#777", marginTop: 2 },
-  pending: { fontSize: 11, color: "#b8860b", marginTop: 2, fontWeight: "600" },
-  amount: { fontSize: 15, fontWeight: "700" },
-  error: { color: "#b3261e", textAlign: "center", marginTop: 40 },
-  empty: { color: "#888", textAlign: "center", marginTop: 40 },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    flex: { flex: 1, backgroundColor: c.background },
+    center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
+    list: { padding: 16, flexGrow: 1 },
+    row: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border,
+    },
+    rowLeft: { flex: 1, paddingRight: 12 },
+    description: { fontSize: 15, fontWeight: "600", color: c.text },
+    meta: { fontSize: 12, color: c.textSecondary, marginTop: 2 },
+    pending: { fontSize: 11, color: c.warning, marginTop: 2, fontWeight: "600" },
+    amount: { fontSize: 15, fontWeight: "700" },
+    error: { color: c.danger, textAlign: "center", marginTop: 40 },
+    empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
+  });

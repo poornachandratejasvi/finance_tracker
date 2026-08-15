@@ -19,16 +19,18 @@ import {
   getGmailStatus,
   syncAlertsNow,
 } from "../../api/gmailAccounts";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { GmailAccountStatus } from "../../types";
 import { formatDateTime } from "../../utils/format";
 
-const STATUS_COLORS: Record<string, string> = {
-  connected: "#1b6b4c",
-  error: "#b3261e",
-  reauth_required: "#b8860b",
-};
-
 export default function ExternalAccountsScreen() {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
+  const STATUS_COLORS: Record<string, string> = {
+    connected: colors.primary,
+    error: colors.danger,
+    reauth_required: colors.warning,
+  };
   const [accounts, setAccounts] = useState<GmailAccountStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -114,7 +116,7 @@ export default function ExternalAccountsScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -135,7 +137,7 @@ export default function ExternalAccountsScreen() {
         <View key={acc.id} style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.email}>{acc.email}</Text>
-            <Text style={[styles.status, { color: STATUS_COLORS[acc.status] || "#666" }]}>
+            <Text style={[styles.status, { color: STATUS_COLORS[acc.status] || colors.textSecondary }]}>
               {acc.status.replace("_", " ")}
             </Text>
           </View>
@@ -167,36 +169,37 @@ export default function ExternalAccountsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  container: { padding: 16, paddingBottom: 48 },
-  hint: { fontSize: 12, color: "#888", marginBottom: 16 },
-  empty: { color: "#888", textAlign: "center", marginTop: 20 },
-  card: { backgroundColor: "#f7f7f7", borderRadius: 12, padding: 14, marginBottom: 14 },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  email: { fontSize: 15, fontWeight: "700", flexShrink: 1 },
-  status: { fontSize: 12, fontWeight: "700", textTransform: "capitalize" },
-  meta: { fontSize: 12, color: "#777", marginTop: 4 },
-  error: { fontSize: 12, color: "#b3261e", marginTop: 4 },
-  cardActions: { flexDirection: "row", gap: 20, marginTop: 10 },
-  actionLink: { color: "#1b6b4c", fontWeight: "600", fontSize: 13 },
-  danger: { color: "#b3261e" },
-  button: {
-    marginTop: 8,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  smallButtonOutline: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  smallButtonOutlineText: { color: "#1b6b4c", fontWeight: "600", fontSize: 13 },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    hint: { fontSize: 12, color: c.textSecondary, marginBottom: 16 },
+    empty: { color: c.textSecondary, textAlign: "center", marginTop: 20 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 14 },
+    cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    email: { fontSize: 15, fontWeight: "700", flexShrink: 1, color: c.text },
+    status: { fontSize: 12, fontWeight: "700", textTransform: "capitalize" },
+    meta: { fontSize: 12, color: c.textSecondary, marginTop: 4 },
+    error: { fontSize: 12, color: c.danger, marginTop: 4 },
+    cardActions: { flexDirection: "row", gap: 20, marginTop: 10 },
+    actionLink: { color: c.primary, fontWeight: "600", fontSize: 13 },
+    danger: { color: c.danger },
+    button: {
+      marginTop: 8,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+    smallButtonOutline: {
+      marginTop: 12,
+      borderWidth: 1,
+      borderColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 10,
+      alignItems: "center",
+    },
+    smallButtonOutlineText: { color: c.primary, fontWeight: "600", fontSize: 13 },
+  });

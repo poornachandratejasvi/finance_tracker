@@ -14,12 +14,15 @@ import {
 
 import { changePassword, getPreferences, updatePreferences, updateProfile } from "../../api/users";
 import { useAuth } from "../../context/AuthContext";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { UserPreferences } from "../../types";
 
 const INTERVALS = ["this_month", "last_month", "this_year", "all_time"];
 
 export default function ProfileScreen() {
   const { user, refreshUser } = useAuth();
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
 
   const [fullName, setFullName] = useState(user?.full_name || "");
   const [email, setEmail] = useState(user?.email || "");
@@ -111,7 +114,12 @@ export default function ProfileScreen() {
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.section}>Profile</Text>
       <Text style={styles.label}>Display name</Text>
-      <TextInput style={styles.input} value={fullName} onChangeText={setFullName} />
+      <TextInput
+        style={styles.input}
+        value={fullName}
+        onChangeText={setFullName}
+        placeholderTextColor={colors.textSecondary}
+      />
       <Text style={styles.label}>Email</Text>
       <TextInput
         style={styles.input}
@@ -119,6 +127,7 @@ export default function ProfileScreen() {
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
+        placeholderTextColor={colors.textSecondary}
       />
       <TouchableOpacity
         style={[styles.button, savingProfile && styles.buttonDisabled]}
@@ -135,9 +144,16 @@ export default function ProfileScreen() {
         value={currentPassword}
         onChangeText={setCurrentPassword}
         secureTextEntry
+        placeholderTextColor={colors.textSecondary}
       />
       <Text style={styles.label}>New password</Text>
-      <TextInput style={styles.input} value={newPassword} onChangeText={setNewPassword} secureTextEntry />
+      <TextInput
+        style={styles.input}
+        value={newPassword}
+        onChangeText={setNewPassword}
+        secureTextEntry
+        placeholderTextColor={colors.textSecondary}
+      />
       <TouchableOpacity
         style={[styles.button, changingPassword && styles.buttonDisabled]}
         onPress={onChangePassword}
@@ -152,7 +168,7 @@ export default function ProfileScreen() {
 
       <Text style={[styles.section, styles.sectionSpaced]}>Preferences</Text>
       {prefsLoading || !prefs ? (
-        <ActivityIndicator style={{ marginTop: 12 }} />
+        <ActivityIndicator style={{ marginTop: 12 }} color={colors.primary} />
       ) : (
         <>
           <Text style={styles.label}>Default period</Text>
@@ -181,44 +197,47 @@ export default function ProfileScreen() {
             <Text style={styles.label}>Auto logout</Text>
             <Switch value={prefs.auto_logout} onValueChange={(v) => savePref({ auto_logout: v })} />
           </View>
-          {savingPrefs && <ActivityIndicator style={{ marginTop: 8 }} />}
+          {savingPrefs && <ActivityIndicator style={{ marginTop: 8 }} color={colors.primary} />}
         </>
       )}
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  section: { fontSize: 16, fontWeight: "700", color: "#222" },
-  sectionSpaced: { marginTop: 28 },
-  label: { fontSize: 13, fontWeight: "600", color: "#333", marginTop: 14, marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#f0f0f0" },
-  chipActive: { backgroundColor: "#1b6b4c" },
-  chipText: { color: "#333", fontSize: 13, textTransform: "capitalize" },
-  chipTextActive: { color: "#fff", fontWeight: "600" },
-  switchRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  button: {
-    marginTop: 20,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    section: { fontSize: 16, fontWeight: "700", color: c.text },
+    sectionSpaced: { marginTop: 28 },
+    label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 14, marginBottom: 6 },
+    input: {
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.text,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+    },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.chipBg },
+    chipActive: { backgroundColor: c.primary },
+    chipText: { color: c.text, fontSize: 13, textTransform: "capitalize" },
+    chipTextActive: { color: "#fff", fontWeight: "600" },
+    switchRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 4,
+    },
+    button: {
+      marginTop: 20,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+  });

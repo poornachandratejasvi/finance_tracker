@@ -14,12 +14,15 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { listBanks } from "../../api/banks";
 import { listLabels } from "../../api/labels";
 import { createTemplate, deleteTemplate, updateTemplate } from "../../api/templates";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
 import { Bank, Label } from "../../types";
 
 type Props = NativeStackScreenProps<SettingsStackParamList, "TemplateForm">;
 
 export default function TemplateFormScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const existing = route.params?.template;
 
   const [name, setName] = useState(existing?.name || "");
@@ -96,7 +99,13 @@ export default function TemplateFormScreen({ route, navigation }: Props) {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.label}>Name</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. Monthly rent" />
+      <TextInput
+        style={styles.input}
+        value={name}
+        onChangeText={setName}
+        placeholder="e.g. Monthly rent"
+        placeholderTextColor={colors.textSecondary}
+      />
 
       <Text style={styles.label}>Type</Text>
       <View style={styles.chipRow}>
@@ -112,13 +121,25 @@ export default function TemplateFormScreen({ route, navigation }: Props) {
       </View>
 
       <Text style={styles.label}>Description (optional)</Text>
-      <TextInput style={styles.input} value={description} onChangeText={setDescription} placeholder="Rent payment" />
+      <TextInput
+        style={styles.input}
+        value={description}
+        onChangeText={setDescription}
+        placeholder="Rent payment"
+        placeholderTextColor={colors.textSecondary}
+      />
 
       <Text style={styles.label}>Amount (optional)</Text>
       <TextInput style={styles.input} value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
 
       <Text style={styles.label}>Category (optional)</Text>
-      <TextInput style={styles.input} value={category} onChangeText={setCategory} placeholder="Housing" />
+      <TextInput
+        style={styles.input}
+        value={category}
+        onChangeText={setCategory}
+        placeholder="Housing"
+        placeholderTextColor={colors.textSecondary}
+      />
 
       {banks.length > 0 && (
         <>
@@ -183,32 +204,35 @@ export default function TemplateFormScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  label: { fontSize: 13, fontWeight: "600", color: "#333", marginTop: 16, marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  multiline: { minHeight: 70, textAlignVertical: "top" },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#f0f0f0" },
-  chipActive: { backgroundColor: "#1b6b4c" },
-  chipText: { color: "#333", fontSize: 13, textTransform: "capitalize" },
-  chipTextActive: { color: "#fff", fontWeight: "600" },
-  button: {
-    marginTop: 28,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  deleteButton: { marginTop: 14, paddingVertical: 12, alignItems: "center" },
-  deleteButtonText: { color: "#b3261e", fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 16, marginBottom: 6 },
+    input: {
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.text,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+    },
+    multiline: { minHeight: 70, textAlignVertical: "top" },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.chipBg },
+    chipActive: { backgroundColor: c.primary },
+    chipText: { color: c.text, fontSize: 13, textTransform: "capitalize" },
+    chipTextActive: { color: "#fff", fontWeight: "600" },
+    button: {
+      marginTop: 28,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+    deleteButton: { marginTop: 14, paddingVertical: 12, alignItems: "center" },
+    deleteButtonText: { color: c.danger, fontWeight: "600" },
+  });

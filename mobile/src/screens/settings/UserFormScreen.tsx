@@ -14,6 +14,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { createUser, deleteUser, leaveHousehold, updateUser } from "../../api/adminUsers";
 import { useAuth } from "../../context/AuthContext";
+import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
 
 type Props = NativeStackScreenProps<SettingsStackParamList, "UserForm">;
@@ -21,6 +22,8 @@ type Props = NativeStackScreenProps<SettingsStackParamList, "UserForm">;
 const ROLES: Array<"USER" | "ADMIN" | "VIEWER"> = ["USER", "ADMIN", "VIEWER"];
 
 export default function UserFormScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const existing = route.params?.user;
   const { user: currentUser } = useAuth();
 
@@ -111,7 +114,13 @@ export default function UserFormScreen({ route, navigation }: Props) {
       {!existing && (
         <>
           <Text style={styles.label}>Username</Text>
-          <TextInput style={styles.input} value={username} onChangeText={setUsername} autoCapitalize="none" />
+          <TextInput
+            style={styles.input}
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            placeholderTextColor={colors.textSecondary}
+          />
         </>
       )}
 
@@ -122,10 +131,11 @@ export default function UserFormScreen({ route, navigation }: Props) {
         onChangeText={setEmail}
         autoCapitalize="none"
         keyboardType="email-address"
+        placeholderTextColor={colors.textSecondary}
       />
 
       <Text style={styles.label}>Full name</Text>
-      <TextInput style={styles.input} value={fullName} onChangeText={setFullName} />
+      <TextInput style={styles.input} value={fullName} onChangeText={setFullName} placeholderTextColor={colors.textSecondary} />
 
       <Text style={styles.label}>Role</Text>
       <View style={styles.chipRow}>
@@ -141,7 +151,13 @@ export default function UserFormScreen({ route, navigation }: Props) {
       </View>
 
       <Text style={styles.label}>{existing ? "New password (optional)" : "Password"}</Text>
-      <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry />
+      <TextInput
+        style={styles.input}
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        placeholderTextColor={colors.textSecondary}
+      />
 
       {existing && (
         <View style={styles.switchRow}>
@@ -169,46 +185,49 @@ export default function UserFormScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  label: { fontSize: 13, fontWeight: "600", color: "#333", marginTop: 16, marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#f0f0f0" },
-  chipActive: { backgroundColor: "#1b6b4c" },
-  chipText: { color: "#333", fontSize: 13 },
-  chipTextActive: { color: "#fff", fontWeight: "600" },
-  switchRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 8,
-  },
-  button: {
-    marginTop: 28,
-    backgroundColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  smallButtonOutline: {
-    marginTop: 14,
-    borderWidth: 1,
-    borderColor: "#1b6b4c",
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  smallButtonOutlineText: { color: "#1b6b4c", fontWeight: "600", fontSize: 13 },
-  deleteButton: { marginTop: 14, paddingVertical: 12, alignItems: "center" },
-  deleteButtonText: { color: "#b3261e", fontWeight: "600" },
-});
+const makeStyles = (c: ThemeColors) =>
+  StyleSheet.create({
+    container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
+    label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 16, marginBottom: 6 },
+    input: {
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.text,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+    },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.chipBg },
+    chipActive: { backgroundColor: c.primary },
+    chipText: { color: c.text, fontSize: 13 },
+    chipTextActive: { color: "#fff", fontWeight: "600" },
+    switchRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: 8,
+    },
+    button: {
+      marginTop: 28,
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    buttonDisabled: { opacity: 0.6 },
+    buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
+    smallButtonOutline: {
+      marginTop: 14,
+      borderWidth: 1,
+      borderColor: c.primary,
+      borderRadius: 8,
+      paddingVertical: 10,
+      alignItems: "center",
+    },
+    smallButtonOutlineText: { color: c.primary, fontWeight: "600", fontSize: 13 },
+    deleteButton: { marginTop: 14, paddingVertical: 12, alignItems: "center" },
+    deleteButtonText: { color: c.danger, fontWeight: "600" },
+  });
