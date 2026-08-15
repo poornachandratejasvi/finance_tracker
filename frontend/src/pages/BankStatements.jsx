@@ -54,7 +54,7 @@ export default function BankStatements() {
   const dueSoon = banks.filter((b) => b.days_until_next != null && b.days_until_next >= 0 && b.days_until_next <= 5);
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h4" gutterBottom>Bank Statement Dashboard</Typography>

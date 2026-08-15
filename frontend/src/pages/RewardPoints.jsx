@@ -96,7 +96,7 @@ export default function RewardPoints() {
   const bankName = (id) => banks.find((b) => b.id === id)?.name || summaries.find((s) => s.bank_id === id)?.bank_name || id;
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Reward Points</Typography>
         <Button variant="contained" startIcon={<AddIcon />} onClick={() => openDialog()} disabled={banks.length === 0}>

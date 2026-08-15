@@ -157,7 +157,7 @@ export default function ApiAccess() {
   );
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Typography variant="h4" gutterBottom>API Access & Ingestion</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Create an API token and post transactions from an iOS Shortcut or webhook.

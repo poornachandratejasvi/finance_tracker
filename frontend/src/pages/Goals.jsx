@@ -55,7 +55,7 @@ export default function Goals() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h4">Savings Goals</Typography>
         <Button variant="contained" startIcon={<Add />} onClick={openNew}>New Goal</Button>

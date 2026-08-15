@@ -51,7 +51,7 @@ export default function Jobs() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
         <Typography variant="h4">Jobs & Activity</Typography>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>

@@ -681,7 +681,7 @@ function Settings() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Typography variant="h4" gutterBottom>
         Settings
       </Typography>

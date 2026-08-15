@@ -378,7 +378,7 @@ function PDFManagement() {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4">PDF Management</Typography>
         <Box display="flex" gap={2}>

@@ -57,7 +57,7 @@ export default function Budgets() {
   const barColor = (pct, over) => (over ? 'error' : pct >= 80 ? 'warning' : 'success');
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Typography variant="h4" gutterBottom>Budgets</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Set a monthly spend limit per category. {status?.period ? `Tracking ${status.period}.` : ''} Alerts are sent to Discord when a category crosses its threshold (configure the webhook in Settings).

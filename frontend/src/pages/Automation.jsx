@@ -331,7 +331,7 @@ export default function Automation() {
 
   // ─── Render ──────────────────────────────────────────────────────────────
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Typography variant="h4" gutterBottom>Automation</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Schedule syncs, configure CSV email delivery, set budget alerts, and manage notification webhooks.
