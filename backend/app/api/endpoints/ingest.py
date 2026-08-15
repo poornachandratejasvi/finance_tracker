@@ -371,6 +371,51 @@ def generate_ios_shortcut(
     )
 
 
+class SmsShortcutRequest(BaseModel):
+    base_url: str
+    token: Optional[str] = None
+    token_name: Optional[str] = "iOS SMS Auto-Detect"
+
+
+@router.post("/sms-shortcut")
+def generate_sms_shortcut(
+    payload: SmsShortcutRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Generate a Shortcut that forwards a message's raw text to /api/ingest/sms --
+    meant to be attached to a Settings -> Shortcuts -> Automation with trigger
+    "When I receive a message" (enable "Run Immediately" so it fires with no
+    confirmation prompt). Apple gives no way to read the SMS inbox directly (unlike
+    Android's SmsReceiver.kt), so this Automation-triggered-Shortcut is the closest
+    iOS equivalent; the actual amount/debit-credit parsing happens server-side in
+    /api/ingest/sms, not in the Shortcut itself.
+    """
+    base = (payload.base_url or "").strip().rstrip("/")
+    if not (base.startswith("http://") or base.startswith("https://")):
+        raise HTTPException(status_code=422, detail="base_url must start with http:// or https://")
+
+    token = (payload.token or "").strip()
+    if not token:
+        full_token, prefix, token_hash = generate_api_token()
+        db.add(ApiToken(
+            user_id=current_user.id,
+            name=(payload.token_name or "iOS SMS Auto-Detect")[:100],
+            token_prefix=prefix,
+            token_hash=token_hash,
+            is_active=True,
+        ))
+        db.commit()
+        token = full_token
+
+    data = shortcut_service.build_sms_forward_shortcut(base_url=base, token=token)
+    return Response(
+        content=data,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": 'attachment; filename="SMS Auto-Detect.shortcut"'},
+    )
+
+
 @router.post("/transaction", status_code=status.HTTP_201_CREATED)
 def ingest_transaction(
     payload: dict = Body(...),
@@ -386,6 +431,62 @@ def ingest_transaction(
         bank_id = _get_external_bank(db, user).id
 
     result = _ingest_one(db, user, payload, mapping, bank_id, allow_duplicates)
+    if result.get("error"):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=result["error"])
+    return result
+
+
+# Same generic amount/direction detection Android's SmsReceiver.kt does natively in
+# Kotlin before POSTing to /transaction above -- iOS has no equivalent (Apple doesn't
+# allow apps to read the SMS inbox), so a Shortcuts Automation on "message received"
+# instead forwards the raw, unparsed message text here and this endpoint does the
+# same parsing server-side. Deliberately generic (not per-bank regex like the Gmail
+# alert-email parser in alert_email_service.py) to match Android's proven approach:
+# less precise, but works across every bank's SMS wording without needing a sample
+# from each one.
+_SMS_AMOUNT_RE = re.compile(r"(?:rs\.?|inr)\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)", re.IGNORECASE)
+_SMS_CREDIT_RE = re.compile(r"credited|received|deposited", re.IGNORECASE)
+
+
+class SmsIngestRequest(BaseModel):
+    text: str
+    sender: Optional[str] = None
+    bank_id: Optional[int] = None  # optional override; falls back to the mapping's default/External bank
+
+
+@router.post("/sms", status_code=status.HTTP_201_CREATED)
+def ingest_sms(
+    payload: SmsIngestRequest,
+    allow_duplicates: bool = False,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_user_from_api_key),
+):
+    """Ingest a raw bank transaction SMS. Created unconfirmed (is_confirmed=False,
+    source='ingest') -- same semantics as every other real-time-alert path, later
+    superseded by the matching statement PDF row via create_or_reconcile_transaction
+    once the real statement arrives."""
+    m = _SMS_AMOUNT_RE.search(payload.text)
+    if not m:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Couldn't find a Rs./INR amount in this text.")
+    try:
+        amount = float(m.group(1).replace(",", ""))
+    except ValueError:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Couldn't parse the amount.")
+    if amount <= 0:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Amount must be positive.")
+
+    mapping = _active_mapping(db, user)
+    bank_id = payload.bank_id or (mapping.default_bank_id if (mapping and mapping.default_bank_id) else _get_external_bank(db, user).id)
+    if not db.query(Bank.id).filter(Bank.id == bank_id, Bank.user_id == user.id).first():
+        bank_id = _get_external_bank(db, user).id
+
+    record = {
+        "amount": amount,
+        "description": payload.text.strip()[:140],
+        "transaction_type": "credit" if _SMS_CREDIT_RE.search(payload.text) else "debit",
+        "notes": f"Auto-detected from SMS" + (f" ({payload.sender})" if payload.sender else ""),
+    }
+    result = _ingest_one(db, user, record, None, bank_id, allow_duplicates)
     if result.get("error"):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=result["error"])
     return result

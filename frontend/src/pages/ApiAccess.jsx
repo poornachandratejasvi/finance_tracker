@@ -8,6 +8,7 @@ import { Delete, Add, ContentCopy, PhoneIphone, Download } from '@mui/icons-mate
 import {
   listApiTokens, createApiToken, revokeApiToken,
   getIngestTargetFields, getIngestMapping, saveIngestMapping, getBanks, downloadShortcut,
+  downloadSmsShortcut,
 } from '../services/api';
 
 const API_BASE = process.env.REACT_APP_API_URL || window.location.origin.replace(':3000', ':8000');
@@ -31,6 +32,10 @@ export default function ApiAccess() {
   const [scBusy, setScBusy] = useState(false);
   const [kit, setKit] = useState(null);     // {token, url} shown after "Create setup kit"
   const [kitBusy, setKitBusy] = useState(false);
+  // SMS auto-detect (iOS Automation) setup kit + downloadable shortcut
+  const [smsKit, setSmsKit] = useState(null);
+  const [smsKitBusy, setSmsKitBusy] = useState(false);
+  const [smsScBusy, setSmsScBusy] = useState(false);
 
   const load = async () => {
     try {
@@ -100,6 +105,35 @@ export default function ApiAccess() {
       setErr('Failed to generate the shortcut. Check the Base URL and try again.');
     } finally {
       setScBusy(false);
+    }
+  };
+
+  const handleCreateSmsKit = async () => {
+    setErr(''); setMsg(''); setSmsKitBusy(true);
+    try {
+      const base = (scBaseUrl || API_BASE).trim().replace(/\/+$/, '');
+      const res = await createApiToken('iOS SMS Auto-Detect');
+      setSmsKit({ token: res.token, url: `${base}/api/ingest/sms` });
+      setMsg('SMS setup kit ready — copy the values into a 2-action Shortcut. The token is shown only once.');
+      load();
+    } catch (e) {
+      setErr('Failed to create the SMS setup kit.');
+    } finally {
+      setSmsKitBusy(false);
+    }
+  };
+
+  const handleDownloadSmsShortcut = async () => {
+    setErr(''); setMsg(''); setSmsScBusy(true);
+    try {
+      const base = (scBaseUrl || API_BASE).trim().replace(/\/+$/, '');
+      const name = await downloadSmsShortcut({ base_url: base, token_name: 'iOS SMS Auto-Detect' });
+      setMsg(`Downloaded "${name}" (URL + fresh token baked in). Sign it on a Mac with \`shortcuts sign\` before importing on iOS 15+, or use the Setup Kit above on a stock iPhone.`);
+      load();
+    } catch (e) {
+      setErr('Failed to generate the SMS shortcut. Check the Base URL and try again.');
+    } finally {
+      setSmsScBusy(false);
     }
   };
 
@@ -288,6 +322,72 @@ export default function ApiAccess() {
             label="Ask Category"
           />
         </Box>
+      </Paper>
+
+      {/* iOS SMS auto-detect (Automation) */}
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <PhoneIphone color="primary" />
+          <Typography variant="h6">iOS SMS Auto-Detect</Typography>
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Apple doesn't let any app (or Shortcut) read your SMS inbox directly — unlike the Android
+          app's automatic detection. The closest iOS equivalent: a Shortcuts <b>Automation</b> that
+          triggers on "When I receive a message" and forwards the message text here, where it's
+          parsed the same way (finds a Rs./INR amount, checks for credit keywords) as the Android
+          app does. Transactions land as <b>unconfirmed</b>, same as every other real-time-alert
+          source — they get auto-confirmed once the real statement PDF arrives.
+        </Typography>
+
+        <Button
+          variant="contained"
+          startIcon={smsKitBusy ? <CircularProgress size={18} color="inherit" /> : <PhoneIphone />}
+          onClick={handleCreateSmsKit}
+          disabled={smsKitBusy || !scBaseUrl.trim()}
+        >
+          {smsKitBusy ? 'Creating…' : 'Create SMS Setup Kit'}
+        </Button>
+
+        {smsKit && (
+          <Box sx={{ mt: 2 }}>
+            {[
+              { label: '1. POST URL', value: smsKit.url },
+              { label: '2. Header  X-API-Key', value: smsKit.token },
+            ].map((row) => (
+              <Box key={row.label} sx={{ mb: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>{row.label}</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: 'action.hover', p: 1, borderRadius: 1 }}>
+                  <code style={{ wordBreak: 'break-all', flex: 1, fontSize: 13 }}>{row.value}</code>
+                  <IconButton size="small" onClick={() => copy(row.value)}><ContentCopy fontSize="small" /></IconButton>
+                </Box>
+              </Box>
+            ))}
+            <Alert severity="success" icon={false} sx={{ mt: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>Build it (Shortcuts app → new shortcut):</Typography>
+              <Box component="ol" sx={{ pl: 3, my: 0, '& li': { mb: 0.25 } }}>
+                <li><Typography variant="body2"><b>Get Contents of URL</b> → paste URL (1), Method <b>POST</b>, add header <code>X-API-Key</code> = value (2), Request Body <b>JSON</b> with a single key <code>text</code> whose value is the magic variable <b>Shortcut Input</b> (tap the field → Select Variable → Shortcut Input).</Typography></li>
+                <li><Typography variant="body2">Name it "SMS Auto-Detect" and save (no need to add it to your Home Screen).</Typography></li>
+                <li><Typography variant="body2">Settings app → <b>Shortcuts</b> → <b>Automation</b> tab → + → <b>Create Personal Automation</b> → <b>Message</b> → optionally filter by sender, or leave unfiltered to catch every bank SMS → Next → <b>Run Shortcut</b> → pick "SMS Auto-Detect" → turn <b>OFF</b> "Ask Before Running" → Done.</Typography></li>
+              </Box>
+            </Alert>
+          </Box>
+        )}
+
+        <Divider sx={{ my: 2 }} />
+
+        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Advanced — download a pre-built shortcut file</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          Same signing caveat as above: since iOS 15, this file imports only after signing on a Mac
+          (<code>shortcuts sign</code>) or on iOS 12–14. On a stock modern iPhone use the Setup Kit above instead.
+        </Typography>
+        <Button
+          variant="outlined"
+          startIcon={smsScBusy ? <CircularProgress size={18} /> : <Download />}
+          onClick={handleDownloadSmsShortcut}
+          disabled={smsScBusy || !scBaseUrl.trim()}
+        >
+          {smsScBusy ? 'Generating…' : 'Download .shortcut file'}
+        </Button>
       </Paper>
 
       {/* Ingest mapping */}

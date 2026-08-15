@@ -67,6 +67,18 @@ def _ask(prompt: str, input_type: str, output_name: str, default: Optional[str] 
     return ({"WFWorkflowActionIdentifier": "is.workflow.actions.ask", "WFWorkflowActionParameters": params}, u)
 
 
+def _shortcut_input_token() -> dict:
+    """A value that is exactly the shortcut's own input (what an Automation passed
+    it -- e.g. the body of the message that triggered a "When I receive a message"
+    automation), shown in the Shortcuts editor as the "Shortcut Input" magic
+    variable. No prior action/UUID needed since it references the workflow's own
+    input, not another action's output."""
+    return {
+        "Value": {"string": _OBJ, "attachmentsByRange": {"{0, 1}": {"Type": "ExtensionInput"}}},
+        "WFSerializationType": "WFTextTokenString",
+    }
+
+
 def build_add_transaction_shortcut(
     base_url: str,
     token: str,
@@ -135,6 +147,74 @@ def build_add_transaction_shortcut(
         },
         "WFWorkflowImportQuestions": [],
         "WFWorkflowTypes": ["NCWidget", "WatchKit"],
+        "WFWorkflowInputContentItemClasses": [
+            "WFAppStoreAppContentItem", "WFArticleContentItem", "WFContactContentItem",
+            "WFDateContentItem", "WFEmailAddressContentItem", "WFGenericFileContentItem",
+            "WFImageContentItem", "WFiTunesProductContentItem", "WFLocationContentItem",
+            "WFDCMapsLinkContentItem", "WFAVAssetContentItem", "WFPDFContentItem",
+            "WFPhoneNumberContentItem", "WFRichTextContentItem", "WFSafariWebPageContentItem",
+            "WFStringContentItem", "WFURLContentItem",
+        ],
+        "WFWorkflowActions": actions,
+    }
+
+    return plistlib.dumps(root, fmt=plistlib.FMT_XML)
+
+
+def build_sms_forward_shortcut(
+    base_url: str,
+    token: str,
+    notify_title: str = "Finance Tracker",
+) -> bytes:
+    """Build a Shortcut meant to run from a Settings -> Shortcuts -> Automation
+    with trigger "When I receive a message" (with "Run Immediately" enabled, no
+    confirmation). It forwards the message's own text as-is to
+    /api/ingest/sms, which does the parsing server-side (Apple gives no way for
+    an app or Shortcut to read/parse SMS content beyond what an Automation itself
+    hands the Shortcut as input) -- this keeps the Shortcut itself trivial (no
+    fragile client-side regex extraction) since all the actual amount/direction
+    parsing is testable Python, not an unverifiable on-device action chain.
+    """
+    base = (base_url or "").rstrip("/")
+    url = f"{base}/api/ingest/sms"
+
+    actions: List[dict] = [
+        {
+            "WFWorkflowActionIdentifier": "is.workflow.actions.downloadurl",
+            "WFWorkflowActionParameters": {
+                "UUID": _new_uuid(),
+                "WFURL": url,
+                "WFHTTPMethod": "POST",
+                "ShowHeaders": True,
+                "WFHTTPHeaders": _dict_field([
+                    _dict_item("X-API-Key", _text_token(token)),
+                    _dict_item("Content-Type", _text_token("application/json")),
+                ]),
+                "WFHTTPBodyType": "JSON",
+                "WFJSONValues": _dict_field([
+                    _dict_item("text", _shortcut_input_token()),
+                ]),
+            },
+        },
+        {
+            "WFWorkflowActionIdentifier": "is.workflow.actions.notification",
+            "WFWorkflowActionParameters": {
+                "WFNotificationActionTitle": notify_title,
+                "WFNotificationActionBody": "Transaction logged from SMS ✓",
+            },
+        },
+    ]
+
+    root = {
+        "WFWorkflowClientVersion": "1146.14",
+        "WFWorkflowMinimumClientVersion": 900,
+        "WFWorkflowMinimumClientVersionString": "900",
+        "WFWorkflowIcon": {
+            "WFWorkflowIconStartColor": 4271458815,
+            "WFWorkflowIconGlyphNumber": 59511,
+        },
+        "WFWorkflowImportQuestions": [],
+        "WFWorkflowTypes": [],
         "WFWorkflowInputContentItemClasses": [
             "WFAppStoreAppContentItem", "WFArticleContentItem", "WFContactContentItem",
             "WFDateContentItem", "WFEmailAddressContentItem", "WFGenericFileContentItem",

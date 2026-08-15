@@ -587,6 +587,27 @@ export const downloadShortcut = async (opts = {}) => {
   return filename;
 };
 
+// Same idea as downloadShortcut, but for the SMS-forwarding Automation shortcut
+// (posts a message's raw text to /api/ingest/sms instead of asking for amount/description).
+export const downloadSmsShortcut = async (opts = {}) => {
+  const res = await api.post('/api/ingest/sms-shortcut', opts, { responseType: 'blob' });
+  let filename = 'SMS Auto-Detect.shortcut';
+  const cd = res.headers?.['content-disposition'] || res.headers?.['Content-Disposition'];
+  if (cd) {
+    const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+    if (m && m[1]) filename = decodeURIComponent(m[1]);
+  }
+  const url = window.URL.createObjectURL(new Blob([res.data]));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+  return filename;
+};
+
 // Ingest mapping (source JSON key -> transaction field)
 export const getIngestTargetFields = async () => {
   const response = await api.get('/api/ingest/target-fields');
