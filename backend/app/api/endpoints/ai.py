@@ -286,39 +286,48 @@ def _spend_summary_text(db: Session, uid: int, days: int = 90) -> str:
     )
 
 
-def _monthly_breakdown_text(db: Session, uid: int, months: int = 6) -> str:
-    """Per-month income/expense (base currency) so time-scoped questions ('last month',
-    'in June') are answered from real data instead of guessed."""
+def _per_bank_monthly_breakdown_text(db: Session, uid: int, months: int = 6) -> str:
+    """Per-account, per-month income/expense/net -- without this, the AI only ever
+    sees each account's CURRENT balance snapshot plus an all-accounts-combined
+    summary, so it has no way to answer a question scoped to one specific bank
+    ("how's my cash flow in Standard Chartered", "am I saving in this account") even
+    though that data exists; it just can't see it."""
     code, _ = _base_ccy(db, uid)
     rate_map = currency_service.get_rate_map(db, uid)
     bank_ccy = currency_service.bank_currency_map(db, uid)
     since = datetime.utcnow() - timedelta(days=months * 31 + 5)
     rows = (
         db.query(
-            Transaction.transaction_date, Transaction.amount, Transaction.transaction_type,
-            Transaction.currency_code, Transaction.bank_id,
+            Transaction.bank_id, Transaction.transaction_date, Transaction.amount,
+            Transaction.transaction_type, Transaction.currency_code,
         )
         .filter(Transaction.user_id == uid, Transaction.transaction_date >= since)
         .all()
     )
-    buckets: dict = defaultdict(lambda: [0.0, 0.0])  # "YYYY-MM" -> [income, expense]
-    for tdate, amount, ttype, ccode, bid in rows:
+    per_bank: dict = defaultdict(lambda: defaultdict(lambda: [0.0, 0.0]))  # bank_id -> "YYYY-MM" -> [income, expense]
+    for bid, tdate, amount, ttype, ccode in rows:
         if not tdate:
             continue
         ccy = ccode or bank_ccy.get(bid) or code
         base_amt = currency_service.to_base(amount, ccy, rate_map)
         key = tdate.strftime("%Y-%m")
         if ttype == TransactionType.CREDIT:
-            buckets[key][0] += base_amt
+            per_bank[bid][key][0] += base_amt
         elif ttype == TransactionType.DEBIT:
-            buckets[key][1] += base_amt
-    if not buckets:
+            per_bank[bid][key][1] += base_amt
+    if not per_bank:
         return ""
-    lines = [
-        f"- {k}: income {round(v[0], 2)} {code}, expense {round(v[1], 2)} {code}, net {round(v[0] - v[1], 2)} {code}"
-        for k, v in sorted(buckets.items(), reverse=True)[:months]
-    ]
-    return "Monthly breakdown (most recent first):\n" + "\n".join(lines)
+
+    bank_names = {b.id: b.name for b in db.query(Bank).filter(Bank.user_id == uid).all()}
+    blocks = []
+    for bid, buckets in per_bank.items():
+        name = bank_names.get(bid, f"Account #{bid}")
+        lines = [
+            f"  - {k}: income {round(v[0], 2)} {code}, expense {round(v[1], 2)} {code}, net {round(v[0] - v[1], 2)} {code}"
+            for k, v in sorted(buckets.items(), reverse=True)[:months]
+        ]
+        blocks.append(f"{name}:\n" + "\n".join(lines))
+    return f"Monthly breakdown per account, last {months} months (most recent first):\n" + "\n\n".join(blocks)
 
 
 @router.get("/insights")
@@ -386,9 +395,9 @@ def ai_query_endpoint(data: AIQueryRequest, db: Session = Depends(get_db), curre
         _spend_summary_text(db, uid, 90),
         "",
     ]
-    monthly = _monthly_breakdown_text(db, uid, 6)
-    if monthly:
-        parts.append(monthly)
+    per_bank_monthly = _per_bank_monthly_breakdown_text(db, uid, 6)
+    if per_bank_monthly:
+        parts.append(per_bank_monthly)
         parts.append("")
     parts.append("Accounts:")
     for b in db.query(Bank).filter(Bank.user_id == uid).all():
