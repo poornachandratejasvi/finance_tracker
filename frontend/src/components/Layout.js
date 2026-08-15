@@ -34,6 +34,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import KeyIcon from '@mui/icons-material/Key';
 import SettingsIcon from '@mui/icons-material/Settings';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
 
 const DRAWER_WIDTH = 236;
 
@@ -47,6 +48,7 @@ const NAV_GROUPS = [
     { label: 'Transactions', path: '/transactions', icon: <ReceiptLongIcon /> },
     { label: 'Budgets', path: '/budgets', icon: <AccountBalanceWalletIcon /> },
     { label: 'Goals', path: '/goals', icon: <FlagIcon /> },
+    { label: 'Reward Points', path: '/reward-points', icon: <CardGiftcardIcon /> },
   ] },
   { heading: 'Accounts & Data', items: [
     { label: 'Banks', path: '/banks', icon: <AccountBalanceIcon /> },

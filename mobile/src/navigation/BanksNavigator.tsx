@@ -6,6 +6,7 @@ import BankStatementsScreen from "../screens/banks/BankStatementsScreen";
 import PdfsScreen from "../screens/banks/PdfsScreen";
 import CsvExportsScreen from "../screens/banks/CsvExportsScreen";
 import ImportsScreen from "../screens/banks/ImportsScreen";
+import RewardPointsScreen from "../screens/banks/RewardPointsScreen";
 import BanksScreen from "../screens/settings/BanksScreen";
 import BankFormScreen from "../screens/settings/BankFormScreen";
 import { Bank } from "../types";
@@ -18,6 +19,7 @@ export type BanksStackParamList = {
   Pdfs: { bankId?: number; bankName?: string } | undefined;
   CsvExports: { bankId?: number; bankName?: string } | undefined;
   Imports: undefined;
+  RewardPoints: undefined;
 };
 
 const Stack = createNativeStackNavigator<BanksStackParamList>();
@@ -32,6 +34,7 @@ export default function BanksNavigator() {
       <Stack.Screen name="Pdfs" component={PdfsScreen} options={{ title: "Statements" }} />
       <Stack.Screen name="CsvExports" component={CsvExportsScreen} options={{ title: "CSV Exports" }} />
       <Stack.Screen name="Imports" component={ImportsScreen} options={{ title: "Imports" }} />
+      <Stack.Screen name="RewardPoints" component={RewardPointsScreen} options={{ title: "Reward Points" }} />
     </Stack.Navigator>
   );
 }

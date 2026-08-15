@@ -1074,6 +1074,39 @@ class PDFParser:
         return None
 
     @staticmethod
+    def extract_reward_points(text: str) -> Optional[float]:
+        """Extract a credit-card statement's reward/loyalty points closing balance,
+        if printed. Best-effort: layouts vary at least as much as Total Amount
+        Due (see credit_balance_service.py's docstring), and plenty of statements
+        never print this at all -- ai_pdf_extraction.extract_reward_points_ai is
+        the fallback for a layout this misses.
+        """
+        if not text:
+            return None
+        labels = [
+            r'(?:total\s+)?reward\s+points?(?:\s+(?:balance|summary|earned|available|closing))?',
+            r'loyalty\s+points?',
+            r'bonus\s+points?',
+            r'(?:neu|cash)\s*points?(?:\s+balance)?',
+        ]
+        # Same shape as extract_total_amount_due's amount_re, but reward-point
+        # figures are usually whole numbers and never have a currency prefix --
+        # instead allow up to 2 stray non-digit characters (a mis-rendered symbol,
+        # "Pts", ":" etc.) immediately before the digits, the same failure mode
+        # that made Total Amount Due extraction miss HDFC's "C11,537.00".
+        number_re = r'[^\d\n]{0,2}\s*([0-9][0-9,]*(?:\.[0-9]+)?)'
+        for label in labels:
+            m = re.search(label + r'\s*[:\-]?\s*' + number_re, text, re.IGNORECASE)
+            if m:
+                try:
+                    val = float(m.group(1).replace(',', ''))
+                    if val >= 0:
+                        return val
+                except (ValueError, AttributeError):
+                    continue
+        return None
+
+    @staticmethod
     def parse_sc_savings(text: str, statement_period: Optional[Tuple[Optional[datetime], Optional[datetime]]] = None) -> List[Dict]:
         """Parse Standard Chartered savings account statement.
 

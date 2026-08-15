@@ -16,7 +16,7 @@ celery_app = Celery(
     include=[
         "app.tasks.sync_tasks", "app.tasks.backup_tasks", "app.tasks.notification_tasks",
         "app.tasks.gmail_health_tasks", "app.tasks.alert_sync_tasks", "app.tasks.credit_balance_tasks",
-        "app.tasks.watcher_tasks",
+        "app.tasks.watcher_tasks", "app.tasks.reward_points_tasks",
     ],
 )
 
@@ -86,5 +86,12 @@ celery_app.conf.beat_schedule = {
     "watcher-monthly-tasks": {
         "task": "watchers.create_monthly_tasks",
         "schedule": 60 * 60.0,
+    },
+    # Reward points don't change minute-to-minute, and an expiry is always weeks
+    # out by the time it's first crossed a warning threshold -- once a day is
+    # plenty (same cadence as the other credit-card checks above).
+    "reward-points-expiry-check": {
+        "task": "reward_points.check_expiring",
+        "schedule": 24 * 60 * 60.0,
     },
 }

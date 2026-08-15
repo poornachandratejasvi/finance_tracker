@@ -28,11 +28,11 @@ _SUMMARY_KEYWORDS = (
 )
 
 
-def _build_excerpt(text: str, max_chars: int = 3500, window: int = 3) -> str:
-    """Pull a window of lines around each billing-summary keyword hit, not just the
-    matching line itself — statement tables often print the label on one line and
-    the actual figures on the next (or split across cells before/after it), so the
-    label alone gives the AI nothing to extract. Preferring earlier matches (the
+def _build_excerpt(text: str, max_chars: int = 3500, window: int = 3, keywords=_SUMMARY_KEYWORDS) -> str:
+    """Pull a window of lines around each keyword hit, not just the matching line
+    itself — statement tables often print the label on one line and the actual
+    figures on the next (or split across cells before/after it), so the label
+    alone gives the AI nothing to extract. Preferring earlier matches (the
     summary box is normally on page 1; later hits are more likely stale
     historical-table rows), and de-duplicating overlapping windows."""
     if not text:
@@ -45,7 +45,7 @@ def _build_excerpt(text: str, max_chars: int = 3500, window: int = 3) -> str:
         if total_len > max_chars:
             break
         low = line.lower()
-        if not any(k in low for k in _SUMMARY_KEYWORDS):
+        if not any(k in low for k in keywords):
             continue
         lo, hi = max(0, i - window), min(len(lines), i + window + 1)
         new_idx = [j for j in range(lo, hi) if j not in included]
@@ -119,3 +119,53 @@ def extract_billing_summary(db: Session, uid: int, text: str) -> dict:
 def extract_total_amount_due_ai(db: Session, uid: int, text: str) -> Optional[float]:
     """Convenience wrapper: just the number, or None."""
     return extract_billing_summary(db, uid, text).get("total_amount_due")
+
+
+_REWARD_POINTS_KEYWORDS = (
+    "reward point", "reward points", "loyalty point", "loyalty points",
+    "bonus point", "bonus points", "neu point", "neu points", "cashpoint", "cash points",
+)
+
+
+def extract_reward_points_ai(db: Session, uid: int, text: str) -> Optional[float]:
+    """Ask the user's configured AI provider for a credit-card statement's reward/
+    loyalty points closing balance, when pdf_parser.extract_reward_points's regex
+    comes up empty. Returns None (never raises) if no provider is configured, the
+    call fails, or nothing parseable comes back."""
+    if not _has_reward_keyword(text):
+        return None
+    excerpt = _build_excerpt(text, window=3, keywords=_REWARD_POINTS_KEYWORDS)
+    if not excerpt:
+        return None
+
+    system = (
+        "You extract a reward/loyalty points figure from a credit-card statement excerpt. "
+        "The excerpt is separate windows (split by '---') of text lines pulled from around "
+        "each mention of a points-related keyword -- a PDF table's columns were flattened "
+        "into plain text, so a label like 'Reward Points' often appears on one line while its "
+        "actual number sits on the line just before or after it. Identify the CURRENT "
+        "statement's CLOSING reward/loyalty points balance (not points earned this cycle "
+        "alone, not a redemption catalog value) as a non-negative number. Respond ONLY with a "
+        'JSON object: {"reward_points": <number or null>}. No prose, no markdown fences. Use '
+        "null if you can't confidently identify it."
+    )
+    prompt = f"STATEMENT EXCERPT (windows separated by ---):\n{excerpt}"
+
+    try:
+        raw = ai_service.complete(db, uid, system, prompt, max_tokens=100)
+    except Exception as e:
+        logger.info("AI reward-points extraction unavailable: %s", str(e)[:150])
+        return None
+
+    data = ai_service._extract_json(raw)
+    if not isinstance(data, dict):
+        return None
+    val = data.get("reward_points")
+    if isinstance(val, (int, float)) and val >= 0:
+        return float(val)
+    return None
+
+
+def _has_reward_keyword(text: str) -> bool:
+    low = text.lower()
+    return any(k in low for k in _REWARD_POINTS_KEYWORDS)

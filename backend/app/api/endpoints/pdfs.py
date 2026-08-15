@@ -19,7 +19,7 @@ from app.services.password_service import get_password_candidates, parse_with_pa
 from app.services.transaction_service import TransactionService
 from app.services.pdf_storage import get_preferred_pdf_path, ensure_decrypted_with_candidates, ensure_decrypted_pdf
 from app.services.balance_service import apply_statement_balance
-from app.services import ai_transaction_extraction
+from app.services import ai_transaction_extraction, reward_points_service
 from app.services.transaction_hooks import apply_auto_rules_and_notify, create_or_reconcile_transaction
 import logging
 
@@ -527,6 +527,13 @@ def reprocess_pdf(
             bank, parse_result, fallback_date=bank_email.received_date,
             ai_context={"db": db, "user_id": current_user.id},
         )
+        try:
+            reward_points_service.record_statement_reward_points(
+                db, bank, pdf.id, parse_result.get("_raw_text"),
+                bank_email.received_date, ai_context={"db": db, "user_id": current_user.id},
+            )
+        except Exception:
+            logger.warning("Reward-points extraction failed for bank %s", bank.id, exc_info=True)
 
         db.commit()
         
@@ -649,6 +656,13 @@ def _reprocess_pdf_worker(pdf_id: int, user_id: int) -> dict:
             bank, parse_result, fallback_date=bank_email.received_date,
             ai_context={"db": db, "user_id": user_id},
         )
+        try:
+            reward_points_service.record_statement_reward_points(
+                db, bank, pdf.id, parse_result.get("_raw_text"),
+                bank_email.received_date, ai_context={"db": db, "user_id": user_id},
+            )
+        except Exception:
+            logger.warning("Reward-points extraction failed for bank %s", bank.id, exc_info=True)
         db.commit()
 
         return {

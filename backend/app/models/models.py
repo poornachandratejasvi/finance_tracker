@@ -101,6 +101,11 @@ class Bank(Base):
     # cards so it never silently overwrites a value the user just set; the
     # explicit "Redetect Credit Balances" button still overrides it on request.
     balance_source = Column(String(10), default="auto")
+    # Statement date whose reward-points figure last reconciled the RewardPointEntry
+    # ledger (see reward_points_service.py) -- same out-of-order-statement guard as
+    # balance_updated_at, kept as its own column since the two can legitimately
+    # diverge (a statement might have one field but not the other).
+    reward_points_updated_at = Column(DateTime)
     currency_code = Column(String(3), default='INR')  # ISO 4217 currency of this account
     color = Column(String(7))  # hex tile/dot color; NULL -> derived from bank_type
     exclude_from_stats = Column(Boolean, default=False)  # hide from dashboard/analytics totals
@@ -619,3 +624,41 @@ class TransactionWatcher(Base):
     created_at = Column(DateTime, default=utcnow)
 
     user = relationship("User")
+
+
+class RewardPointEntry(Base):
+    """A single credit-card reward/loyalty points ledger entry.
+
+    ``points`` is always the signed delta this entry contributes to the running
+    balance: positive for 'earned' and most 'adjustment' rows, negative for
+    'redeemed'/'expired'. Summing every entry for a bank gives its current
+    balance -- no separate balance column to keep in sync.
+
+    'earned' entries carry the only meaningful ``expiry_date``: the batch of
+    points they represent expires then (if the issuer has one at all). A
+    statement-derived 'adjustment' entry (source='auto'/'ai') reconciles the
+    running total to the issuer's own printed points balance as of that
+    statement, the same way apply_statement_balance() reconciles a card's
+    outstanding-due balance -- but since statements essentially never print a
+    per-batch expiry date, it never carries one.
+    """
+    __tablename__ = "reward_point_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    bank_id = Column(Integer, ForeignKey("banks.id", ondelete="CASCADE"), nullable=False, index=True)
+    pdf_statement_id = Column(Integer, ForeignKey("pdf_statements.id", ondelete="CASCADE"), nullable=True)
+    entry_type = Column(String(20), nullable=False)  # earned | redeemed | expired | adjustment
+    points = Column(Float, nullable=False)
+    expiry_date = Column(DateTime, nullable=True)
+    description = Column(String(255), nullable=True)
+    source = Column(String(10), default="manual")  # manual | auto | ai
+    # Highest expiry-warning threshold (30/7/1 days) already notified for this
+    # entry, so the daily check never re-sends the same warning tomorrow.
+    notified_threshold = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
+    user = relationship("User")
+    bank = relationship("Bank")
+
+    __table_args__ = (Index("ix_reward_points_user_bank", "user_id", "bank_id"),)

@@ -501,6 +501,23 @@ export const commitImport = async (payload) => {
   return response.data;
 };
 
+// Reward points
+export const getRewardPoints = async (bankId) => {
+  const response = await api.get('/api/reward-points/', { params: bankId ? { bank_id: bankId } : {} });
+  return response.data;
+};
+export const createRewardEntry = async (data) => {
+  const response = await api.post('/api/reward-points/', data);
+  return response.data;
+};
+export const deleteRewardEntry = async (id) => {
+  await api.delete(`/api/reward-points/${id}`);
+};
+export const checkExpiringRewardPoints = async () => {
+  const response = await api.post('/api/reward-points/check-expiring');
+  return response.data;
+};
+
 // Net worth history
 export const getNetWorth = async (days = 180) => {
   const response = await api.get(`/api/dashboard/net-worth?days=${days}`);

@@ -447,3 +447,35 @@ export interface WatcherSuggestion {
   match_amount?: number | null;
   [key: string]: unknown;
 }
+
+export type RewardEntryType = "earned" | "redeemed" | "expired" | "adjustment";
+
+export interface RewardPointEntry {
+  id: number;
+  bank_id: number;
+  entry_type: RewardEntryType;
+  points: number;
+  expiry_date: string | null;
+  description: string | null;
+  source: "manual" | "auto" | "ai";
+  created_at: string;
+}
+
+export interface RewardPointExpiring {
+  expiry_date: string;
+  points: number;
+  entry_id: number;
+}
+
+export interface RewardPointSummary {
+  bank_id: number;
+  bank_name: string;
+  balance: number;
+  expiring: RewardPointExpiring[];
+  next_expiry_date: string | null;
+}
+
+export interface RewardPointsResponse {
+  summaries: RewardPointSummary[];
+  entries: RewardPointEntry[];
+}
