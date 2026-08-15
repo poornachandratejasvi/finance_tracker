@@ -63,6 +63,40 @@ def apply_statement_balance(
     return True
 
 
+def adjust_credit_balance_for_new_transaction(bank, transaction) -> bool:
+    """Nudge a credit card's stored balance for a single newly-created transaction
+    dated after the account's last known statement, so spending/payments show up
+    immediately instead of staying frozen until the next statement PDF arrives.
+    A debit (purchase) increases the amount owed; a credit (payment/refund)
+    reduces it.
+
+    Only call this for a genuinely NEW transaction (never for the "reconcile an
+    existing pending alert" branch of create_or_reconcile_transaction) — the
+    pending row already got this adjustment once, when it was first created as an
+    alert; applying it again on reconciliation would double-count it. Once the
+    next statement's Total Amount Due is applied via apply_statement_balance,
+    balance_updated_at moves forward and this transaction naturally stops being
+    "post-statement," so there's no ongoing drift to correct for later.
+    """
+    is_credit = (getattr(bank, "bank_type", "") or "").lower() == "credit"
+    if not is_credit or bank.current_balance is None:
+        return False
+    if not bank.balance_updated_at or not transaction.transaction_date:
+        return False
+    if transaction.transaction_date <= bank.balance_updated_at:
+        return False
+    if transaction.amount is None:
+        return False
+
+    ttype = transaction.transaction_type
+    ttype_value = ttype.value if hasattr(ttype, "value") else str(ttype)
+    if ttype_value not in ("debit", "credit"):
+        return False
+
+    bank.current_balance += transaction.amount if ttype_value == "debit" else -transaction.amount
+    return True
+
+
 def recompute_bank_balance(db, bank) -> bool:
     """Authoritatively recompute a bank's balance from its stored transactions.
 

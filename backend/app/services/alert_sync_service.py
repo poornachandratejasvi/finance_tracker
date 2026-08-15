@@ -133,6 +133,13 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
                     source="alert", is_confirmed=False,
                 )
                 db.add(transaction)
+
+                try:
+                    from app.services.balance_service import adjust_credit_balance_for_new_transaction
+                    adjust_credit_balance_for_new_transaction(bank, transaction)
+                except Exception:
+                    logger.warning("Post-statement balance adjustment failed for bank %s", bank.id, exc_info=True)
+
                 apply_auto_rules_and_notify(db, bank.user_id, transaction)
                 created += 1
 

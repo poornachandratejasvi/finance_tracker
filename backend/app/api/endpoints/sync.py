@@ -169,7 +169,11 @@ def _process_pdf_task(
         if is_protected and bank.account_password:
             ensure_decrypted_pdf(db, pdf_statement, bank.account_password)
 
-        apply_statement_balance(bank, parse_result, ai_context={"db": db, "user_id": user_id})
+        bank_email = db.query(BankEmail).filter(BankEmail.id == pdf_statement.bank_email_id).first()
+        apply_statement_balance(
+            bank, parse_result, fallback_date=bank_email.received_date if bank_email else None,
+            ai_context={"db": db, "user_id": user_id},
+        )
         db.commit()
 
         return {
@@ -1013,7 +1017,10 @@ def resync_pdfs(
 
                 if is_protected and bank.account_password:
                     ensure_decrypted_pdf(db, pdf_statement, bank.account_password)
-                apply_statement_balance(bank, parse_result, ai_context={"db": db, "user_id": current_user.id})
+                apply_statement_balance(
+                    bank, parse_result, fallback_date=bank_email.received_date,
+                    ai_context={"db": db, "user_id": current_user.id},
+                )
                 db.commit()
                 pdfs_processed += 1
                 logger.info(f"Saved {len(parse_result['transactions'])} transactions from {pdf_statement.file_name}")
@@ -1224,7 +1231,10 @@ def update_pdf_password(
         )
         apply_auto_rules_and_notify(db, current_user.id, transaction)
         transactions_added += 1
-    apply_statement_balance(bank, parse_result, ai_context={"db": db, "user_id": current_user.id})
+    apply_statement_balance(
+        bank, parse_result, fallback_date=bank_email.received_date,
+        ai_context={"db": db, "user_id": current_user.id},
+    )
     db.commit()
 
     return {

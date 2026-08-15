@@ -255,6 +255,15 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
         custom_fields=json.dumps(extras) if extras else None,
     )
     db.add(txn)
+
+    try:
+        from app.services.balance_service import adjust_credit_balance_for_new_transaction
+        ingest_bank = db.query(Bank).filter(Bank.id == default_bank_id).first()
+        if ingest_bank:
+            adjust_credit_balance_for_new_transaction(ingest_bank, txn)
+    except Exception:
+        pass
+
     db.commit()
     db.refresh(txn)
     TransactionService.apply_auto_labels(db, txn.id, txn.description)

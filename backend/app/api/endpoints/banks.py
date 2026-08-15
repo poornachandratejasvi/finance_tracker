@@ -659,9 +659,12 @@ async def upload_bank_pdf(
             apply_auto_rules_and_notify(db, current_user.id, transaction)
             transactions_added += 1
 
-        apply_statement_balance(bank, parse_result, ai_context={"db": db, "user_id": current_user.id})
+        apply_statement_balance(
+            bank, parse_result, fallback_date=bank_email.received_date,
+            ai_context={"db": db, "user_id": current_user.id},
+        )
         db.commit()
-        
+
         logger.info(f"Added {transactions_added} transactions to database")
         
         return {

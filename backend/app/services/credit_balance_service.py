@@ -24,12 +24,17 @@ from app.services import ai_pdf_extraction
 logger = logging.getLogger(__name__)
 
 
-def _latest_pdf(db: Session, bank_id: int) -> Optional[PDFStatement]:
+def _latest_pdf(db: Session, bank_id: int) -> Optional[tuple]:
+    """Returns (PDFStatement, received_date) for the chronologically latest statement
+    email on file for this bank. Ordered by the email's actual received date, not
+    PDFStatement.id -- statements are frequently backfilled/reprocessed out of
+    order, so "highest id" is often an older statement re-synced later, not the
+    newest one."""
     return (
-        db.query(PDFStatement)
+        db.query(PDFStatement, BankEmail.received_date)
         .join(BankEmail, PDFStatement.bank_email_id == BankEmail.id)
         .filter(BankEmail.bank_id == bank_id)
-        .order_by(PDFStatement.id.desc())
+        .order_by(BankEmail.received_date.desc().nullslast(), PDFStatement.id.desc())
         .first()
     )
 
@@ -47,11 +52,12 @@ def redetect_credit_card_balance(db: Session, uid: int, bank: Bank, use_ai: bool
         "source": "unchanged", "detail": None,
     }
 
-    pdf = _latest_pdf(db, bank.id)
-    if not pdf:
+    row = _latest_pdf(db, bank.id)
+    if not row:
         report["source"] = "no_pdf"
         report["detail"] = "No statement PDF on file for this account."
         return report
+    pdf, received_date = row
 
     candidates = get_password_candidates(db, bank)
     try:
@@ -115,7 +121,7 @@ def redetect_credit_card_balance(db: Session, uid: int, bank: Bank, use_ai: bool
         return report
 
     bank.current_balance = new_balance
-    bank.balance_updated_at = pdf.statement_period_end or pdf.created_at
+    bank.balance_updated_at = pdf.statement_period_end or received_date or pdf.created_at
     bank.balance_source = "auto"  # re-detecting explicitly supersedes any earlier manual override
     report["new_balance"] = new_balance
     report["source"] = source

@@ -262,6 +262,13 @@ def create_transaction(
     )
 
     db.add(transaction)
+
+    try:
+        from app.services.balance_service import adjust_credit_balance_for_new_transaction
+        adjust_credit_balance_for_new_transaction(bank, transaction)
+    except Exception:
+        pass
+
     db.commit()
     db.refresh(transaction)
 

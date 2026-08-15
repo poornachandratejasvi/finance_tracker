@@ -75,6 +75,16 @@ def create_or_reconcile_transaction(db, user_id: int, bank_id: int, trans_data: 
         **({"source": source} if source else {}), **trans_data,
     )
     db.add(transaction)
+
+    try:
+        from app.models.models import Bank
+        from app.services.balance_service import adjust_credit_balance_for_new_transaction
+        bank = db.query(Bank).filter(Bank.id == bank_id).first()
+        if bank:
+            adjust_credit_balance_for_new_transaction(bank, transaction)
+    except Exception:
+        logger.warning("Post-statement balance adjustment failed for bank %s", bank_id, exc_info=True)
+
     return transaction, False
 
 

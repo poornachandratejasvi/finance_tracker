@@ -523,8 +523,11 @@ def reprocess_pdf(
         if pdf.is_password_protected and bank.account_password:
             from app.services.pdf_storage import ensure_decrypted_pdf
             ensure_decrypted_pdf(db, pdf, bank.account_password)
-        apply_statement_balance(bank, parse_result, ai_context={"db": db, "user_id": current_user.id})
-        
+        apply_statement_balance(
+            bank, parse_result, fallback_date=bank_email.received_date,
+            ai_context={"db": db, "user_id": current_user.id},
+        )
+
         db.commit()
         
         return {
@@ -642,7 +645,10 @@ def _reprocess_pdf_worker(pdf_id: int, user_id: int) -> dict:
         if pdf.is_password_protected and bank.account_password:
             from app.services.pdf_storage import ensure_decrypted_pdf
             ensure_decrypted_pdf(db, pdf, bank.account_password)
-        apply_statement_balance(bank, parse_result, ai_context={"db": db, "user_id": user_id})
+        apply_statement_balance(
+            bank, parse_result, fallback_date=bank_email.received_date,
+            ai_context={"db": db, "user_id": user_id},
+        )
         db.commit()
 
         return {
