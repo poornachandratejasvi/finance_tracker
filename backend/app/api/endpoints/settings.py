@@ -132,6 +132,53 @@ def test_discord_webhook(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Extra notification services (Apprise) -- Discord (above) is one target among
+# many; these are any other Apprise-supported service URLs (Telegram, Slack,
+# email, ntfy, Pushover, ...). See app.services.notify_service.
+# ──────────────────────────────────────────────────────────────────────────────
+class NotifyURLs(BaseModel):
+    urls: List[str] = []
+
+
+@router.get("/notify-urls")
+def get_notify_urls(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    from app.services import notify_service
+    return {"urls": notify_service.get_extra_urls(db, current_user.id)}
+
+
+@router.post("/notify-urls")
+def save_notify_urls(
+    payload: NotifyURLs,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Save extra Apprise service URLs, e.g. tgram://bottoken/ChatID,
+    mailto://user:pass@gmail.com, ntfy://topic. One entry per service; see
+    github.com/caronc/apprise#popular-notification-services for the full list
+    and URL format per service."""
+    from app.services import notify_service
+    notify_service.set_extra_urls(db, current_user.id, payload.urls)
+    return {"success": True, "count": len(notify_service.get_extra_urls(db, current_user.id))}
+
+
+@router.post("/notify-urls/test")
+def test_notify_urls(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Send a test notification to every configured target (Discord webhook +
+    any extra Apprise URLs)."""
+    from app.services import notify_service
+    ok, message = notify_service.send_test(db, current_user.id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+    return {"success": True, "message": message}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Scheduled Sync Settings
 # ──────────────────────────────────────────────────────────────────────────────
 

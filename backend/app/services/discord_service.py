@@ -11,7 +11,6 @@ API keys are (AppSetting + app.core.crypto).
 import logging
 from typing import Optional, Tuple
 
-import httpx
 from sqlalchemy.orm import Session
 
 from app.models.models import AppSetting
@@ -86,54 +85,39 @@ def _format_amount(amount, ttype) -> str:
 
 
 def send_test_message(db: Session, uid: int) -> Tuple[bool, str]:
-    url = get_webhook(db, uid)
-    if not url:
-        return False, "No Discord webhook configured."
-    try:
-        r = httpx.post(url, json={"content": "✅ Finance Tracker: this is a test notification. Your webhook is working."}, timeout=10)
-        r.raise_for_status()
-        return True, "Test message sent."
-    except Exception as e:
-        return False, str(e)[:200]
+    """Delegates to notify_service (Apprise) so this test covers every configured
+    target (Discord webhook + any extra Apprise service URLs), not just Discord."""
+    from app.services import notify_service
+    return notify_service.send_test(db, uid)
 
 
 def send_discord_message(db: Session, uid: int, title: str, description: str) -> bool:
-    """Best-effort, transaction-agnostic Discord post — used by notification rules
+    """Best-effort, transaction-agnostic notification — used by notification rules
     (both 'match' and 'absence' triggers, the latter having no specific transaction
-    to describe). Returns False (no exception) if no webhook is configured."""
-    url = get_webhook(db, uid)
-    if not url:
-        return False
-    embed = {"title": title[:256], "description": description[:4000], "color": 0x1AA565}
-    r = httpx.post(url, json={"embeds": [embed]}, timeout=10)
-    r.raise_for_status()
-    return True
+    to describe). Returns False if nothing is configured. Despite the name (kept
+    for the many existing call sites), this now fans out via notify_service
+    (Apprise) to the Discord webhook plus any other configured service."""
+    from app.services import notify_service
+    return notify_service.send(db, uid, title, description)
 
 
 def send_rule_match_notification(db: Session, uid: int, transaction, rule) -> bool:
-    """Best-effort: post a message about a transaction that matched a rule with
+    """Best-effort: notify about a transaction that matched a rule with
     notify_discord=True. Never raises — failures are logged and swallowed so a
-    Discord outage can't break transaction creation/ingestion."""
-    url = get_webhook(db, uid)
-    if not url:
-        return False
+    notification-service outage can't break transaction creation/ingestion."""
+    from app.services import notify_service
+
     try:
         amount_str = _format_amount(transaction.amount, transaction.transaction_type)
         desc = (transaction.description or "").strip()[:200]
         date_str = transaction.transaction_date.strftime("%Y-%m-%d %H:%M") if transaction.transaction_date else ""
-        embed = {
-            "title": f"🔔 Rule matched: {rule.name}",
-            "color": 0x1AA565,
-            "fields": [
-                {"name": "Amount", "value": amount_str, "inline": True},
-                {"name": "Category", "value": transaction.category or "—", "inline": True},
-                {"name": "Date", "value": date_str, "inline": True},
-                {"name": "Description", "value": desc or "—", "inline": False},
-            ],
-        }
-        r = httpx.post(url, json={"embeds": [embed]}, timeout=10)
-        r.raise_for_status()
-        return True
+        body = (
+            f"Amount: {amount_str}\n"
+            f"Category: {transaction.category or '—'}\n"
+            f"Date: {date_str}\n"
+            f"Description: {desc or '—'}"
+        )
+        return notify_service.send(db, uid, f"🔔 Rule matched: {rule.name}", body)
     except Exception as e:
-        logger.info("Discord notification failed for rule %s: %s", getattr(rule, "id", "?"), str(e)[:150])
+        logger.info("Rule-match notification failed for rule %s: %s", getattr(rule, "id", "?"), str(e)[:150])
         return False

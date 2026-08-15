@@ -79,6 +79,12 @@ export default function Automation() {
   const [webhookUrl, setWebhookUrl] = useState('');
   const [webhookSaved, setWebhookSaved] = useState(false);
 
+  // ── Other notification services (Apprise) ─────────────────────────────
+  const [notifyUrlsText, setNotifyUrlsText] = useState('');
+  const [notifyUrlsLoading, setNotifyUrlsLoading] = useState(false);
+  const [notifyUrlsSaved, setNotifyUrlsSaved] = useState(false);
+  const [notifyUrlsStatus, setNotifyUrlsStatus] = useState(null);
+
   // ── Job History ────────────────────────────────────────────────────────
   const [serverJobs, setServerJobs] = useState([]);
   const [serverJobsLoading, setServerJobsLoading] = useState(false);
@@ -86,6 +92,7 @@ export default function Automation() {
   useEffect(() => {
     fetchBanks();
     fetchWebhook();
+    fetchNotifyUrls();
     fetchSchedule();
     fetchBudgets();
     fetchServerJobs();
@@ -122,6 +129,13 @@ export default function Automation() {
     try {
       const resp = await api.get('/api/settings/discord-webhook');
       setWebhookUrl(resp.data.webhook_url || '');
+    } catch (_) {}
+  };
+
+  const fetchNotifyUrls = async () => {
+    try {
+      const resp = await api.get('/api/settings/notify-urls');
+      setNotifyUrlsText((resp.data.urls || []).join('\n'));
     } catch (_) {}
   };
 
@@ -327,6 +341,26 @@ export default function Automation() {
     } catch (err) {
       setWebhookStatus({ success: false, error: err?.response?.data?.detail || err.message });
     } finally { setWebhookLoading(false); }
+  };
+
+  // ── Apprise (other services) handlers ──────────────────────────────────
+  const handleSaveNotifyUrls = async () => {
+    setNotifyUrlsLoading(true);
+    try {
+      const urls = notifyUrlsText.split('\n').map((u) => u.trim()).filter(Boolean);
+      await api.post('/api/settings/notify-urls', { urls });
+      setNotifyUrlsSaved(true); setTimeout(() => setNotifyUrlsSaved(false), 3000);
+    } catch (_) {} finally { setNotifyUrlsLoading(false); }
+  };
+
+  const handleTestNotifyUrls = async () => {
+    setNotifyUrlsLoading(true); setNotifyUrlsStatus(null);
+    try {
+      const resp = await api.post('/api/settings/notify-urls/test');
+      setNotifyUrlsStatus({ success: true, message: resp.data?.message || 'Test sent!' });
+    } catch (err) {
+      setNotifyUrlsStatus({ success: false, error: err?.response?.data?.detail || err.message });
+    } finally { setNotifyUrlsLoading(false); }
   };
 
   // ─── Render ──────────────────────────────────────────────────────────────
@@ -781,6 +815,39 @@ export default function Automation() {
                 </Grid>
               )}
             </Grid>
+
+            <Divider sx={{ my: 3 }} />
+            <Typography variant="h6" gutterBottom>Other Notification Services</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Powered by <a href="https://github.com/caronc/apprise" target="_blank" rel="noreferrer">Apprise</a> —
+              add one service URL per line (Telegram, Slack, email, ntfy, Pushover, and 100+ others). Every
+              notification below (budget alerts, rule matches, sync events, reward-point expiry) goes to these
+              plus the Discord webhook above.
+            </Typography>
+            <Grid container spacing={2} alignItems="flex-start">
+              <Grid item xs={12} md={8}>
+                <TextField fullWidth multiline minRows={3} label="Apprise service URLs (one per line)"
+                  value={notifyUrlsText} onChange={(e) => setNotifyUrlsText(e.target.value)}
+                  placeholder={'tgram://bottoken/ChatID\nmailto://user:pass@gmail.com\nntfy://topic'}
+                  helperText={<>See the <a href="https://github.com/caronc/apprise#popular-notification-services" target="_blank" rel="noreferrer">full service list</a> for URL formats.</>} />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Box display="flex" gap={1}>
+                  <Button variant="contained" onClick={handleSaveNotifyUrls} disabled={notifyUrlsLoading}>
+                    {notifyUrlsSaved ? '✓ Saved' : 'Save'}
+                  </Button>
+                  <Button variant="outlined" onClick={handleTestNotifyUrls} disabled={notifyUrlsLoading}>Test</Button>
+                </Box>
+              </Grid>
+              {notifyUrlsStatus && (
+                <Grid item xs={12}>
+                  {notifyUrlsStatus.success
+                    ? <Alert severity="success">{notifyUrlsStatus.message}</Alert>
+                    : <Alert severity="error">{notifyUrlsStatus.error}</Alert>}
+                </Grid>
+              )}
+            </Grid>
+
             <Divider sx={{ my: 3 }} />
             <Typography variant="h6" gutterBottom>Notification Events</Typography>
             <TableContainer>

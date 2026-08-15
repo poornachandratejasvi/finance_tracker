@@ -19,12 +19,15 @@ import {
   deleteWatcher,
   detectRecurringWatchers,
   getDiscordWebhook,
+  getNotifyUrls,
   getScheduleConfig,
   listWatchers,
   runWatchersNow,
   saveDiscordWebhook,
+  saveNotifyUrls,
   saveScheduleConfig,
   testDiscordWebhook,
+  testNotifyUrls,
   updateWatcher,
 } from "../../api/automation";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
@@ -55,6 +58,9 @@ export default function AutomationScreen() {
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [savingWebhook, setSavingWebhook] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
+  const [notifyUrlsText, setNotifyUrlsText] = useState("");
+  const [savingNotifyUrls, setSavingNotifyUrls] = useState(false);
+  const [testingNotifyUrls, setTestingNotifyUrls] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [runningWatchers, setRunningWatchers] = useState(false);
 
@@ -68,13 +74,15 @@ export default function AutomationScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [sched, discord, watcherList] = await Promise.all([
+      const [sched, discord, notify, watcherList] = await Promise.all([
         getScheduleConfig(),
         getDiscordWebhook(),
+        getNotifyUrls(),
         listWatchers(),
       ]);
       setSchedule(sched);
       setWebhookUrl(discord.webhook_url || "");
+      setNotifyUrlsText((notify.urls || []).join("\n"));
       setWatchers(watcherList);
     } catch {
       // keep prior state; pull-to-refresh can retry
@@ -132,6 +140,31 @@ export default function AutomationScreen() {
       Alert.alert("Couldn't test", "Please try again.");
     } finally {
       setTestingWebhook(false);
+    }
+  };
+
+  const onSaveNotifyUrls = async () => {
+    setSavingNotifyUrls(true);
+    try {
+      const urls = notifyUrlsText.split("\n").map((u) => u.trim()).filter(Boolean);
+      await saveNotifyUrls(urls);
+      Alert.alert("Saved", "Notification services updated.");
+    } catch {
+      Alert.alert("Couldn't save", "Please try again.");
+    } finally {
+      setSavingNotifyUrls(false);
+    }
+  };
+
+  const onTestNotifyUrls = async () => {
+    setTestingNotifyUrls(true);
+    try {
+      const result = await testNotifyUrls();
+      Alert.alert(result.success ? "Sent" : "Failed", result.message || (result.success ? "Test message sent." : "Couldn't send."));
+    } catch {
+      Alert.alert("Couldn't test", "Please try again.");
+    } finally {
+      setTestingNotifyUrls(false);
     }
   };
 
@@ -340,6 +373,32 @@ export default function AutomationScreen() {
       </View>
 
       <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Other Notification Services</Text>
+        <Text style={styles.hint}>
+          Powered by Apprise — add one service URL per line (Telegram, Slack, email, ntfy, Pushover, and 100+
+          others). Sent alongside the Discord webhook above.
+        </Text>
+        <TextInput
+          style={[styles.input, styles.multilineInput]}
+          value={notifyUrlsText}
+          onChangeText={setNotifyUrlsText}
+          placeholder={"tgram://bottoken/ChatID\nmailto://user:pass@gmail.com\nntfy://topic"}
+          placeholderTextColor={colors.textSecondary}
+          autoCapitalize="none"
+          multiline
+          textAlignVertical="top"
+        />
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={[styles.smallButtonOutline, styles.flexButton]} onPress={onSaveNotifyUrls} disabled={savingNotifyUrls}>
+            {savingNotifyUrls ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={styles.smallButtonOutlineText}>Save</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.smallButtonOutline, styles.flexButton]} onPress={onTestNotifyUrls} disabled={testingNotifyUrls}>
+            {testingNotifyUrls ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={styles.smallButtonOutlineText}>Test</Text>}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.sectionTitle}>Reminders (Watchers)</Text>
         {watchers.length === 0 && <Text style={styles.empty}>No watchers yet.</Text>}
         {watchers.map((w) => (
@@ -456,6 +515,8 @@ const makeStyles = (c: ThemeColors) =>
       paddingVertical: 10,
       fontSize: 15,
     },
+    multilineInput: { minHeight: 80, marginBottom: 8 },
+    hint: { fontSize: 12, color: c.textSecondary, marginBottom: 10, lineHeight: 17 },
     chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16, backgroundColor: c.chipBg },
     chipActive: { backgroundColor: c.primary },

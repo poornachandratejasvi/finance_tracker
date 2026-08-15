@@ -1,8 +1,6 @@
 import os
-import json
 import time
 import logging
-import requests
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -53,46 +51,48 @@ class DiscordNotifier:
 
     def send_notification(self, title: str, description: str, color: int = 0x00ff00, fields: list = None):
         """
-        Send notification to Discord
-        
+        Send a sync-lifecycle/budget-alert notification via Apprise -- fans out to
+        this instance's Discord webhook plus any other Apprise service URLs the
+        app owner has configured (Settings -> Automation -> Notifications; see
+        notify_service.py). This class has no per-user concept (it's a
+        module-level singleton predating multi-service support), so it treats
+        user id 1 as the app owner, matching this app's existing documented
+        single-user-in-practice assumption elsewhere.
+
         Args:
             title: Notification title
             description: Notification description
-            color: Embed color (default green: 0x00ff00, red: 0xff0000, yellow: 0xffff00)
-            fields: List of {"name": "...", "value": "...", "inline": bool} dicts
+            color: unused (kept for call-site compatibility -- Apprise's common
+                notify() has no per-service color/embed concept)
+            fields: List of {"name": "...", "value": "...", "inline": bool} dicts,
+                flattened into plain text lines in the body
         """
         if not self.enabled:
             return False
-        
-        try:
-            embed = {
-                "title": title,
-                "description": description,
-                "color": color,
-                "timestamp": None,  # Will be set by Discord
-                "footer": {
-                    "text": "Finance Tracker"
-                }
-            }
-            
-            if fields:
-                embed["fields"] = fields
-            
-            payload = {
-                "embeds": [embed]
-            }
-            
-            response = requests.post(
-                self.webhook_url,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=10,  # never let a slow/hung webhook block the sync worker
-            )
 
-            return response.status_code == 204
-            
+        try:
+            import apprise
+            from app.services.notify_service import _discord_to_apprise, get_extra_urls
+            from app.core.database import SessionLocal
+
+            body_lines = [description]
+            for f in (fields or []):
+                body_lines.append(f"{f.get('name', '')}: {f.get('value', '')}")
+            body = "\n".join(body_lines)
+
+            a = apprise.Apprise()
+            a.add(_discord_to_apprise(self.webhook_url))
+            db = SessionLocal()
+            try:
+                for url in get_extra_urls(db, uid=1):
+                    a.add(url)
+            finally:
+                db.close()
+
+            return a.notify(title=title[:256], body=body[:4000])
+
         except Exception as e:
-            print(f"Failed to send Discord notification: {e}")
+            logger.warning("Failed to send notification: %s", e, exc_info=True)
             return False
     
     def notify_new_data(self, bank_name: str, transaction_count: int, pdf_file: str = None):

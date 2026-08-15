@@ -28,6 +28,21 @@ export async function testDiscordWebhook(): Promise<{ success: boolean; message?
   return data;
 }
 
+export async function getNotifyUrls(): Promise<{ urls: string[] }> {
+  const { data } = await api.get("/api/settings/notify-urls");
+  return data;
+}
+
+export async function saveNotifyUrls(urls: string[]): Promise<{ success: boolean; count: number }> {
+  const { data } = await api.post("/api/settings/notify-urls", { urls });
+  return data;
+}
+
+export async function testNotifyUrls(): Promise<{ success: boolean; message?: string }> {
+  const { data } = await api.post("/api/settings/notify-urls/test");
+  return data;
+}
+
 export async function listWatchers(): Promise<Watcher[]> {
   const { data } = await api.get<Watcher[]>("/api/watchers/");
   return data;
