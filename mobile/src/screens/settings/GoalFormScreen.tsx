@@ -12,49 +12,47 @@ import {
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import { createBank, deleteBank, updateBank } from "../../api/banks";
+import { createGoal, deleteGoal, updateGoal } from "../../api/goals";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
-import { BanksStackParamList } from "../../navigation/BanksNavigator";
+import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
+import { todayIsoDate } from "../../utils/format";
 
-type Props = NativeStackScreenProps<BanksStackParamList, "BankForm">;
+type Props = NativeStackScreenProps<SettingsStackParamList, "GoalForm">;
 
-const BANK_TYPES = ["savings", "credit", "other"];
-const COLORS = ["#1b6b4c", "#b3261e", "#0b5fff", "#b8860b", "#7d3fc4", "#008080"];
+const COLORS = ["#4e79a7", "#1b6b4c", "#b3261e", "#b8860b", "#7d3fc4", "#008080"];
 
-export default function BankFormScreen({ route, navigation }: Props) {
+export default function GoalFormScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
-  const existing = route.params?.bank;
+  const existing = route.params?.goal;
 
   const [name, setName] = useState(existing?.name || "");
-  const [bankType, setBankType] = useState(existing?.bank_type || "savings");
-  const [currencyCode, setCurrencyCode] = useState(existing?.currency_code || "INR");
+  const [targetAmount, setTargetAmount] = useState(existing ? String(existing.target_amount) : "");
+  const [currentAmount, setCurrentAmount] = useState(existing ? String(existing.current_amount) : "0");
+  const [targetDate, setTargetDate] = useState(existing?.target_date?.slice(0, 10) || "");
   const [color, setColor] = useState(existing?.color || COLORS[0]);
-  const [currentBalance, setCurrentBalance] = useState(
-    existing?.current_balance != null ? String(existing.current_balance) : ""
-  );
-  const [isArchived, setIsArchived] = useState(!!existing?.is_archived);
+  const [isActive, setIsActive] = useState(existing?.is_active !== false);
   const [submitting, setSubmitting] = useState(false);
 
   const onSave = async () => {
-    if (!name.trim()) {
-      Alert.alert("Missing name", "Give this account a name.");
+    if (!name.trim() || !targetAmount) {
+      Alert.alert("Missing fields", "Give the goal a name and a target amount.");
       return;
     }
     setSubmitting(true);
     try {
       const payload = {
         name: name.trim(),
-        bank_type: bankType,
-        currency_code: currencyCode.trim().toUpperCase() || "INR",
+        target_amount: parseFloat(targetAmount),
+        current_amount: currentAmount ? parseFloat(currentAmount) : 0,
+        target_date: targetDate.trim() || null,
         color,
-        current_balance: currentBalance ? parseFloat(currentBalance) : undefined,
-        is_archived: isArchived,
+        is_active: isActive,
       };
       if (existing) {
-        await updateBank(existing.id, payload);
+        await updateGoal(existing.id, payload);
       } else {
-        await createBank(payload);
+        await createGoal(payload);
       }
       navigation.goBack();
     } catch (err: any) {
@@ -67,14 +65,14 @@ export default function BankFormScreen({ route, navigation }: Props) {
 
   const onDelete = () => {
     if (!existing) return;
-    Alert.alert("Delete account?", `This removes "${existing.name}" and can't be undone.`, [
+    Alert.alert("Delete goal?", `Remove "${existing.name}"?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
         onPress: async () => {
           try {
-            await deleteBank(existing.id);
+            await deleteGoal(existing.id);
             navigation.goBack();
           } catch {
             Alert.alert("Couldn't delete", "Please try again.");
@@ -91,32 +89,38 @@ export default function BankFormScreen({ route, navigation }: Props) {
         style={styles.input}
         value={name}
         onChangeText={setName}
-        placeholder="e.g. HDFC Savings"
+        placeholder="e.g. Emergency Fund"
         placeholderTextColor={colors.textSecondary}
       />
 
-      <Text style={styles.label}>Type</Text>
-      <View style={styles.chipRow}>
-        {BANK_TYPES.map((t) => (
-          <TouchableOpacity
-            key={t}
-            style={[styles.chip, bankType === t && styles.chipActive]}
-            onPress={() => setBankType(t)}
-          >
-            <Text style={[styles.chipText, bankType === t && styles.chipTextActive]}>{t}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <Text style={styles.label}>Currency code</Text>
+      <Text style={styles.label}>Target amount</Text>
       <TextInput
         style={styles.input}
-        value={currencyCode}
-        onChangeText={setCurrencyCode}
-        autoCapitalize="characters"
-        maxLength={3}
-        placeholder="INR"
+        value={targetAmount}
+        onChangeText={setTargetAmount}
+        keyboardType="decimal-pad"
+        placeholder="100000"
         placeholderTextColor={colors.textSecondary}
+      />
+
+      <Text style={styles.label}>Current amount</Text>
+      <TextInput
+        style={styles.input}
+        value={currentAmount}
+        onChangeText={setCurrentAmount}
+        keyboardType="decimal-pad"
+        placeholder="0"
+        placeholderTextColor={colors.textSecondary}
+      />
+
+      <Text style={styles.label}>Target date (optional, YYYY-MM-DD)</Text>
+      <TextInput
+        style={styles.input}
+        value={targetDate}
+        onChangeText={setTargetDate}
+        placeholder={todayIsoDate()}
+        placeholderTextColor={colors.textSecondary}
+        autoCapitalize="none"
       />
 
       <Text style={styles.label}>Color</Text>
@@ -130,20 +134,10 @@ export default function BankFormScreen({ route, navigation }: Props) {
         ))}
       </View>
 
-      <Text style={styles.label}>Current balance (optional)</Text>
-      <TextInput
-        style={styles.input}
-        value={currentBalance}
-        onChangeText={setCurrentBalance}
-        keyboardType="decimal-pad"
-        placeholder="0.00"
-        placeholderTextColor={colors.textSecondary}
-      />
-
       {existing && (
         <View style={styles.switchRow}>
-          <Text style={styles.label}>Archived</Text>
-          <Switch value={isArchived} onValueChange={setIsArchived} />
+          <Text style={styles.label}>Active</Text>
+          <Switch value={isActive} onValueChange={setIsActive} />
         </View>
       )}
 
@@ -153,7 +147,7 @@ export default function BankFormScreen({ route, navigation }: Props) {
 
       {existing && (
         <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
-          <Text style={styles.deleteButtonText}>Delete Account</Text>
+          <Text style={styles.deleteButtonText}>Delete Goal</Text>
         </TouchableOpacity>
       )}
     </ScrollView>
@@ -174,11 +168,7 @@ const makeStyles = (c: ThemeColors) =>
       paddingVertical: 10,
       fontSize: 16,
     },
-    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.chipBg },
-    chipActive: { backgroundColor: c.primary },
-    chipText: { color: c.text, fontSize: 13, textTransform: "capitalize" },
-    chipTextActive: { color: "#fff", fontWeight: "600" },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
     swatch: { width: 32, height: 32, borderRadius: 16 },
     swatchActive: { borderWidth: 3, borderColor: c.text },
     switchRow: {

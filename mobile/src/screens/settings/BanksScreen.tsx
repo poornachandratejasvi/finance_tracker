@@ -13,11 +13,11 @@ import {
 
 import { listBanks } from "../../api/banks";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
-import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
+import { BanksStackParamList } from "../../navigation/BanksNavigator";
 import { Bank } from "../../types";
 import { formatCurrency } from "../../utils/format";
 
-type Props = NativeStackScreenProps<SettingsStackParamList, "Banks">;
+type Props = NativeStackScreenProps<BanksStackParamList, "Banks">;
 
 export default function BanksScreen({ navigation }: Props) {
   const { colors } = useTheme();

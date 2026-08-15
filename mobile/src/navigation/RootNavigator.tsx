@@ -10,6 +10,8 @@ import LoginScreen from "../screens/LoginScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import TransactionsScreen from "../screens/TransactionsScreen";
 import AddTransactionScreen from "../screens/AddTransactionScreen";
+import AnalyticsScreen from "../screens/AnalyticsScreen";
+import BanksNavigator from "./BanksNavigator";
 import SettingsNavigator from "./SettingsNavigator";
 
 export type RootStackParamList = {
@@ -21,6 +23,8 @@ export type TabParamList = {
   Dashboard: undefined;
   Transactions: undefined;
   Add: undefined;
+  Analytics: undefined;
+  Banks: undefined;
   Settings: undefined;
 };
 
@@ -48,6 +52,16 @@ function AppTabs() {
         name="Add"
         component={AddTransactionScreen}
         options={{ tabBarIcon: tabIcon("➕"), title: "Add Transaction" }}
+      />
+      <Tab.Screen
+        name="Analytics"
+        component={AnalyticsScreen}
+        options={{ tabBarIcon: tabIcon("📈"), title: "Analytics" }}
+      />
+      <Tab.Screen
+        name="Banks"
+        component={BanksNavigator}
+        options={{ tabBarIcon: tabIcon("🏦"), headerShown: false, title: "Banks" }}
       />
       <Tab.Screen
         name="Settings"

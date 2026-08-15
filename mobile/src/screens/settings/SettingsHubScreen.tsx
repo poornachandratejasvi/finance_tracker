@@ -24,9 +24,16 @@ const WALLET_ROWS: Row[] = [
   { key: "NotificationRules", label: "Notification Rules", icon: "🔔" },
 ];
 
+const TOOLS_ROWS: Row[] = [
+  { key: "Budgets", label: "Budgets", icon: "💰" },
+  { key: "Goals", label: "Goals", icon: "🎯" },
+  { key: "Jobs", label: "Jobs", icon: "🔄" },
+  { key: "Automation", label: "Automation", icon: "🤖" },
+  { key: "AskAi", label: "Ask AI", icon: "💬" },
+];
+
 const GENERAL_ROWS: Row[] = [
   { key: "Profile", label: "Profile & Preferences", icon: "👤" },
-  { key: "Banks", label: "Accounts", icon: "🏦" },
   { key: "AI", label: "AI", icon: "✨" },
   { key: "ApiTokens", label: "REST API", icon: "🔑" },
   { key: "Users", label: "Users", icon: "👥", adminOnly: true },
@@ -90,6 +97,7 @@ export default function SettingsHubScreen({ navigation }: Props) {
       </View>
 
       {renderSection("Wallet", WALLET_ROWS)}
+      {renderSection("Tools", TOOLS_ROWS)}
       {renderSection("General", GENERAL_ROWS)}
 
       <TouchableOpacity style={styles.logoutButton} onPress={logout}>

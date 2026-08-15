@@ -27,3 +27,13 @@ export async function testAIProvider(
   const { data } = await api.post("/api/ai/test", { provider });
   return data;
 }
+
+export interface AskAiResponse {
+  answer: string;
+  ai: boolean;
+}
+
+export async function askAI(question: string): Promise<AskAiResponse> {
+  const { data } = await api.post<AskAiResponse>("/api/ai/query", { question });
+  return data;
+}

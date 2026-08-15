@@ -3,8 +3,6 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import SettingsHubScreen from "../screens/settings/SettingsHubScreen";
 import ProfileScreen from "../screens/settings/ProfileScreen";
-import BanksScreen from "../screens/settings/BanksScreen";
-import BankFormScreen from "../screens/settings/BankFormScreen";
 import CategoriesScreen from "../screens/settings/CategoriesScreen";
 import CategoryFormScreen from "../screens/settings/CategoryFormScreen";
 import LabelsScreen from "../screens/settings/LabelsScreen";
@@ -29,13 +27,17 @@ import BillingScreen from "../screens/settings/BillingScreen";
 import PrivacyScreen from "../screens/settings/PrivacyScreen";
 import HelpScreen from "../screens/settings/HelpScreen";
 import AboutScreen from "../screens/settings/AboutScreen";
-import { Bank, Category, Label, AutoRule, NotificationRule, Currency, Template, AdminUser } from "../types";
+import BudgetsScreen from "../screens/settings/BudgetsScreen";
+import GoalsScreen from "../screens/settings/GoalsScreen";
+import GoalFormScreen from "../screens/settings/GoalFormScreen";
+import JobsScreen from "../screens/settings/JobsScreen";
+import AutomationScreen from "../screens/settings/AutomationScreen";
+import AskAiScreen from "../screens/settings/AskAiScreen";
+import { Category, Label, AutoRule, NotificationRule, Currency, Template, AdminUser, Goal } from "../types";
 
 export type SettingsStackParamList = {
   SettingsHub: undefined;
   Profile: undefined;
-  Banks: undefined;
-  BankForm: { bank?: Bank } | undefined;
   Categories: undefined;
   CategoryForm: { category?: Category } | undefined;
   Labels: undefined;
@@ -60,6 +62,12 @@ export type SettingsStackParamList = {
   Privacy: undefined;
   Help: undefined;
   About: undefined;
+  Budgets: undefined;
+  Goals: undefined;
+  GoalForm: { goal?: Goal } | undefined;
+  Jobs: undefined;
+  Automation: undefined;
+  AskAi: undefined;
 };
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>();
@@ -69,8 +77,6 @@ export default function SettingsNavigator() {
     <Stack.Navigator screenOptions={{ headerTitleAlign: "center" }}>
       <Stack.Screen name="SettingsHub" component={SettingsHubScreen} options={{ title: "Settings" }} />
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />
-      <Stack.Screen name="Banks" component={BanksScreen} options={{ title: "Accounts" }} />
-      <Stack.Screen name="BankForm" component={BankFormScreen} options={{ title: "Account" }} />
       <Stack.Screen name="Categories" component={CategoriesScreen} options={{ title: "Categories" }} />
       <Stack.Screen name="CategoryForm" component={CategoryFormScreen} options={{ title: "Category" }} />
       <Stack.Screen name="Labels" component={LabelsScreen} options={{ title: "Labels" }} />
@@ -107,6 +113,12 @@ export default function SettingsNavigator() {
       <Stack.Screen name="Privacy" component={PrivacyScreen} options={{ title: "Personal data & privacy" }} />
       <Stack.Screen name="Help" component={HelpScreen} options={{ title: "Help" }} />
       <Stack.Screen name="About" component={AboutScreen} options={{ title: "About" }} />
+      <Stack.Screen name="Budgets" component={BudgetsScreen} options={{ title: "Budgets" }} />
+      <Stack.Screen name="Goals" component={GoalsScreen} options={{ title: "Goals" }} />
+      <Stack.Screen name="GoalForm" component={GoalFormScreen} options={{ title: "Goal" }} />
+      <Stack.Screen name="Jobs" component={JobsScreen} options={{ title: "Jobs" }} />
+      <Stack.Screen name="Automation" component={AutomationScreen} options={{ title: "Automation" }} />
+      <Stack.Screen name="AskAi" component={AskAiScreen} options={{ title: "Ask AI" }} />
     </Stack.Navigator>
   );
 }

@@ -262,3 +262,188 @@ export interface AIConfig {
   gemini_key_set: boolean;
   available: { ollama: boolean; claude: boolean; gemini: boolean };
 }
+
+export interface CategoryAmount {
+  category: string;
+  amount: number;
+}
+
+export interface AnalyticsPeriod {
+  label: string;
+  income_total: number;
+  expense_total: number;
+  net: number;
+  income_by_category: CategoryAmount[];
+  expense_by_category: CategoryAmount[];
+}
+
+export interface AnalyticsComparison {
+  base_currency: { code: string; symbol: string };
+  period_a: AnalyticsPeriod;
+  period_b: AnalyticsPeriod;
+}
+
+export interface CashflowPoint {
+  date: string;
+  income: number;
+  expense: number;
+  net: number;
+}
+
+export interface CashflowResponse {
+  granularity: "day" | "week" | "month";
+  series: CashflowPoint[];
+  totals: { income: number; expense: number; net: number };
+}
+
+export interface BalanceTrendPoint {
+  date: string;
+  balance: number;
+}
+
+export interface BalanceTrendResponse {
+  granularity: "day" | "week" | "month";
+  series: BalanceTrendPoint[];
+  ending_balance: number;
+  net_change: number;
+}
+
+export interface Budget {
+  category: string;
+  monthly_limit: number;
+  alert_at_pct: number;
+}
+
+export interface BudgetsConfig {
+  budgets: Budget[];
+  alert_email: string | null;
+  discord_alerts: boolean;
+}
+
+export interface BudgetStatusItem {
+  id: number;
+  category: string;
+  monthly_limit: number;
+  alert_at_pct: number;
+  spent: number;
+  remaining: number;
+  pct: number;
+  over: boolean;
+}
+
+export interface BudgetStatus {
+  period: string;
+  budgets: BudgetStatusItem[];
+  total_limit: number;
+  total_spent: number;
+}
+
+export interface Goal {
+  id: number;
+  name: string;
+  target_amount: number;
+  current_amount: number;
+  remaining: number;
+  pct: number;
+  target_date: string | null;
+  color: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface PdfStatement {
+  id: number;
+  file_name: string;
+  file_path: string | null;
+  decrypted_available: boolean;
+  is_processed: boolean;
+  error_message: string | null;
+  is_password_protected: boolean;
+  statement_period_start: string | null;
+  statement_period_end: string | null;
+  created_at: string;
+  bank_name: string | null;
+  bank_id: number | null;
+  from_email: string | null;
+  email_subject: string | null;
+  email_received_date: string | null;
+  transaction_count: number;
+}
+
+export interface PdfListResponse {
+  items: PdfStatement[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export interface StatementDashboardBank {
+  bank_id: number;
+  bank_name: string;
+  bank_type: string | null;
+  bank_code: string | null;
+  current_balance: number | null;
+  balance_updated_at: string | null;
+  total_statements: number;
+  total_transactions: number;
+  latest_email_subject: string | null;
+  latest_received_date: string | null;
+  latest_statement_period_end: string | null;
+  latest_pdf_filename: string | null;
+  latest_pdf_processed: boolean;
+  expected_next_statement: string | null;
+  days_until_next: number | null;
+}
+
+export type SyncStatus = "queued" | "processing" | "success" | "partial" | "failed";
+
+export interface SyncLog {
+  sync_log_id: number;
+  status: SyncStatus;
+  sync_type: string | null;
+  gmail_email: string | null;
+  emails_processed: number;
+  transactions_added: number;
+  duplicates_found: number;
+  total_emails: number | null;
+  processed_emails: number | null;
+  current_step: string | null;
+  current_bank: string | null;
+  started_at: string;
+  completed_at: string | null;
+  error_message: string | null;
+}
+
+export interface ScheduleConfig {
+  enabled: boolean;
+  frequency: "hourly" | "every4h" | "daily" | "weekly";
+  hour: number;
+  day_of_week: number;
+  notify_on_completion: boolean;
+  auto_generate_csv: boolean;
+  csv_email_on_sync: boolean;
+  last_run_at: string | null;
+}
+
+export type WatcherFrequency = "daily" | "weekly" | "monthly" | "yearly";
+
+export interface Watcher {
+  id: number;
+  user_id: number;
+  name: string;
+  match_keywords: string[];
+  match_amount: number | null;
+  frequency: WatcherFrequency;
+  is_active: boolean;
+  current_period: string | null;
+  current_task_id: string | null;
+  cleared_at: string | null;
+  created_at: string;
+}
+
+export interface WatcherSuggestion {
+  bank_name: string | null;
+  suggested_keywords: string[];
+  match_amount?: number | null;
+  [key: string]: unknown;
+}

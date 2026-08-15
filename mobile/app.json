@@ -27,7 +27,8 @@
         }
       ],
       "./plugins/withAppIntents",
-      "./plugins/withSmsReceiver"
+      "./plugins/withSmsReceiver",
+      "expo-sharing"
     ]
   }
 }
