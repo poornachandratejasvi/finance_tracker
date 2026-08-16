@@ -142,6 +142,52 @@ def delete_entry(db: Session, user_id: int, entry_id: int) -> bool:
     return True
 
 
+def _reconcile_category_account(
+    db, bank, category: str, name: str, value: float, statement_date, description: str,
+) -> Optional[InvestmentEntry]:
+    """Shared reconciliation: find-or-create the one auto account for this
+    bank+category, then bring its running value to `value` via a single
+    'value_update' entry -- same pattern used for PPF and, below, for each
+    CAS category (mutual_fund/stocks). Returns None if the statement is
+    older than what's already reconciled, or nothing changed.
+    """
+    account = (
+        db.query(InvestmentAccount)
+        .filter(InvestmentAccount.user_id == bank.user_id, InvestmentAccount.linked_bank_id == bank.id,
+                InvestmentAccount.category == category)
+        .first()
+    )
+    if not account:
+        account = InvestmentAccount(
+            user_id=bank.user_id, name=name, category=category, source="auto", linked_bank_id=bank.id,
+        )
+        db.add(account)
+        db.commit()
+        db.refresh(account)
+        logger.info("Auto-created %s investment account %s for bank %s", category, account.id, bank.id)
+
+    if account.value_updated_at and statement_date <= account.value_updated_at:
+        return None
+
+    current_value = sum(
+        e.amount for e in db.query(InvestmentEntry).filter(InvestmentEntry.investment_account_id == account.id).all()
+    )
+    delta = value - current_value
+    account.value_updated_at = statement_date
+    if abs(delta) < 0.01:
+        db.commit()
+        return None
+
+    entry = InvestmentEntry(
+        user_id=bank.user_id, investment_account_id=account.id, entry_type="value_update",
+        amount=delta, entry_date=statement_date, source="auto", description=description,
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
 def record_ppf_statement(db, bank, text: str, statement_date) -> Optional[InvestmentEntry]:
     """Best-effort: if this bank's statement bundles a linked PPF account
     (BOB does this), auto-create the PPF InvestmentAccount the first time
@@ -159,63 +205,50 @@ def record_ppf_statement(db, bank, text: str, statement_date) -> Optional[Invest
     if not ppf:
         return None
 
-    account = (
-        db.query(InvestmentAccount)
-        .filter(InvestmentAccount.user_id == bank.user_id, InvestmentAccount.linked_bank_id == bank.id,
-                InvestmentAccount.category == "ppf")
-        .first()
-    )
-    if not account:
-        name = f"PPF{' - ' + ppf['account_number'] if ppf.get('account_number') else ''}"
-        account = InvestmentAccount(
-            user_id=bank.user_id, name=name, category="ppf", source="auto", linked_bank_id=bank.id,
-        )
-        db.add(account)
-        db.commit()
-        db.refresh(account)
-        logger.info("Auto-created PPF investment account %s for bank %s", account.id, bank.id)
-
-    if account.value_updated_at and statement_date <= account.value_updated_at:
-        return None
-
-    current_value = sum(
-        e.amount for e in db.query(InvestmentEntry).filter(InvestmentEntry.investment_account_id == account.id).all()
-    )
-    delta = ppf["closing_balance"] - current_value
-    account.value_updated_at = statement_date
-    if abs(delta) < 0.01:
-        db.commit()
-        return None
-
-    entry = InvestmentEntry(
-        user_id=bank.user_id, investment_account_id=account.id, entry_type="value_update",
-        amount=delta, entry_date=statement_date, source="auto",
+    name = f"PPF{' - ' + ppf['account_number'] if ppf.get('account_number') else ''}"
+    return _reconcile_category_account(
+        db, bank, "ppf", name, ppf["closing_balance"], statement_date,
         description=f"Reconciled to statement's printed PPF balance ({ppf['closing_balance']:,.0f})",
     )
-    db.add(entry)
-    db.commit()
-    db.refresh(entry)
-    return entry
 
 
-def record_cas_statement(db, bank, text: str, statement_date) -> None:
+def record_cas_statement(db, bank, text: str, statement_date) -> List[InvestmentEntry]:
     """Best-effort: parse a CDSL/NSDL Consolidated Account Statement (CAS) --
     a single statement covering every mutual fund folio and demat holding a
     user has, quite unlike a normal single-account bank statement.
 
-    NOT YET IMPLEMENTED. This is a deliberate no-op placeholder until it's
-    been verified against a REAL CAS PDF's actual text layout -- same
-    "extract against real production data before shipping regex" discipline
-    as every other statement-format-specific parser in this app (e.g.
-    extract_ppf_section, extract_reward_points_breakdown). Guessing a CAS
-    layout blind risks silently creating wrong InvestmentAccount values,
-    which is worse than doing nothing until the real structure is in hand.
+    A CAS's per-folio detail is either unreliable to extract (bilingual
+    summary pages get interleaved character-by-character) or simply doesn't
+    print per-folio valuation figures in the detail section (confirmed
+    against a real statement -- only folio identification fields like AMC/
+    Scheme/Folio No/ISIN are there, no values). So rather than guess a
+    fragile per-scheme breakdown, this reconciles two portfolio-level
+    totals -- "Mutual Fund Folios" and "CDSL Demat Account" -- each to its
+    own auto InvestmentAccount ("mutual_fund" / "stocks" category), same
+    single-account reconciliation pattern as record_ppf_statement. Never
+    raises; returns whatever entries were actually created (may be empty).
     """
-    if not text:
-        return None
-    logger.info(
-        "CAS statement received for bank %s (%d chars, statement_date=%s) -- "
-        "holdings parsing not yet implemented, no-op for now",
-        bank.id, len(text), statement_date,
-    )
-    return None
+    if not text or statement_date is None:
+        return []
+
+    from app.services.pdf_parser import PDFParser
+    cas = PDFParser.extract_cas_section(text)
+    if not cas:
+        return []
+
+    entries = []
+    if cas.get("mutual_fund_value") is not None:
+        entry = _reconcile_category_account(
+            db, bank, "mutual_fund", "Mutual Funds (CDSL CAS)", cas["mutual_fund_value"], statement_date,
+            description=f"Reconciled to statement's printed Mutual Fund Folios total ({cas['mutual_fund_value']:,.0f})",
+        )
+        if entry:
+            entries.append(entry)
+    if cas.get("stocks_value") is not None:
+        entry = _reconcile_category_account(
+            db, bank, "stocks", "Stocks (CDSL Demat)", cas["stocks_value"], statement_date,
+            description=f"Reconciled to statement's printed CDSL Demat Account total ({cas['stocks_value']:,.0f})",
+        )
+        if entry:
+            entries.append(entry)
+    return entries

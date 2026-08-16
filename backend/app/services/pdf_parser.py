@@ -1190,6 +1190,45 @@ class PDFParser:
         return {"account_number": account_number, "closing_balance": closing_balance}
 
     @staticmethod
+    def extract_cas_section(text: str) -> Optional[dict]:
+        """Best-effort: pull the two portfolio-level totals off a CDSL/NSDL
+        Consolidated Account Statement (CAS) -- one combined PDF covering
+        every mutual fund folio and demat/stock holding a user has.
+
+        Most of a CAS's summary pages render as bilingual (English +
+        Devanagari) text that gets interleaved character-by-character
+        during PDF text extraction and is NOT reliably regex-able (confirmed
+        against a real CDSL statement). But the specific tabular summary
+        rows this checks stay intact even on those pages, e.g.:
+          "Mutual Fund Folios 6 Folios 6 3,98,506.99"
+          "CDSL Demat Account 0 0.00"
+        so this only ever reads those two exact rows rather than attempting
+        a full per-folio breakdown (whose valuation figures were not found
+        in a safely-parseable form).
+
+        Returns {"mutual_fund_value": float|None, "stocks_value": float|None}
+        or None if neither row is present (i.e. this isn't a CAS at all).
+        """
+        if not text:
+            return None
+
+        mf_match = re.search(
+            r'Mutual\s+Fund\s+Folios\s+\d+\s*Folios?\s*\d+\s+([\d,]+\.\d{2})',
+            text, re.IGNORECASE,
+        )
+        demat_match = re.search(
+            r'CDSL\s+Demat\s+Account\s+\d+\s+([\d,]+\.\d{2})',
+            text, re.IGNORECASE,
+        )
+        if not mf_match and not demat_match:
+            return None
+
+        def _num(m):
+            return float(m.group(1).replace(',', '')) if m else None
+
+        return {"mutual_fund_value": _num(mf_match), "stocks_value": _num(demat_match)}
+
+    @staticmethod
     def parse_sc_savings(text: str, statement_period: Optional[Tuple[Optional[datetime], Optional[datetime]]] = None) -> List[Dict]:
         """Parse Standard Chartered savings account statement.
 
