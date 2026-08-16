@@ -26,7 +26,7 @@ from app.services.password_service import get_password_candidates, save_password
 from app.services.pdf_storage import ensure_decrypted_pdf
 from app.services.balance_service import apply_statement_balance, recompute_all_balances
 from app.services.credit_balance_service import redetect_all_credit_balances
-from app.services import ai_transaction_extraction, reward_points_service
+from app.services import ai_transaction_extraction, reward_points_service, investment_service
 from app.services.transaction_hooks import apply_auto_rules_and_notify, create_or_reconcile_transaction
 from app.core.household import visible_user_ids
 
@@ -657,6 +657,12 @@ async def upload_bank_pdf(
             )
         except Exception:
             logger.warning("Reward-points extraction failed for bank %s", bank.id, exc_info=True)
+        try:
+            investment_service.record_ppf_statement(
+                db, bank, parse_result.get("_raw_text"), bank_email.received_date,
+            )
+        except Exception:
+            logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
         db.commit()
 
         logger.info(f"Added {transactions_added} transactions to database")

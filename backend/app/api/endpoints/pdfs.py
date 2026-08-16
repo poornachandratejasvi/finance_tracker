@@ -19,7 +19,7 @@ from app.services.password_service import get_password_candidates, parse_with_pa
 from app.services.transaction_service import TransactionService
 from app.services.pdf_storage import get_preferred_pdf_path, ensure_decrypted_with_candidates, ensure_decrypted_pdf
 from app.services.balance_service import apply_statement_balance
-from app.services import ai_transaction_extraction, reward_points_service
+from app.services import ai_transaction_extraction, reward_points_service, investment_service
 from app.services.transaction_hooks import apply_auto_rules_and_notify, create_or_reconcile_transaction
 import logging
 
@@ -534,9 +534,13 @@ def reprocess_pdf(
             )
         except Exception:
             logger.warning("Reward-points extraction failed for bank %s", bank.id, exc_info=True)
+        try:
+            investment_service.record_ppf_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
+        except Exception:
+            logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
 
         db.commit()
-        
+
         return {
             "success": True,
             "pdf_id": pdf.id,
@@ -663,6 +667,10 @@ def _reprocess_pdf_worker(pdf_id: int, user_id: int) -> dict:
             )
         except Exception:
             logger.warning("Reward-points extraction failed for bank %s", bank.id, exc_info=True)
+        try:
+            investment_service.record_ppf_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
+        except Exception:
+            logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
         db.commit()
 
         return {

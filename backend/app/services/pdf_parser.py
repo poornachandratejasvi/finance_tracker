@@ -1154,6 +1154,42 @@ class PDFParser:
         return {"opening": opening, "earned": earned, "redeemed": disbursed, "expired": adjusted}
 
     @staticmethod
+    def extract_ppf_section(text: str) -> Optional[dict]:
+        """Best-effort: find a linked PPF account bundled into another
+        account's statement email (BOB does this -- one combined PDF covers
+        both the savings account and a linked PPF account, each with its own
+        "Statement of transactions in ... Account" block). Returns
+        {"account_number": str|None, "closing_balance": float} or None if no
+        PPF section is present at all.
+
+        Scoped to text AFTER the first "PPF ACCOUNT" mention specifically --
+        the savings account's own "Closing Balance" line must never be
+        picked up here (confirmed against a real BOB statement where both
+        accounts print a same-named "Closing Balance" line).
+        """
+        if not text:
+            return None
+        ppf_idx = text.upper().find('PPF ACCOUNT')
+        if ppf_idx == -1:
+            return None
+        section = text[ppf_idx:]
+
+        m = re.search(r'PPF\s+ACCOUNT\s+NUMBER\s*[-:]?\s*(\d+)', section, re.IGNORECASE)
+        account_number = m.group(1) if m else None
+
+        balances = re.findall(
+            r'closing\s+balance\s*[:\-]?\s*([0-9][0-9,]*\.?[0-9]{0,2})\s*(?:Cr|Dr)?',
+            section, re.IGNORECASE,
+        )
+        if not balances:
+            return None
+        try:
+            closing_balance = float(balances[-1].replace(',', ''))
+        except (ValueError, AttributeError):
+            return None
+        return {"account_number": account_number, "closing_balance": closing_balance}
+
+    @staticmethod
     def parse_sc_savings(text: str, statement_period: Optional[Tuple[Optional[datetime], Optional[datetime]]] = None) -> List[Dict]:
         """Parse Standard Chartered savings account statement.
 

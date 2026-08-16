@@ -24,7 +24,7 @@ from app.services.transaction_service import TransactionService
 from app.services.discord_notifier import discord_notifier
 from app.services.pdf_storage import get_preferred_pdf_path, ensure_decrypted_with_candidates, ensure_decrypted_pdf
 from app.services.balance_service import apply_statement_balance
-from app.services import ai_transaction_extraction, reward_points_service
+from app.services import ai_transaction_extraction, reward_points_service, investment_service
 from app.services.transaction_hooks import apply_auto_rules_and_notify, create_or_reconcile_transaction
 
 router = APIRouter()
@@ -182,6 +182,10 @@ def _process_pdf_task(
                 )
             except Exception:
                 logger.warning("Reward-points extraction failed for bank %s", bank.id, exc_info=True)
+            try:
+                investment_service.record_ppf_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
+            except Exception:
+                logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
         db.commit()
 
         return {
@@ -1036,6 +1040,10 @@ def resync_pdfs(
                     )
                 except Exception:
                     logger.warning("Reward-points extraction failed for bank %s", bank.id, exc_info=True)
+                try:
+                    investment_service.record_ppf_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
+                except Exception:
+                    logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
                 db.commit()
                 pdfs_processed += 1
                 logger.info(f"Saved {len(parse_result['transactions'])} transactions from {pdf_statement.file_name}")
@@ -1257,6 +1265,10 @@ def update_pdf_password(
         )
     except Exception:
         logger.warning("Reward-points extraction failed for bank %s", bank.id, exc_info=True)
+    try:
+        investment_service.record_ppf_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
+    except Exception:
+        logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
     db.commit()
 
     return {

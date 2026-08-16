@@ -530,6 +530,17 @@ export const getFamilyDashboard = async () => {
   return response.data;
 };
 
+// Investments (PPF, mutual funds, stocks, NPS, EPF, bonds, gold, vehicles)
+export const getInvestments = async () => (await api.get('/api/investments/')).data;
+export const getInvestmentsDashboard = async () => (await api.get('/api/investments/dashboard')).data;
+export const createInvestmentAccount = async (data) => (await api.post('/api/investments/', data)).data;
+export const deleteInvestmentAccount = async (id) => { await api.delete(`/api/investments/${id}`); };
+export const getInvestmentEntries = async (accountId) =>
+  (await api.get(`/api/investments/${accountId}/entries`)).data;
+export const createInvestmentEntry = async (accountId, data) =>
+  (await api.post(`/api/investments/${accountId}/entries`, data)).data;
+export const deleteInvestmentEntry = async (entryId) => { await api.delete(`/api/investments/entries/${entryId}`); };
+
 // Net worth history
 export const getNetWorth = async (days = 180) => {
   const response = await api.get(`/api/dashboard/net-worth?days=${days}`);

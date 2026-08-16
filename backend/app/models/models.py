@@ -667,3 +667,74 @@ class RewardPointEntry(Base):
     bank = relationship("Bank")
 
     __table_args__ = (Index("ix_reward_points_user_bank", "user_id", "bank_id"),)
+
+
+class InvestmentAccount(Base):
+    """A single investment holding -- PPF, a mutual fund, a stock/demat
+    account, NPS, EPF, bonds, gold, or a vehicle. Deliberately separate from
+    Bank/Transaction (not merged into the regular Banks list or net-worth
+    figure) -- investments get their own dashboard, per the user's explicit
+    request that they NOT be folded into everyday banking balances.
+
+    Current value is always the sum of every InvestmentEntry.amount for this
+    account -- same "no separate mutable balance column" design as
+    RewardPointEntry, for the same reason (nothing to drift out of sync).
+    """
+    __tablename__ = "investment_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(150), nullable=False)
+    # ppf | mutual_fund | stocks | nps | epf | bonds | gold | vehicle
+    category = Column(String(20), nullable=False)
+    # 'auto' -- detected from a linked bank's statement (currently only PPF,
+    # via BOB's combined savings+PPF email); 'manual' -- user-added and
+    # user-maintained via buy/sell/contribution/value-update entries.
+    source = Column(String(10), default="manual")
+    # For an 'auto' account: the Bank whose statement it was detected
+    # alongside (BOB's savings account, for PPF) -- lets a later statement
+    # from that same bank be matched back to this account. Null for manual.
+    linked_bank_id = Column(Integer, ForeignKey("banks.id", ondelete="SET NULL"), nullable=True)
+    # Statement date last reconciled into this account's value (auto only) --
+    # same out-of-order-statement guard as Bank.balance_updated_at.
+    value_updated_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=utcnow)
+
+    user = relationship("User")
+    linked_bank = relationship("Bank")
+
+    __table_args__ = (Index("ix_investment_accounts_user", "user_id"),)
+
+
+class InvestmentEntry(Base):
+    """A single ledger entry against an InvestmentAccount. ``amount`` is
+    always the signed delta this entry contributes to the account's current
+    value -- positive for buy/contribution and most value_update
+    reconciliations, negative for sell/withdrawal (same convention as
+    RewardPointEntry.points).
+
+    ``quantity``/``price_per_unit`` are optional context for unit-based
+    holdings (stocks, mutual funds, gold by weight) -- not used in the value
+    calculation itself (amount already carries the total), just displayed
+    alongside the entry so a buy/sell has a record of at what price.
+    """
+    __tablename__ = "investment_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    investment_account_id = Column(Integer, ForeignKey("investment_accounts.id", ondelete="CASCADE"), nullable=False, index=True)
+    # buy | sell | contribution | withdrawal | value_update
+    entry_type = Column(String(20), nullable=False)
+    amount = Column(Float, nullable=False)
+    quantity = Column(Float, nullable=True)
+    price_per_unit = Column(Float, nullable=True)
+    entry_date = Column(DateTime, nullable=True)
+    description = Column(String(255), nullable=True)
+    source = Column(String(10), default="manual")  # manual | auto
+    created_at = Column(DateTime, default=utcnow)
+
+    user = relationship("User")
+    account = relationship("InvestmentAccount")
+
+    __table_args__ = (Index("ix_investment_entries_account", "investment_account_id"),)
