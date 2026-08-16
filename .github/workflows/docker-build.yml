@@ -22,9 +22,13 @@ jobs:
           - service: backend
             context: ./backend
             image: finance_tracker-backend
+            build_args: ''
           - service: frontend
             context: ./frontend
             image: finance_tracker-frontend
+            # Baked into the static bundle at build time -- see frontend/Dockerfile.
+            # This is just the app's own public URL, not a secret.
+            build_args: 'REACT_APP_API_URL=https://finance.061295.xyz'
 
     steps:
       - name: Checkout
@@ -64,5 +68,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.build_args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
