@@ -1095,8 +1095,16 @@ class PDFParser:
         # "Pts", ":" etc.) immediately before the digits, the same failure mode
         # that made Total Amount Due extraction miss HDFC's "C11,537.00".
         number_re = r'[^\d\n]{0,2}\s*([0-9][0-9,]*(?:\.[0-9]+)?)'
-        for label in labels:
-            m = re.search(label + r'\s*[:\-]?\s*' + number_re, text, re.IGNORECASE)
+        # HDFC (and likely others) print the label followed by a run of column
+        # headers before the actual figure appears on its own line, e.g.
+        # "Reward Points Opening Balance Earned Disbursed Adjusted/Lapsed\n2,998\n...".
+        # The strict number_re above never reaches past those header words, so
+        # widen the gap allowance (still digit-free, just longer) for this one
+        # label -- it's the only one seen paired with a summary-table header row.
+        wide_number_re = r'[^\d]{0,80}([0-9][0-9,]*(?:\.[0-9]+)?)'
+        for i, label in enumerate(labels):
+            gap = wide_number_re if i == 0 else number_re
+            m = re.search(label + r'\s*[:\-]?\s*' + gap, text, re.IGNORECASE)
             if m:
                 try:
                     val = float(m.group(1).replace(',', ''))
