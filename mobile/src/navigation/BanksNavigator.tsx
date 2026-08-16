@@ -8,6 +8,7 @@ import CsvExportsScreen from "../screens/banks/CsvExportsScreen";
 import ImportsScreen from "../screens/banks/ImportsScreen";
 import RewardPointsScreen from "../screens/banks/RewardPointsScreen";
 import FamilyDashboardScreen from "../screens/banks/FamilyDashboardScreen";
+import InvestmentsScreen from "../screens/banks/InvestmentsScreen";
 import BanksScreen from "../screens/settings/BanksScreen";
 import BankFormScreen from "../screens/settings/BankFormScreen";
 import { Bank } from "../types";
@@ -22,6 +23,7 @@ export type BanksStackParamList = {
   Imports: undefined;
   RewardPoints: undefined;
   FamilyDashboard: undefined;
+  Investments: undefined;
 };
 
 const Stack = createNativeStackNavigator<BanksStackParamList>();
@@ -37,6 +39,7 @@ export default function BanksNavigator() {
       <Stack.Screen name="CsvExports" component={CsvExportsScreen} options={{ title: "CSV Exports" }} />
       <Stack.Screen name="Imports" component={ImportsScreen} options={{ title: "Imports" }} />
       <Stack.Screen name="RewardPoints" component={RewardPointsScreen} options={{ title: "Reward Points" }} />
+      <Stack.Screen name="Investments" component={InvestmentsScreen} options={{ title: "Investments" }} />
       <Stack.Screen name="FamilyDashboard" component={FamilyDashboardScreen} options={{ title: "Family Dashboard" }} />
     </Stack.Navigator>
   );

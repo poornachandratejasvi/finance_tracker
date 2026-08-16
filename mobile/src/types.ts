@@ -518,3 +518,41 @@ export interface FamilyDashboardResponse {
     net_worth: number;
   };
 }
+
+export type InvestmentCategory =
+  | "ppf" | "mutual_fund" | "stocks" | "nps" | "epf" | "bonds" | "gold" | "vehicle";
+
+export type InvestmentEntryType = "buy" | "sell" | "contribution" | "withdrawal" | "value_update";
+
+export interface InvestmentAccountSummary {
+  id: number;
+  name: string;
+  category: InvestmentCategory;
+  source: "auto" | "manual";
+  current_value: number;
+  linked_bank_id: number | null;
+}
+
+export interface InvestmentCategorySummary {
+  category: InvestmentCategory;
+  total_value: number;
+  accounts: InvestmentAccountSummary[];
+}
+
+export interface InvestmentsDashboard {
+  categories: InvestmentCategorySummary[];
+  total_value: number;
+}
+
+export interface InvestmentEntry {
+  id: number;
+  investment_account_id: number;
+  entry_type: InvestmentEntryType;
+  amount: number;
+  quantity: number | null;
+  price_per_unit: number | null;
+  entry_date: string | null;
+  description: string | null;
+  source: "manual" | "auto";
+  created_at: string;
+}

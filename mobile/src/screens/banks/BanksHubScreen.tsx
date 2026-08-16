@@ -27,6 +27,7 @@ const ROWS: Row[] = [
   { key: "CsvExports", label: "CSV Exports", icon: "📊", hint: "Generate, email, or download CSV statements" },
   { key: "Imports", label: "Imports", icon: "📥", hint: "Import transactions from a CSV or Excel file" },
   { key: "RewardPoints", label: "Reward Points", icon: "🎁", hint: "Track points balance, usage, and upcoming expiries" },
+  { key: "Investments", label: "Investments", icon: "📈", hint: "PPF, mutual funds, stocks, NPS, EPF, bonds, gold, vehicle" },
 ];
 
 const ADMIN_ROWS: Row[] = [
