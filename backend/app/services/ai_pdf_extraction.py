@@ -104,7 +104,9 @@ def extract_billing_summary(db: Session, uid: int, text: str) -> dict:
 
     out = {}
     tad = data.get("total_amount_due")
-    if isinstance(tad, (int, float)) and tad > 0:
+    # A card paid in full genuinely has a total amount due of 0 -- that's a real
+    # answer, not "the AI found nothing" (matches minimum_amount_due's >= 0 below).
+    if isinstance(tad, (int, float)) and tad >= 0:
         out["total_amount_due"] = float(tad)
     mad = data.get("minimum_amount_due")
     if isinstance(mad, (int, float)) and mad >= 0:

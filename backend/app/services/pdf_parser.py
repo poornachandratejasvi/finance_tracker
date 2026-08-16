@@ -1062,15 +1062,27 @@ class PDFParser:
         ]
         # amount like 1,23,456.78 or 12345.67, optionally prefixed by Rs/INR/₹
         amount_re = r'(?:rs\.?|inr|₹)?\s*([0-9][0-9,]*\.?[0-9]{0,2})'
-        for label in labels:
-            m = re.search(label + r'\s*[:\-]?\s*' + amount_re, text, re.IGNORECASE)
-            if m:
-                try:
-                    val = float(m.group(1).replace(',', ''))
-                    if val > 0:
-                        return val
-                except (ValueError, AttributeError):
-                    continue
+        # Tight gap first (original behaviour, exact for every issuer already
+        # working off it -- e.g. ICICI, where a wide gap would leap straight
+        # past "Total Amount Due" onto an unrelated Credit Limit figure
+        # instead). Only if NO label matches tightly do we retry with a wider
+        # gap: SBI (and likely others) render the currency-symbol placeholder
+        # as a short run of junk characters between the label and the figure,
+        # e.g. "*Total Amount Due ( ` )\n0.00" -- the tight gap can't cross
+        # that at all (a different failure mode than the value being rejected
+        # once found).
+        for gap_re in (r'\s*[:\-]?\s*', r'[^\d\n]{0,15}\s*'):
+            for label in labels:
+                m = re.search(label + gap_re + amount_re, text, re.IGNORECASE)
+                if m:
+                    try:
+                        val = float(m.group(1).replace(',', ''))
+                        # A statement paid in full genuinely prints "0.00" here --
+                        # that's not "nothing found", it's the real outstanding balance.
+                        if val >= 0:
+                            return val
+                    except (ValueError, AttributeError):
+                        continue
         return None
 
     @staticmethod
