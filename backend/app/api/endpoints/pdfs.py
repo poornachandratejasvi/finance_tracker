@@ -341,6 +341,20 @@ def decrypt_all_pdfs(
             db.commit()
         if decrypted_path:
             decrypted += 1
+            # This endpoint only decrypts -- it never runs the normal parse/
+            # reconcile pipeline, so an investment-linked "bank" (e.g. a CDSL
+            # CAS statement) would otherwise sit decrypted forever without
+            # its holdings ever reconciled. Every other PDF-processing path
+            # (reprocess, sync, manual upload) already calls this; mirror it
+            # here so bulk password-retry doesn't leave CAS data stale.
+            if bank.bank_type == "investment":
+                try:
+                    text = PDFParser.extract_text(decrypted_path)
+                    investment_service.record_cas_statement(db, bank, text, bank_email.received_date)
+                    pdf.is_processed = True
+                    db.commit()
+                except Exception:
+                    logger.warning("CAS extraction failed for bank %s", bank.id, exc_info=True)
         else:
             skipped += 1
 
