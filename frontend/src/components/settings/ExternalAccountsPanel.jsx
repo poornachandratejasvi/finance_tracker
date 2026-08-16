@@ -7,7 +7,7 @@ import {
 import {
   Email, Refresh, PlayArrow, Sync as SyncIcon, LinkOff, Add, UploadFile, CheckCircle, Forum,
 } from '@mui/icons-material';
-import {
+import api, {
   getGmailAccountsStatus, getGmailAuthUrl, checkGmailAccountNow, testGmailNotification,
   disconnectGmailAccount, getGoogleCredentialsStatus, uploadGoogleCredentials,
   getDiscordConfig, updateDiscordWebhook, testDiscordWebhook,
@@ -52,24 +52,51 @@ export default function ExternalAccountsPanel() {
   const [discordTesting, setDiscordTesting] = useState(false);
   const [discordTestResult, setDiscordTestResult] = useState(null);
 
+  // Other notification services (Apprise)
+  const [notifyUrlsText, setNotifyUrlsText] = useState('');
+  const [notifyUrlsLoading, setNotifyUrlsLoading] = useState(false);
+  const [notifyUrlsSaved, setNotifyUrlsSaved] = useState(false);
+  const [notifyUrlsStatus, setNotifyUrlsStatus] = useState(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [statusRes, credRes, discordRes] = await Promise.all([
+      const [statusRes, credRes, discordRes, notifyRes] = await Promise.all([
         getGmailAccountsStatus().catch(() => ({ accounts: [] })),
         getGoogleCredentialsStatus().catch(() => null),
         getDiscordConfig().catch(() => null),
+        api.get('/api/settings/notify-urls').catch(() => null),
       ]);
       setAccounts(statusRes?.accounts || []);
       setCredStatus(credRes);
       setDiscordWebhookSet(!!discordRes?.webhook_set);
+      setNotifyUrlsText((notifyRes?.data?.urls || []).join('\n'));
     } catch (e) {
       setError(apiError(e, 'Failed to load external accounts'));
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const handleSaveNotifyUrls = async () => {
+    setNotifyUrlsLoading(true);
+    try {
+      const urls = notifyUrlsText.split('\n').map((u) => u.trim()).filter(Boolean);
+      await api.post('/api/settings/notify-urls', { urls });
+      setNotifyUrlsSaved(true); setTimeout(() => setNotifyUrlsSaved(false), 3000);
+    } catch (_) {} finally { setNotifyUrlsLoading(false); }
+  };
+
+  const handleTestNotifyUrls = async () => {
+    setNotifyUrlsLoading(true); setNotifyUrlsStatus(null);
+    try {
+      const resp = await api.post('/api/settings/notify-urls/test');
+      setNotifyUrlsStatus({ success: true, message: resp.data?.message || 'Test sent!' });
+    } catch (err) {
+      setNotifyUrlsStatus({ success: false, error: err?.response?.data?.detail || err.message });
+    } finally { setNotifyUrlsLoading(false); }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -339,6 +366,38 @@ export default function ExternalAccountsPanel() {
         {discordTestResult && (
           <Alert severity={discordTestResult.ok ? 'success' : 'error'} sx={{ mt: 1.5 }} onClose={() => setDiscordTestResult(null)}>
             {discordTestResult.message}
+          </Alert>
+        )}
+      </Paper>
+
+      {/* ── Other notification services (Apprise) ───────────────────────── */}
+      <Paper variant="outlined" sx={{ mb: 3, p: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <Forum color="action" />
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Other Notification Services</Typography>
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Slack, Telegram, ntfy, Pushover, email, and 80+ others via{' '}
+          <a href="https://github.com/caronc/apprise" target="_blank" rel="noreferrer">Apprise</a> — one URL
+          per line, sent alongside the Discord webhook above to every notification this app sends.
+        </Typography>
+        <TextField
+          fullWidth multiline minRows={2} size="small"
+          placeholder={'slack://TokenA/TokenB/TokenC\ntgram://bottoken/ChatID\nmailto://user:pass@gmail.com'}
+          value={notifyUrlsText}
+          onChange={(e) => setNotifyUrlsText(e.target.value)}
+        />
+        <Box sx={{ display: 'flex', gap: 1, mt: 1, alignItems: 'center' }}>
+          <Button variant="contained" size="small" onClick={handleSaveNotifyUrls} disabled={notifyUrlsLoading}>
+            {notifyUrlsSaved ? '✓ Saved' : 'Save'}
+          </Button>
+          <Button variant="outlined" size="small" onClick={handleTestNotifyUrls} disabled={notifyUrlsLoading}>
+            Test
+          </Button>
+        </Box>
+        {notifyUrlsStatus && (
+          <Alert severity={notifyUrlsStatus.success ? 'success' : 'error'} sx={{ mt: 1.5 }} onClose={() => setNotifyUrlsStatus(null)}>
+            {notifyUrlsStatus.success ? notifyUrlsStatus.message : notifyUrlsStatus.error}
           </Alert>
         )}
       </Paper>

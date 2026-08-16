@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Container, Box, Typography, Paper, Tabs, Tab, Grid,
   TextField, Button, Alert, CircularProgress, Chip,
@@ -33,8 +34,15 @@ const FREQUENCIES = [
   { value: 'weekly', label: 'Weekly' },
 ];
 
+const TAB_KEYS = ['sync', 'csv', 'budget-alerts', 'discord', 'reminders'];
+
 export default function Automation() {
-  const [tab, setTab] = useState(0);
+  const location = useLocation();
+  const [tab, setTab] = useState(() => {
+    const key = new URLSearchParams(location.search).get('tab');
+    const idx = TAB_KEYS.indexOf(key);
+    return idx === -1 ? 0 : idx;
+  });
   const { addJob, updateJob, refresh: refreshActivity } = useActivity();
 
   // ── Banks ──────────────────────────────────────────────────────────────
