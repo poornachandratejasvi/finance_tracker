@@ -1,9 +1,19 @@
-name: Build Debug Android APK
+name: Build Android APK
 
-# Produces a debug-signed APK for the Expo app in mobile/ -- Android needs no code-signing
-# ceremony to sideload at all (unlike iOS): a debug build is signed with Gradle's
-# well-known default debug keystore and installs directly via "Install unknown apps",
-# no LiveContainer-equivalent, no Apple-Developer-Program-equivalent gatekeeping.
+# Produces a RELEASE-type APK for the Expo app in mobile/ -- despite the workflow's name
+# (kept from when this built a true debug APK), a "debug" build type only ever loads its
+# JS from a Metro server on your dev machine (localhost:8081 over USB, or your computer's
+# IP over Wi-Fi) rather than bundling it into the APK, so it's unusable once installed
+# standalone on a phone ("Unable to load script... Make sure you're running Metro").
+# "release" is the React Native Gradle plugin's recognized convention for bundling JS
+# into the APK's assets at build time, needed for a sideloaded install to actually work.
+#
+# Still needs no code-signing ceremony to sideload (unlike iOS): the generated
+# android/app/build.gradle points buildTypes.release at the same well-known Gradle debug
+# keystore as buildTypes.debug (confirmed in the real prebuilt project, not assumed) --
+# there's no Play-Store-grade production keystore to manage since this is never
+# distributed there, and minifyEnabled/shrinkResources both default to false, so there's
+# no ProGuard-related crash risk either.
 #
 # Runs on ubuntu-latest (no macOS needed -- Android tooling is cross-platform), so this is
 # both cheaper and faster than the iOS workflow. Manual trigger only, for consistency with
@@ -16,7 +26,7 @@ permissions:
   contents: read
 
 jobs:
-  build-debug-apk:
+  build-release-apk:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -62,25 +72,25 @@ jobs:
       - name: Generate native Android project (expo prebuild)
         run: npx expo prebuild --platform android --clean --non-interactive
 
-      - name: Build debug APK
+      - name: Build release APK
         working-directory: mobile/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Locate APK
         working-directory: mobile/android
         run: |
           set -euo pipefail
-          APK_PATH=$(find app/build/outputs/apk/debug -maxdepth 1 -name "*.apk" | head -1)
+          APK_PATH=$(find app/build/outputs/apk/release -maxdepth 1 -name "*.apk" | head -1)
           if [ -z "$APK_PATH" ]; then
-            echo "No .apk found under app/build/outputs/apk/debug" >&2
+            echo "No .apk found under app/build/outputs/apk/release" >&2
             find app/build/outputs -maxdepth 3 >&2 || true
             exit 1
           fi
-          cp "$APK_PATH" "../FinanceTracker-debug.apk"
+          cp "$APK_PATH" "../FinanceTracker-release.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: debug-apk
-          path: mobile/FinanceTracker-debug.apk
+          name: release-apk
+          path: mobile/FinanceTracker-release.apk
           retention-days: 14
