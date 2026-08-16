@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
-from app.api.endpoints.auth import get_current_active_user
+from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.models.models import User, Label, AutoLabelRule, TransactionLabel, Transaction
 from app.schemas.label import (
     LabelCreate,
@@ -37,7 +37,7 @@ def list_labels(
 def create_label(
     label_data: LabelCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Create a new label"""
     payload = label_data.dict()
@@ -67,7 +67,7 @@ def update_label(
     label_id: int,
     label_data: LabelUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Update label"""
     label = db.query(Label).filter(
@@ -106,7 +106,7 @@ def update_label(
 def delete_label(
     label_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Delete label"""
     label = db.query(Label).filter(
@@ -131,7 +131,7 @@ def create_auto_label_rule(
     label_id: int,
     rule_data: AutoLabelRuleCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Create auto-labeling rule"""
     label = db.query(Label).filter(
@@ -161,7 +161,7 @@ def create_auto_label_rule(
 def add_label_to_transaction(
     data: TransactionLabelCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Add label to transaction"""
     # Verify transaction belongs to user
@@ -212,7 +212,7 @@ def add_label_to_transaction(
 def bulk_label_transactions(
     data: BulkLabelRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Add label to multiple transactions"""
     # Verify label belongs to user

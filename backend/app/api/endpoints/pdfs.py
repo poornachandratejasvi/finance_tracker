@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.core.database import get_db, SessionLocal
 from app.core.config import settings
-from app.api.endpoints.auth import get_current_active_user
+from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.models.models import User, PDFStatement, BankEmail, Bank, GmailAccount, Transaction
 from app.services.pdf_parser import PDFParser
 from app.services.password_service import get_password_candidates, parse_with_passwords
@@ -294,7 +294,7 @@ def get_pdf_fields(
 def decrypt_all_pdfs(
     bank_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Create decrypted copies for all protected PDFs (optionally filtered by bank)."""
     gmail_accounts = db.query(GmailAccount).filter(
@@ -351,7 +351,7 @@ def decrypt_all_pdfs(
 def reset_pdfs(
     payload: PdfResetRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Delete PDFs and related data for the user (optionally filtered by bank)."""
     gmail_accounts = db.query(GmailAccount).filter(
@@ -414,7 +414,7 @@ def reset_pdfs(
 def reprocess_pdf(
     pdf_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Reprocess a single PDF"""
     # Get PDF
@@ -682,7 +682,7 @@ def _reprocess_pdf_worker(pdf_id: int, user_id: int) -> dict:
 def reprocess_all_pdfs(
     bank_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Reprocess all PDFs for the current user (optionally filtered by bank)."""
     gmail_accounts = db.query(GmailAccount).filter(
@@ -726,7 +726,7 @@ def reprocess_all_pdfs(
 def reassign_pdf_banks(
     bank_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Re-detect bank for PDFs and update bank association when mismatched."""
     gmail_accounts = db.query(GmailAccount).filter(
@@ -826,7 +826,7 @@ def reassign_pdf_banks(
 def remap_pdf_bank(
     payload: PdfRemapRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     if not payload.pdf_ids:
         raise HTTPException(status_code=400, detail="No PDFs selected")
@@ -893,7 +893,7 @@ class PdfDeleteBySenderRequest(BaseModel):
 def delete_pdfs_by_sender(
     payload: PdfDeleteBySenderRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Delete all PDFs and optionally their transactions for a given sender email."""
     if not payload.from_email or not payload.from_email.strip():
@@ -959,7 +959,7 @@ def delete_pdfs_by_sender(
 def cleanup_pdfs(
     payload: PdfCleanupRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     cutoff = utcnow() - timedelta(days=payload.max_age_days)
     gmail_accounts = db.query(GmailAccount).filter(

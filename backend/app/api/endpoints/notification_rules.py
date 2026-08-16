@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
-from app.api.endpoints.auth import get_current_active_user
+from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.models.models import User, NotificationRule, Bank
 from app.schemas.notification_rule import NotificationRuleCreate, NotificationRuleUpdate, NotificationRuleResponse
 from app.services.autorules import parse_list
@@ -73,7 +73,7 @@ def _validate(data) -> None:
 
 
 @router.post("/", response_model=NotificationRuleResponse, status_code=status.HTTP_201_CREATED)
-def create_rule(data: NotificationRuleCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def create_rule(data: NotificationRuleCreate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     name = (data.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Rule name is required")
@@ -118,7 +118,7 @@ def create_rule(data: NotificationRuleCreate, db: Session = Depends(get_db), cur
 
 
 @router.put("/{rule_id}", response_model=NotificationRuleResponse)
-def update_rule(rule_id: int, data: NotificationRuleUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def update_rule(rule_id: int, data: NotificationRuleUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     rule = db.query(NotificationRule).filter(NotificationRule.id == rule_id, NotificationRule.user_id == current_user.id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -183,7 +183,7 @@ def update_rule(rule_id: int, data: NotificationRuleUpdate, db: Session = Depend
 
 
 @router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_rule(rule_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def delete_rule(rule_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     rule = db.query(NotificationRule).filter(NotificationRule.id == rule_id, NotificationRule.user_id == current_user.id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")

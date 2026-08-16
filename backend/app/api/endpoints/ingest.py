@@ -448,10 +448,45 @@ _SMS_AMOUNT_RE = re.compile(r"(?:rs\.?|inr)\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)", 
 _SMS_CREDIT_RE = re.compile(r"credited|received|deposited", re.IGNORECASE)
 
 
+def _match_bank_from_sms(db: Session, user: User, sender: Optional[str], body: str) -> Optional[int]:
+    """Best-effort: identify which of the caller's OWN banks this SMS is from,
+    using signals unlikely to false-positive (unlike guessing a per-bank SMS
+    template blind, which the generic amount regex above deliberately avoids).
+
+    Strongest signal: the account number's last 4 digits appearing in the
+    message body -- issuers print exactly this in their own alert SMS ("...
+    ending 6951..."). Weaker signal: the bank's short `code` (e.g. "hdfc",
+    "icici") appearing in the SENDER id specifically, not the free-form body --
+    some codes (e.g. "sc", "yes") are common English words and would
+    false-positive constantly against real message text. Only returns a match
+    when exactly one bank fits, so an ambiguous SMS falls through to the
+    existing default-bank behaviour instead of guessing wrong.
+    """
+    banks = db.query(Bank).filter(Bank.user_id == user.id, Bank.is_active == True).all()  # noqa: E712
+    body_upper = (body or "").upper()
+
+    last4_matches = {
+        b.id for b in banks
+        if len(digits := re.sub(r"\D", "", b.account_number or "")) >= 4 and digits[-4:] in body_upper
+    }
+    if len(last4_matches) == 1:
+        return next(iter(last4_matches))
+
+    sender_upper = (sender or "").upper()
+    code_matches = {
+        b.id for b in banks
+        if (code := (b.code or "").upper()) and len(code) >= 3 and code in sender_upper
+    }
+    if len(code_matches) == 1:
+        return next(iter(code_matches))
+
+    return None
+
+
 class SmsIngestRequest(BaseModel):
     text: str
     sender: Optional[str] = None
-    bank_id: Optional[int] = None  # optional override; falls back to the mapping's default/External bank
+    bank_id: Optional[int] = None  # optional override; falls back to auto-match, then the mapping's default/External bank
 
 
 @router.post("/sms", status_code=status.HTTP_201_CREATED)
@@ -476,7 +511,12 @@ def ingest_sms(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Amount must be positive.")
 
     mapping = _active_mapping(db, user)
-    bank_id = payload.bank_id or (mapping.default_bank_id if (mapping and mapping.default_bank_id) else _get_external_bank(db, user).id)
+    matched_bank_id = _match_bank_from_sms(db, user, payload.sender, payload.text)
+    bank_id = (
+        payload.bank_id
+        or matched_bank_id
+        or (mapping.default_bank_id if (mapping and mapping.default_bank_id) else _get_external_bank(db, user).id)
+    )
     if not db.query(Bank.id).filter(Bank.id == bank_id, Bank.user_id == user.id).first():
         bank_id = _get_external_bank(db, user).id
 

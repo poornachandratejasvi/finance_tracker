@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.endpoints.auth import get_current_active_user
+from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.core.database import get_db
 from app.models.models import Bank, User
 from app.services import reward_points_service
@@ -64,7 +64,7 @@ class RewardEntryCreate(BaseModel):
 def create_reward_entry(
     payload: RewardEntryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_write_access),
 ):
     if payload.entry_type not in VALID_ENTRY_TYPES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"entry_type must be one of {VALID_ENTRY_TYPES}")
@@ -85,7 +85,7 @@ def create_reward_entry(
 def delete_reward_entry(
     entry_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_write_access),
 ):
     if not reward_points_service.delete_entry(db, current_user.id, entry_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Entry not found")

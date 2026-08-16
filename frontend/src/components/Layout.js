@@ -35,6 +35,7 @@ import KeyIcon from '@mui/icons-material/Key';
 import SettingsIcon from '@mui/icons-material/Settings';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
+import GroupsIcon from '@mui/icons-material/Groups';
 
 const DRAWER_WIDTH = 236;
 
@@ -118,6 +119,15 @@ const Layout = ({ children }) => {
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
 
+  const navGroups = React.useMemo(() => {
+    if (user?.role !== 'ADMIN') return NAV_GROUPS;
+    return NAV_GROUPS.map((g) =>
+      g.heading === 'Overview'
+        ? { ...g, items: [...g.items, { label: 'Family Dashboard', path: '/family-dashboard', icon: <GroupsIcon /> }] }
+        : g
+    );
+  }, [user?.role]);
+
   const drawer = (
     <Box role="navigation" aria-label="Main navigation">
       <Toolbar sx={{ px: 2 }}>
@@ -125,7 +135,7 @@ const Layout = ({ children }) => {
         <Typography variant="h6" noWrap sx={{ fontWeight: 700 }}>Finance</Typography>
       </Toolbar>
       <Divider />
-      {NAV_GROUPS.map((group) => (
+      {navGroups.map((group) => (
         <List
           key={group.heading}
           dense

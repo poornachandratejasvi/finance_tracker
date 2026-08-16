@@ -7,7 +7,7 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.core.time_utils import utcnow
-from app.api.endpoints.auth import get_current_active_user
+from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.models.models import User, SavingsGoal
 
 router = APIRouter()
@@ -62,7 +62,7 @@ def list_goals(db: Session = Depends(get_db), current_user: User = Depends(get_c
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def create_goal(payload: GoalCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def create_goal(payload: GoalCreate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     g = SavingsGoal(
         user_id=current_user.id,
         name=payload.name,
@@ -79,7 +79,7 @@ def create_goal(payload: GoalCreate, db: Session = Depends(get_db), current_user
 
 
 @router.put("/{goal_id}")
-def update_goal(goal_id: int, payload: GoalUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def update_goal(goal_id: int, payload: GoalUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     g = db.query(SavingsGoal).filter(SavingsGoal.id == goal_id, SavingsGoal.user_id == current_user.id).first()
     if not g:
         raise HTTPException(status_code=404, detail="Goal not found")
@@ -102,7 +102,7 @@ def update_goal(goal_id: int, payload: GoalUpdate, db: Session = Depends(get_db)
 
 
 @router.delete("/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_goal(goal_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def delete_goal(goal_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     g = db.query(SavingsGoal).filter(SavingsGoal.id == goal_id, SavingsGoal.user_id == current_user.id).first()
     if not g:
         raise HTTPException(status_code=404, detail="Goal not found")

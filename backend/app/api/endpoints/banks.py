@@ -10,8 +10,8 @@ from uuid import uuid4
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.time_utils import utcnow
-from app.api.endpoints.auth import get_current_active_user
-from app.models.models import User, Bank, BankConfig, GmailAccount, UserRole, BankEmail, PDFStatement, Transaction
+from app.api.endpoints.auth import get_current_active_user, require_write_access
+from app.models.models import User, Bank, BankConfig, GmailAccount, BankEmail, PDFStatement, Transaction
 from app.schemas.bank import (
     BankCreate,
     BankUpdate,
@@ -28,7 +28,7 @@ from app.services.balance_service import apply_statement_balance, recompute_all_
 from app.services.credit_balance_service import redetect_all_credit_balances
 from app.services import ai_transaction_extraction, reward_points_service
 from app.services.transaction_hooks import apply_auto_rules_and_notify, create_or_reconcile_transaction
-from app.core.household import household_user_ids
+from app.core.household import visible_user_ids
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +45,9 @@ def list_banks(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """List all banks visible to the caller — their own plus any household member's
-    (a shared family/couple wallet), see app.core.household."""
-    household_ids = household_user_ids(db, current_user)
+    """List all banks visible to the caller — their own, or their whole
+    household's if they're an admin (see app.core.household.visible_user_ids)."""
+    household_ids = visible_user_ids(db, current_user)
     query = db.query(Bank).filter(
         Bank.user_id.in_(household_ids)
     )
@@ -126,11 +126,12 @@ def check_stale_credit_cards_now(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Manually run the 60+ day no-activity credit card check for the caller's
-    household right now, instead of waiting for the once-a-day scheduled run."""
+    """Manually run the 60+ day no-activity credit card check for whatever the
+    caller can see (their own cards, or their whole household if admin), instead
+    of waiting for the once-a-day scheduled run."""
     from app.tasks.credit_balance_tasks import check_stale_credit_cards
 
-    household_ids = household_user_ids(db, current_user)
+    household_ids = visible_user_ids(db, current_user)
     result = check_stale_credit_cards(db, user_ids=household_ids)
     return result
 
@@ -250,14 +251,11 @@ def create_bank(
     bank_data: BankCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
-    """Create a new bank (Admin only)"""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
+    """Create a new bank, owned by the caller (any non-VIEWER user can add
+    their own accounts -- a household's admin isn't the only one who can track
+    an account; a VIEWER can look but never add/edit/delete)."""
 
     # Allow duplicate codes - users can have multiple accounts with same bank
     bank = Bank(**bank_data.dict(), user_id=current_user.id)
@@ -283,10 +281,10 @@ def get_bank(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Get bank by ID (own or any household member's)"""
+    """Get bank by ID (own, or any household member's if admin)"""
     bank = db.query(Bank).filter(
         Bank.id == bank_id,
-        Bank.user_id.in_(household_user_ids(db, current_user))
+        Bank.user_id.in_(visible_user_ids(db, current_user))
     ).first()
 
     if not bank:
@@ -302,14 +300,9 @@ def get_bank(
 def delete_bank(
     bank_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
-    """Delete a bank (Admin only). Scoped to the admin's own banks."""
-    if str(getattr(current_user.role, "value", current_user.role)).upper() != "ADMIN":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
+    """Delete a bank. Scoped to the caller's own banks -- a VIEWER can't delete anything."""
 
     # Scope to the current user's own bank — never delete another user's bank/data by id.
     bank = db.query(Bank).filter(
@@ -369,14 +362,9 @@ def update_bank(
     bank_id: int,
     bank_data: BankUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
-    """Update bank (Admin only)"""
-    if current_user.role.upper() != "ADMIN":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )    
+    """Update bank. Scoped to the caller's own banks -- a VIEWER can't edit anything."""
     bank = db.query(Bank).filter(
         Bank.id == bank_id,
         Bank.user_id == current_user.id
@@ -461,7 +449,7 @@ def update_bank_password_candidates(
     bank_id: int,
     payload: PasswordCandidatesRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Update password candidates for a bank."""
     bank = db.query(Bank).filter(
@@ -495,15 +483,9 @@ def create_bank_config(
     bank_id: int,
     config_data: BankConfigCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
-    """Create bank configuration (Admin only)"""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
-    
+    """Create bank configuration."""
     bank = db.query(Bank).filter(Bank.id == bank_id).first()
     if not bank:
         raise HTTPException(
@@ -525,7 +507,7 @@ async def upload_bank_pdf(
     file: UploadFile = File(...),
     password: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Upload and process bank statement PDF"""
     import logging

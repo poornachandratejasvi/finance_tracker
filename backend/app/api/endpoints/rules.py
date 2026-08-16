@@ -6,7 +6,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.api.endpoints.auth import get_current_active_user
+from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.models.models import User, AutoRule, Transaction, TransactionType, TransactionLabel
 from app.schemas.auto_rule import AutoRuleCreate, AutoRuleUpdate, AutoRuleResponse
 from app.services.autorules import get_active_rules, match_rule, apply_rule, parse_list
@@ -36,7 +36,7 @@ def list_rules(db: Session = Depends(get_db), current_user: User = Depends(get_c
 
 
 @router.post("/", response_model=AutoRuleResponse, status_code=status.HTTP_201_CREATED)
-def create_rule(data: AutoRuleCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def create_rule(data: AutoRuleCreate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     name = (data.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Rule name is required")
@@ -55,7 +55,7 @@ def create_rule(data: AutoRuleCreate, db: Session = Depends(get_db), current_use
 
 
 @router.put("/{rule_id}", response_model=AutoRuleResponse)
-def update_rule(rule_id: int, data: AutoRuleUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def update_rule(rule_id: int, data: AutoRuleUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     rule = db.query(AutoRule).filter(AutoRule.id == rule_id, AutoRule.user_id == current_user.id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -81,7 +81,7 @@ def update_rule(rule_id: int, data: AutoRuleUpdate, db: Session = Depends(get_db
 
 
 @router.delete("/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_rule(rule_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def delete_rule(rule_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     rule = db.query(AutoRule).filter(AutoRule.id == rule_id, AutoRule.user_id == current_user.id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -94,7 +94,7 @@ class ApplyRequest(BaseModel):
 
 
 @router.post("/apply")
-def apply_rules(payload: ApplyRequest = ApplyRequest(), db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def apply_rules(payload: ApplyRequest = ApplyRequest(), db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     """Apply all active rules to existing transactions (category + labels)."""
     rules = get_active_rules(db, current_user.id)
     if not rules:
@@ -168,7 +168,7 @@ class ApplySelectedRequest(BaseModel):
 
 
 @router.post("/apply-selected")
-def apply_rule_to_selected(data: ApplySelectedRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def apply_rule_to_selected(data: ApplySelectedRequest, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     """Apply a rule's actions (category + labels) to a specific set of the user's records."""
     ids = [int(i) for i in (data.transaction_ids or [])]
     if not ids:
@@ -216,7 +216,7 @@ class ApplyAllMatchingRequest(BaseModel):
 
 
 @router.post("/apply-all-matching")
-def apply_rule_to_all_matching(data: ApplyAllMatchingRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def apply_rule_to_all_matching(data: ApplyAllMatchingRequest, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     """Apply a rule's actions to EVERY record matching its keywords/record_type — not
     just the page shown in the 'Found existing records' preview (which is capped at
     500 rows for the browser). Re-runs the match query server-side so it scales to

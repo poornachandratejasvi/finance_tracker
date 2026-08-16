@@ -24,6 +24,20 @@ def household_user_ids(db: Session, user: User) -> List[int]:
     return ids or [user.id]
 
 
+def visible_user_ids(db: Session, user: User) -> List[int]:
+    """Ids of users whose banks/transactions `user` may see in their everyday
+    (non-admin) views. An ADMIN sees their whole household -- the family/friends
+    group they've invited and manage -- so a "family dashboard" can show
+    everyone combined. Everyone else sees strictly their own data, even other
+    members of the same household: household membership only grants the admin a
+    combined view, it doesn't make ordinary members' data visible to each other
+    (a friend added to track their own spending shouldn't see anyone else's)."""
+    from app.models.models import UserRole
+    if user.role == UserRole.ADMIN:
+        return household_user_ids(db, user)
+    return [user.id]
+
+
 def ensure_household(db: Session, user: User) -> None:
     """Give a just-created user their own private household, if they don't
     already have one. Call this right after every User row is committed

@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.endpoints.auth import get_current_active_user
+from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.core.database import get_db
 from app.models.models import Bank, Transaction, User
 from app.services.transaction_hooks import apply_auto_rules_and_notify, create_or_reconcile_transaction
@@ -157,7 +157,7 @@ class ImportCommitResponse(BaseModel):
 def commit_import(
     payload: ImportCommitRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_write_access),
 ):
     bank = db.query(Bank).filter(Bank.id == payload.bank_id, Bank.user_id == current_user.id).first()
     if not bank:

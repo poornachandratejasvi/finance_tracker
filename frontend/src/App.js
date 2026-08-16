@@ -26,6 +26,7 @@ import Goals from './pages/Goals.jsx';
 import AskAI from './pages/AskAI.jsx';
 import Imports from './pages/Imports.jsx';
 import RewardPoints from './pages/RewardPoints.jsx';
+import FamilyDashboard from './pages/FamilyDashboard.jsx';
 
 const queryClient = new QueryClient();
 
@@ -55,6 +56,7 @@ function App() {
                 <Route path="/assistant" element={<ProtectedRoute><Layout><AskAI /></Layout></ProtectedRoute>} />
                 <Route path="/imports" element={<ProtectedRoute><Layout><Imports /></Layout></ProtectedRoute>} />
                 <Route path="/reward-points" element={<ProtectedRoute><Layout><RewardPoints /></Layout></ProtectedRoute>} />
+                <Route path="/family-dashboard" element={<ProtectedRoute><Layout><FamilyDashboard /></Layout></ProtectedRoute>} />
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </Router>

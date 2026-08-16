@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
-from app.api.endpoints.auth import get_current_active_user
+from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.models.models import User, Template
 from app.schemas.template import TemplateCreate, TemplateUpdate, TemplateResponse
 
@@ -37,7 +37,7 @@ def list_templates(db: Session = Depends(get_db), current_user: User = Depends(g
 
 
 @router.post("/", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED)
-def create_template(data: TemplateCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def create_template(data: TemplateCreate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     name = (data.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Template name is required")
@@ -50,7 +50,7 @@ def create_template(data: TemplateCreate, db: Session = Depends(get_db), current
 
 
 @router.put("/{template_id}", response_model=TemplateResponse)
-def update_template(template_id: int, data: TemplateUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def update_template(template_id: int, data: TemplateUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     tpl = db.query(Template).filter(Template.id == template_id, Template.user_id == current_user.id).first()
     if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -66,7 +66,7 @@ def update_template(template_id: int, data: TemplateUpdate, db: Session = Depend
 
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_template(template_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def delete_template(template_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     tpl = db.query(Template).filter(Template.id == template_id, Template.user_id == current_user.id).first()
     if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")

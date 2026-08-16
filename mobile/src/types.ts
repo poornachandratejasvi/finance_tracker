@@ -487,3 +487,33 @@ export interface RewardPointsMonth {
   expired: number;
   net: number;
 }
+
+export interface FamilyMemberBank {
+  bank_id: number;
+  bank_name: string;
+  bank_type: string;
+  current_balance: number;
+  currency_code: string | null;
+  balance_updated_at: string | null;
+}
+
+export interface FamilyMember {
+  user_id: number;
+  username: string;
+  full_name: string | null;
+  role: string;
+  is_you: boolean;
+  banks: FamilyMemberBank[];
+  assets: number;
+  liabilities: number;
+  net: number;
+}
+
+export interface FamilyDashboardResponse {
+  members: FamilyMember[];
+  totals: {
+    total_assets: number;
+    total_liabilities: number;
+    net_worth: number;
+  };
+}

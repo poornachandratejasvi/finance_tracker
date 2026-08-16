@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
-from app.api.endpoints.auth import get_current_active_user
+from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.models.models import User, TransactionWatcher
 from app.schemas.watcher import WatcherCreate, WatcherUpdate, WatcherResponse
 from app.services.autorules import parse_list
@@ -58,7 +58,7 @@ def list_watchers(db: Session = Depends(get_db), current_user: User = Depends(ge
 
 
 @router.post("/", response_model=WatcherResponse, status_code=status.HTTP_201_CREATED)
-def create_watcher(data: WatcherCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def create_watcher(data: WatcherCreate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     name = (data.name or "").strip()
     keywords = _dedupe(data.match_keywords)
     if not name:
@@ -78,7 +78,7 @@ def create_watcher(data: WatcherCreate, db: Session = Depends(get_db), current_u
 
 
 @router.put("/{watcher_id}", response_model=WatcherResponse)
-def update_watcher(watcher_id: int, data: WatcherUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def update_watcher(watcher_id: int, data: WatcherUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     watcher = db.query(TransactionWatcher).filter(
         TransactionWatcher.id == watcher_id, TransactionWatcher.user_id == current_user.id
     ).first()
@@ -106,7 +106,7 @@ def update_watcher(watcher_id: int, data: WatcherUpdate, db: Session = Depends(g
 
 
 @router.delete("/{watcher_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_watcher(watcher_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def delete_watcher(watcher_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     watcher = db.query(TransactionWatcher).filter(
         TransactionWatcher.id == watcher_id, TransactionWatcher.user_id == current_user.id
     ).first()

@@ -524,6 +524,12 @@ export const getRewardPointsMonthly = async (bankId, months = 12) => {
   return response.data;
 };
 
+// Family dashboard (admin-only)
+export const getFamilyDashboard = async () => {
+  const response = await api.get('/api/family-dashboard/');
+  return response.data;
+};
+
 // Net worth history
 export const getNetWorth = async (days = 180) => {
   const response = await api.get(`/api/dashboard/net-worth?days=${days}`);

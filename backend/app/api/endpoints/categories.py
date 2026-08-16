@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
-from app.api.endpoints.auth import get_current_active_user
+from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.models.models import User, Category, CategoryRule, Transaction
 from app.schemas.category import (
     CategoryCreate, CategoryUpdate, CategoryResponse,
@@ -28,7 +28,7 @@ def list_category_rules(db: Session = Depends(get_db), current_user: User = Depe
 
 
 @router.post("/rules", response_model=CategoryRuleResponse, status_code=status.HTTP_201_CREATED)
-def create_category_rule(data: CategoryRuleCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def create_category_rule(data: CategoryRuleCreate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     kw = (data.keyword or "").strip()
     if not kw or not (data.category or "").strip():
         raise HTTPException(status_code=400, detail="keyword and category are required")
@@ -40,7 +40,7 @@ def create_category_rule(data: CategoryRuleCreate, db: Session = Depends(get_db)
 
 
 @router.put("/rules/{rule_id}", response_model=CategoryRuleResponse)
-def update_category_rule(rule_id: int, data: CategoryRuleUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def update_category_rule(rule_id: int, data: CategoryRuleUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     rule = db.query(CategoryRule).filter(CategoryRule.id == rule_id, CategoryRule.user_id == current_user.id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -51,7 +51,7 @@ def update_category_rule(rule_id: int, data: CategoryRuleUpdate, db: Session = D
 
 
 @router.delete("/rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_category_rule(rule_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def delete_category_rule(rule_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     rule = db.query(CategoryRule).filter(CategoryRule.id == rule_id, CategoryRule.user_id == current_user.id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -64,7 +64,7 @@ class RecategorizeRequest(BaseModel):
 
 
 @router.post("/recategorize")
-def recategorize(payload: RecategorizeRequest = RecategorizeRequest(), db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def recategorize(payload: RecategorizeRequest = RecategorizeRequest(), db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     """Apply keyword rules to existing transactions. By default only touches rows
     with no/Unknown/Others category; set only_uncategorized=false to re-tag all."""
     rules = get_active_rules(db, current_user.id)
@@ -103,7 +103,7 @@ def list_categories(
 def create_category(
     data: CategoryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_write_access),
 ):
     name = (data.name or "").strip()
     if not name:
@@ -129,7 +129,7 @@ def update_category(
     category_id: int,
     data: CategoryUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_write_access),
 ):
     category = (
         db.query(Category)
@@ -153,7 +153,7 @@ def update_category(
 def delete_category(
     category_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(require_write_access),
 ):
     category = (
         db.query(Category)

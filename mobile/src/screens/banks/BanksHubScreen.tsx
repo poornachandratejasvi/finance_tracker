@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-nati
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
+import { useAuth } from "../../context/AuthContext";
 import { BanksStackParamList } from "../../navigation/BanksNavigator";
 
 type Props = NativeStackScreenProps<BanksStackParamList, "BanksHub">;
@@ -28,14 +29,20 @@ const ROWS: Row[] = [
   { key: "RewardPoints", label: "Reward Points", icon: "🎁", hint: "Track points balance, usage, and upcoming expiries" },
 ];
 
+const ADMIN_ROWS: Row[] = [
+  { key: "FamilyDashboard", label: "Family Dashboard", icon: "👨‍👩‍👧", hint: "Every household member's accounts and balances combined" },
+];
+
 export default function BanksHubScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  const { user } = useAuth();
+  const rows = user?.role === "ADMIN" ? [...ROWS, ...ADMIN_ROWS] : ROWS;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.list}>
-        {ROWS.map((row) => (
+        {rows.map((row) => (
           <TouchableOpacity
             key={row.key}
             style={styles.row}

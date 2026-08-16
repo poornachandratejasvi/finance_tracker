@@ -6,7 +6,7 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.core.time_utils import utcnow
-from app.api.endpoints.auth import get_current_active_user
+from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.models.models import User, Transaction, Bank, TransactionLabel, Label
 from app.schemas.transaction import (
     TransactionCreate,
@@ -18,7 +18,7 @@ from app.schemas.transaction import (
 )
 from app.services.transaction_service import TransactionService
 from app.utils.parsing import parse_csv_list as _parse_csv_list
-from app.core.household import household_user_ids
+from app.core.household import visible_user_ids
 
 router = APIRouter()
 
@@ -60,10 +60,10 @@ def list_transactions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """List transactions visible to the caller — their own plus any household
-    member's (a shared family/couple wallet), see app.core.household."""
+    """List transactions visible to the caller — their own, or their whole
+    household's if they're an admin (see app.core.household.visible_user_ids)."""
     from sqlalchemy import asc as _asc
-    household_ids = household_user_ids(db, current_user)
+    household_ids = visible_user_ids(db, current_user)
     query = db.query(Transaction).filter(Transaction.user_id.in_(household_ids))
 
     bank_ids = _parse_csv_list(bank_id, int)
@@ -232,7 +232,7 @@ def get_duplicates(
 def create_transaction(
     trans_data: TransactionCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Create a new transaction manually"""
     # Ensure the target bank belongs to the current user (no cross-user attribution).
@@ -504,7 +504,7 @@ def update_transaction(
     transaction_id: int,
     trans_data: TransactionUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Update transaction"""
     transaction = db.query(Transaction).filter(
@@ -534,7 +534,7 @@ def update_transaction(
 def delete_transaction(
     transaction_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Delete transaction"""
     transaction = db.query(Transaction).filter(
@@ -560,7 +560,7 @@ def delete_transaction(
 def bulk_delete_transactions(
     payload: BulkDeleteRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Delete many transactions at once (scoped to the current user)."""
     ids = payload.transaction_ids or []
@@ -579,7 +579,7 @@ def bulk_delete_transactions(
 def bulk_confirm_transactions(
     payload: BulkDeleteRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Mark many Pending transactions as Confirmed at once — the manual fallback for
     when automatic reconciliation (matching a statement/alert transaction) never finds
@@ -605,7 +605,7 @@ def bulk_confirm_transactions(
 def mark_not_duplicate(
     transaction_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Mark transaction as not duplicate"""
     transaction = db.query(Transaction).filter(
@@ -635,7 +635,7 @@ def bulk_edit_transactions(
     transaction_ids: List[int],
     updates: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Bulk edit multiple transactions"""
     
@@ -704,7 +704,7 @@ def update_custom_fields(
     transaction_id: int,
     custom_fields: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """Update custom fields for a transaction"""
     
@@ -741,7 +741,7 @@ def update_custom_fields(
 def remove_duplicates(
     keep_first: bool = True,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(require_write_access)
 ):
     """
     Find and remove duplicate transactions.

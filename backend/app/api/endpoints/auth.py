@@ -242,3 +242,17 @@ def get_current_admin_user(current_user: User = Depends(get_current_active_user)
             detail="Administrator privileges required",
         )
     return current_user
+
+
+def require_write_access(current_user: User = Depends(get_current_active_user)) -> User:
+    """Block a VIEWER (read-only family/friend account) from creating, editing,
+    or deleting financial records. Use in place of get_current_active_user on
+    mutating routes (POST/PUT/DELETE) for transactions, banks, budgets, goals,
+    templates, reward points, imports, and PDFs -- everywhere a VIEWER should be
+    able to look but not touch."""
+    if current_user.role == UserRole.VIEWER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has read-only access",
+        )
+    return current_user

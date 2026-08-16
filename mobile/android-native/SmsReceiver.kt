@@ -9,21 +9,19 @@ import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.regex.Pattern
 
-// Mirrors the backend's alert-email parsing (app/services/alert_email_service.py) but for
-// bank transaction SMS instead of email -- iOS has no equivalent since Apple doesn't allow
-// reading SMS content at all; this is Android-only. Uses only java.net/org.json (Android's
-// standard library) rather than adding an HTTP client dependency, since a debug APK isn't
-// R8/ProGuard-stripped and this needs no more than a POST with a couple of headers.
+// Android can read the SMS inbox directly (iOS can't -- Apple gives no app any access to
+// SMS content, hence the Shortcuts-forwarding approach on that platform instead). This
+// receiver forwards the raw sender + body to /api/ingest/sms, which does the amount/
+// credit-debit parsing AND best-effort bank identification server-side (matching the
+// sender/body against the user's own configured banks by account-number-last-4-digits or
+// short code -- see ingest.py's _match_bank_from_sms) so the transaction lands on the right
+// account instead of an unattributed "External" bucket, the same server-side logic the
+// iOS Shortcut path already relies on. Keeping the parsing server-side (not duplicated here
+// in Kotlin) means a fix or improvement to the matching only has to happen once.
 class SmsReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "FinanceTrackerSms"
-        private val AMOUNT_PATTERN: Pattern = Pattern.compile(
-            "(?:Rs\\.?|INR)\\s?([0-9,]+(?:\\.[0-9]{1,2})?)",
-            Pattern.CASE_INSENSITIVE
-        )
-        private val CREDIT_PATTERN = Regex("credited|received|deposited", RegexOption.IGNORE_CASE)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -40,7 +38,7 @@ class SmsReceiver : BroadcastReceiver() {
                 for (message in messages) {
                     val body = message.messageBody ?: continue
                     val sender = message.originatingAddress ?: "SMS"
-                    parseAndSend(sender, body)
+                    send(sender, body)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing SMS", e)
@@ -50,23 +48,13 @@ class SmsReceiver : BroadcastReceiver() {
         }.start()
     }
 
-    private fun parseAndSend(sender: String, body: String) {
-        val matcher = AMOUNT_PATTERN.matcher(body)
-        if (!matcher.find()) return
-        val amountStr = matcher.group(1)?.replace(",", "") ?: return
-        val amount = amountStr.toDoubleOrNull() ?: return
-        if (amount <= 0) return
-
-        val type = if (CREDIT_PATTERN.containsMatchIn(body)) "credit" else "debit"
-
+    private fun send(sender: String, body: String) {
         val payload = JSONObject()
-        payload.put("amount", amount)
-        payload.put("description", body.take(140))
-        payload.put("type", type)
-        payload.put("notes", "Auto-detected from SMS ($sender)")
+        payload.put("text", body)
+        payload.put("sender", sender)
 
         try {
-            val url = URL("${ApiConfig.SERVER_URL}/api/ingest/transaction")
+            val url = URL("${ApiConfig.SERVER_URL}/api/ingest/sms")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
             connection.setRequestProperty("X-API-Key", ApiConfig.API_KEY)
@@ -76,10 +64,12 @@ class SmsReceiver : BroadcastReceiver() {
             connection.readTimeout = 15000
             OutputStreamWriter(connection.outputStream).use { it.write(payload.toString()) }
             val code = connection.responseCode
+            // A 422 here just means this particular SMS had no Rs./INR amount in it
+            // (e.g. an OTP or promo text) -- expected and not an error worth alarming on.
             Log.i(TAG, "Ingest response: $code")
             connection.disconnect()
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to send transaction", e)
+            Log.e(TAG, "Failed to send SMS to ingest endpoint", e)
         }
     }
 }
