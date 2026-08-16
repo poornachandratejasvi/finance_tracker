@@ -456,6 +456,7 @@ export interface RewardPointEntry {
   entry_type: RewardEntryType;
   points: number;
   expiry_date: string | null;
+  entry_date: string | null;
   description: string | null;
   source: "manual" | "auto" | "ai";
   created_at: string;

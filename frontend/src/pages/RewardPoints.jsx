@@ -43,6 +43,9 @@ export default function RewardPoints() {
   const [entries, setEntries] = useState([]);
   const [monthly, setMonthly] = useState([]);
   const [monthlyBankId, setMonthlyBankId] = useState('');
+  const [historyBankId, setHistoryBankId] = useState('');
+  const [historyType, setHistoryType] = useState('');
+  const [historySort, setHistorySort] = useState('date_desc');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [err, setErr] = useState('');
@@ -111,6 +114,17 @@ export default function RewardPoints() {
   };
 
   const bankName = (id) => banks.find((b) => b.id === id)?.name || summaries.find((s) => s.bank_id === id)?.bank_name || id;
+
+  const historyEntries = entries
+    .filter((e) => !historyBankId || e.bank_id === historyBankId)
+    .filter((e) => !historyType || e.entry_type === historyType)
+    .sort((a, b) => {
+      if (historySort === 'points_desc') return b.points - a.points;
+      if (historySort === 'points_asc') return a.points - b.points;
+      const da = new Date(a.entry_date || a.created_at);
+      const db = new Date(b.entry_date || b.created_at);
+      return historySort === 'date_asc' ? da - db : db - da;
+    });
 
   return (
     <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
@@ -220,7 +234,41 @@ export default function RewardPoints() {
       </Paper>
 
       <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" gutterBottom>History</Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+          <Typography variant="h6">History</Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <TextField
+              select size="small" label="Card" value={historyBankId} sx={{ minWidth: 160 }}
+              onChange={(e) => setHistoryBankId(e.target.value)}
+            >
+              <MenuItem value="">All cards</MenuItem>
+              {banks.map((b) => (
+                <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select size="small" label="Type" value={historyType} sx={{ minWidth: 140 }}
+              onChange={(e) => setHistoryType(e.target.value)}
+            >
+              <MenuItem value="">All types</MenuItem>
+              {ENTRY_TYPES.map((t) => (
+                <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select size="small" label="Sort by" value={historySort} sx={{ minWidth: 170 }}
+              onChange={(e) => setHistorySort(e.target.value)}
+            >
+              <MenuItem value="date_desc">Newest first</MenuItem>
+              <MenuItem value="date_asc">Oldest first</MenuItem>
+              <MenuItem value="points_desc">Points: high to low</MenuItem>
+              <MenuItem value="points_asc">Points: low to high</MenuItem>
+            </TextField>
+          </Box>
+        </Box>
+        {historyEntries.length === 0 ? (
+          <Typography color="text.secondary">No entries match these filters.</Typography>
+        ) : (
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -234,7 +282,7 @@ export default function RewardPoints() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {entries.map((e) => (
+            {historyEntries.map((e) => (
               <TableRow key={e.id}>
                 <TableCell>{bankName(e.bank_id)}</TableCell>
                 <TableCell sx={{ textTransform: 'capitalize' }}>{e.entry_type}</TableCell>
@@ -253,6 +301,7 @@ export default function RewardPoints() {
             ))}
           </TableBody>
         </Table>
+        )}
       </Paper>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>

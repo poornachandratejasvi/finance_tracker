@@ -25,6 +25,14 @@ function monthLabel(month: string): string {
 
 const ENTRY_TYPES: RewardEntryType[] = ["earned", "redeemed", "expired", "adjustment"];
 
+type SortMode = "date_desc" | "date_asc" | "points_desc" | "points_asc";
+const SORT_MODES: { value: SortMode; label: string }[] = [
+  { value: "date_desc", label: "Newest" },
+  { value: "date_asc", label: "Oldest" },
+  { value: "points_desc", label: "Points ↓" },
+  { value: "points_asc", label: "Points ↑" },
+];
+
 export default function RewardPointsScreen() {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
@@ -34,6 +42,9 @@ export default function RewardPointsScreen() {
   const [entries, setEntries] = useState<RewardPointEntry[]>([]);
   const [monthly, setMonthly] = useState<RewardPointsMonth[]>([]);
   const [loading, setLoading] = useState(true);
+  const [historyBankId, setHistoryBankId] = useState<number | null>(null);
+  const [historyType, setHistoryType] = useState<RewardEntryType | null>(null);
+  const [historySort, setHistorySort] = useState<SortMode>("date_desc");
 
   const [modalVisible, setModalVisible] = useState(false);
   const [bankId, setBankId] = useState<number | null>(null);
@@ -124,6 +135,17 @@ export default function RewardPointsScreen() {
   const bankName = (id: number) =>
     banks.find((b) => b.id === id)?.name || summaries.find((s) => s.bank_id === id)?.bank_name || String(id);
 
+  const historyEntries = entries
+    .filter((e) => historyBankId === null || e.bank_id === historyBankId)
+    .filter((e) => historyType === null || e.entry_type === historyType)
+    .sort((a, b) => {
+      if (historySort === "points_desc") return b.points - a.points;
+      if (historySort === "points_asc") return a.points - b.points;
+      const da = new Date(a.entry_date || a.created_at).getTime();
+      const db = new Date(b.entry_date || b.created_at).getTime();
+      return historySort === "date_asc" ? da - db : db - da;
+    });
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -204,8 +226,60 @@ export default function RewardPointsScreen() {
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>History</Text>
-        {entries.length === 0 && <Text style={styles.empty}>No entries yet.</Text>}
-        {entries.map((e) => (
+
+        <Text style={styles.filterLabel}>Card</Text>
+        <View style={styles.chipRow}>
+          <TouchableOpacity
+            style={[styles.chip, historyBankId === null && styles.chipActive]}
+            onPress={() => setHistoryBankId(null)}
+          >
+            <Text style={[styles.chipText, historyBankId === null && styles.chipTextActive]}>All</Text>
+          </TouchableOpacity>
+          {banks.map((b) => (
+            <TouchableOpacity
+              key={b.id}
+              style={[styles.chip, historyBankId === b.id && styles.chipActive]}
+              onPress={() => setHistoryBankId(b.id)}
+            >
+              <Text style={[styles.chipText, historyBankId === b.id && styles.chipTextActive]}>{b.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.filterLabel}>Type</Text>
+        <View style={styles.chipRow}>
+          <TouchableOpacity
+            style={[styles.chip, historyType === null && styles.chipActive]}
+            onPress={() => setHistoryType(null)}
+          >
+            <Text style={[styles.chipText, historyType === null && styles.chipTextActive]}>All</Text>
+          </TouchableOpacity>
+          {ENTRY_TYPES.map((t) => (
+            <TouchableOpacity
+              key={t}
+              style={[styles.chip, historyType === t && styles.chipActive]}
+              onPress={() => setHistoryType(t)}
+            >
+              <Text style={[styles.chipText, historyType === t && styles.chipTextActive]}>{t}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.filterLabel}>Sort</Text>
+        <View style={styles.chipRow}>
+          {SORT_MODES.map((s) => (
+            <TouchableOpacity
+              key={s.value}
+              style={[styles.chip, historySort === s.value && styles.chipActive]}
+              onPress={() => setHistorySort(s.value)}
+            >
+              <Text style={[styles.chipText, historySort === s.value && styles.chipTextActive]}>{s.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {historyEntries.length === 0 && <Text style={styles.empty}>No entries match these filters.</Text>}
+        {historyEntries.map((e) => (
           <TouchableOpacity key={e.id} style={styles.entryRow} onLongPress={() => onDelete(e)}>
             <View style={styles.rowMain}>
               <Text style={styles.entryBank}>
@@ -222,7 +296,7 @@ export default function RewardPointsScreen() {
             </Text>
           </TouchableOpacity>
         ))}
-        {entries.length > 0 && <Text style={styles.hint}>Long-press an entry to delete it.</Text>}
+        {historyEntries.length > 0 && <Text style={styles.hint}>Long-press an entry to delete it.</Text>}
       </View>
 
       <Modal visible={modalVisible} transparent animationType="fade">
@@ -318,6 +392,7 @@ const makeStyles = (c: ThemeColors) =>
     balance: { fontSize: 26, fontWeight: "700", color: c.text, marginTop: 4 },
     meta: { fontSize: 12, color: c.textSecondary, marginTop: 2 },
     sectionTitle: { fontSize: 15, fontWeight: "700", color: c.text, marginBottom: 10 },
+    filterLabel: { fontSize: 11, fontWeight: "600", color: c.textSecondary, marginTop: 8, marginBottom: 4 },
     monthRow: {
       flexDirection: "row",
       justifyContent: "space-between",
