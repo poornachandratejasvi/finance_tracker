@@ -151,8 +151,11 @@ def _process_pdf_task(
         pdf_statement.is_processed = True
         pdf_statement.error_message = None
 
-        # Parser found nothing at all — try the AI fallback before giving up.
-        ai_transaction_extraction.fill_missing_transactions(db, user_id, parse_result)
+        if bank.bank_type == "investment":
+            parse_result["transactions"] = []
+        else:
+            # Parser found nothing at all — try the AI fallback before giving up.
+            ai_transaction_extraction.fill_missing_transactions(db, user_id, parse_result)
 
         transactions_added = 0
         for trans_data in parse_result["transactions"]:
@@ -186,6 +189,10 @@ def _process_pdf_task(
                 investment_service.record_ppf_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
             except Exception:
                 logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
+            try:
+                investment_service.record_cas_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
+            except Exception:
+                logger.warning("CAS extraction failed for bank %s", bank.id, exc_info=True)
         db.commit()
 
         return {
@@ -1010,8 +1017,11 @@ def resync_pdfs(
                 pdf_statement.statement_period_end = parse_result['statement_period']['end']
                 pdf_statement.is_processed = True
 
-                # Parser found nothing at all — try the AI fallback before giving up.
-                ai_transaction_extraction.fill_missing_transactions(db, current_user.id, parse_result)
+                if bank.bank_type == "investment":
+                    parse_result["transactions"] = []
+                else:
+                    # Parser found nothing at all — try the AI fallback before giving up.
+                    ai_transaction_extraction.fill_missing_transactions(db, current_user.id, parse_result)
 
                 # Add transactions
                 for trans_data in parse_result['transactions']:
@@ -1020,7 +1030,7 @@ def resync_pdfs(
                         trans_data['category'] = TransactionService.categorize_transaction(
                             trans_data['description']
                         )
-                    
+
                     transaction, _reconciled = create_or_reconcile_transaction(
                         db, current_user.id, bank.id, trans_data, pdf_statement_id=pdf_statement.id
                     )
@@ -1044,6 +1054,10 @@ def resync_pdfs(
                     investment_service.record_ppf_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
                 except Exception:
                     logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
+                try:
+                    investment_service.record_cas_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
+                except Exception:
+                    logger.warning("CAS extraction failed for bank %s", bank.id, exc_info=True)
                 db.commit()
                 pdfs_processed += 1
                 logger.info(f"Saved {len(parse_result['transactions'])} transactions from {pdf_statement.file_name}")
@@ -1242,8 +1256,11 @@ def update_pdf_password(
     except Exception:
         logger.debug("ensure_decrypted_pdf failed", exc_info=True)
 
-    # Parser found nothing at all — try the AI fallback before giving up.
-    ai_transaction_extraction.fill_missing_transactions(db, current_user.id, parse_result)
+    if bank.bank_type == "investment":
+        parse_result["transactions"] = []
+    else:
+        # Parser found nothing at all — try the AI fallback before giving up.
+        ai_transaction_extraction.fill_missing_transactions(db, current_user.id, parse_result)
 
     transactions_added = 0
     for trans_data in parse_result["transactions"]:
@@ -1269,6 +1286,10 @@ def update_pdf_password(
         investment_service.record_ppf_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
     except Exception:
         logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
+    try:
+        investment_service.record_cas_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
+    except Exception:
+        logger.warning("CAS extraction failed for bank %s", bank.id, exc_info=True)
     db.commit()
 
     return {

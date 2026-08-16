@@ -18,7 +18,7 @@ import { BanksStackParamList } from "../../navigation/BanksNavigator";
 
 type Props = NativeStackScreenProps<BanksStackParamList, "BankForm">;
 
-const BANK_TYPES = ["savings", "credit", "other"];
+const BANK_TYPES = ["savings", "credit", "investment", "other"];
 const COLORS = ["#1b6b4c", "#b3261e", "#0b5fff", "#b8860b", "#7d3fc4", "#008080"];
 
 export default function BankFormScreen({ route, navigation }: Props) {
@@ -107,6 +107,14 @@ export default function BankFormScreen({ route, navigation }: Props) {
           </TouchableOpacity>
         ))}
       </View>
+      {bankType === "investment" && (
+        <Text style={styles.hint}>
+          Won't show up as a bank balance — this just lets statement emails from this
+          sender (e.g. eCAS@cdslstatement.com for a CDSL CAS) get auto-downloaded, so
+          their holdings feed the Investments tab instead. Add the PDF password below
+          like any other bank once it's created.
+        </Text>
+      )}
 
       <Text style={styles.label}>Currency code</Text>
       <TextInput
@@ -164,6 +172,7 @@ const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
     label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 16, marginBottom: 6 },
+    hint: { fontSize: 11, color: c.textSecondary, marginTop: 6, fontStyle: "italic" },
     input: {
       borderWidth: 1,
       borderColor: c.inputBorder,

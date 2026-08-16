@@ -196,3 +196,26 @@ def record_ppf_statement(db, bank, text: str, statement_date) -> Optional[Invest
     db.commit()
     db.refresh(entry)
     return entry
+
+
+def record_cas_statement(db, bank, text: str, statement_date) -> None:
+    """Best-effort: parse a CDSL/NSDL Consolidated Account Statement (CAS) --
+    a single statement covering every mutual fund folio and demat holding a
+    user has, quite unlike a normal single-account bank statement.
+
+    NOT YET IMPLEMENTED. This is a deliberate no-op placeholder until it's
+    been verified against a REAL CAS PDF's actual text layout -- same
+    "extract against real production data before shipping regex" discipline
+    as every other statement-format-specific parser in this app (e.g.
+    extract_ppf_section, extract_reward_points_breakdown). Guessing a CAS
+    layout blind risks silently creating wrong InvestmentAccount values,
+    which is worse than doing nothing until the real structure is in hand.
+    """
+    if not text:
+        return None
+    logger.info(
+        "CAS statement received for bank %s (%d chars, statement_date=%s) -- "
+        "holdings parsing not yet implemented, no-op for now",
+        bank.id, len(text), statement_date,
+    )
+    return None

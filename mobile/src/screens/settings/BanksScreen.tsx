@@ -76,9 +76,13 @@ export default function BanksScreen({ navigation }: Props) {
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.meta}>{item.bank_type || "other"}</Text>
             </View>
-            <Text style={styles.balance}>
-              {formatCurrency(item.current_balance ?? item.computed_balance ?? 0, item.currency_code)}
-            </Text>
+            {item.bank_type === "investment" ? (
+              <Text style={styles.meta}>Feeds Investments</Text>
+            ) : (
+              <Text style={styles.balance}>
+                {formatCurrency(item.current_balance ?? item.computed_balance ?? 0, item.currency_code)}
+              </Text>
+            )}
           </TouchableOpacity>
         )}
       />

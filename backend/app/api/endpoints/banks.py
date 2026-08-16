@@ -628,8 +628,14 @@ async def upload_bank_pdf(
         pdf_statement.is_processed = True
         bank_email.is_processed = True
 
-        # Parser found nothing at all — try the AI fallback before giving up.
-        ai_transaction_extraction.fill_missing_transactions(db, owner_id, parse_result)
+        # Investment-linked "banks" (e.g. a CDSL CAS statement) aren't real
+        # accounts -- never let the AI fallback hallucinate "transactions"
+        # out of a holdings table; see investment_service.record_cas_statement.
+        if bank.bank_type == "investment":
+            parse_result["transactions"] = []
+        else:
+            # Parser found nothing at all — try the AI fallback before giving up.
+            ai_transaction_extraction.fill_missing_transactions(db, owner_id, parse_result)
 
         # Add transactions
         transactions_added = 0
@@ -663,6 +669,12 @@ async def upload_bank_pdf(
             )
         except Exception:
             logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
+        try:
+            investment_service.record_cas_statement(
+                db, bank, parse_result.get("_raw_text"), bank_email.received_date,
+            )
+        except Exception:
+            logger.warning("CAS extraction failed for bank %s", bank.id, exc_info=True)
         db.commit()
 
         logger.info(f"Added {transactions_added} transactions to database")

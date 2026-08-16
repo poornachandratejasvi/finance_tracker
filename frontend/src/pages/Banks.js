@@ -486,7 +486,8 @@ function Banks() {
 
   const bankTypeLabel = (bank) =>
     bank.bank_type === 'credit' ? 'Credit account'
-      : bank.bank_type === 'savings' ? 'Savings account' : 'General';
+      : bank.bank_type === 'savings' ? 'Savings account'
+      : bank.bank_type === 'investment' ? 'Feeds Investments (see Investments page)' : 'General';
 
   // Days since an ISO timestamp (naive-UTC safe). null when missing/invalid.
   const daysSince = (iso) => {
@@ -914,8 +915,18 @@ function Banks() {
             >
               <MenuItem value="savings">Savings Account</MenuItem>
               <MenuItem value="credit">Credit Card</MenuItem>
+              <MenuItem value="investment">Investment Statement (e.g. CDSL/NSDL CAS)</MenuItem>
               <MenuItem value="other">Other</MenuItem>
             </TextField>
+            {newBank.bank_type === 'investment' && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                This won't show up as a bank balance — it's just a way to let statement
+                emails from this sender (e.g. eCAS@cdslstatement.com for CDSL's Consolidated
+                Account Statement) get auto-downloaded, so their holdings can feed the
+                Investments page instead. Add the PDF password below like any other bank
+                once it's created.
+              </Alert>
+            )}
             <TextField
               fullWidth
               label="Account Number (Optional)"

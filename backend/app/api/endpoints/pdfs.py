@@ -502,8 +502,14 @@ def reprocess_pdf(
         pdf.is_processed = True
         pdf.error_message = None  # clear any prior failure
 
-        # Parser found nothing at all — try the AI fallback before giving up.
-        ai_transaction_extraction.fill_missing_transactions(db, current_user.id, parse_result)
+        # Investment-linked "banks" (e.g. a CDSL CAS statement) aren't real
+        # accounts -- never let the AI fallback hallucinate "transactions"
+        # out of a holdings table; see investment_service.record_cas_statement.
+        if bank.bank_type == "investment":
+            parse_result["transactions"] = []
+        else:
+            # Parser found nothing at all — try the AI fallback before giving up.
+            ai_transaction_extraction.fill_missing_transactions(db, current_user.id, parse_result)
 
         # Add transactions
         transactions_added = 0
@@ -513,7 +519,7 @@ def reprocess_pdf(
                 trans_data['category'] = TransactionService.categorize_transaction(
                     trans_data['description']
                 )
-            
+
             transaction, _reconciled = create_or_reconcile_transaction(
                 db, current_user.id, bank.id, trans_data, pdf_statement_id=pdf.id
             )
@@ -538,6 +544,10 @@ def reprocess_pdf(
             investment_service.record_ppf_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
         except Exception:
             logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
+        try:
+            investment_service.record_cas_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
+        except Exception:
+            logger.warning("CAS extraction failed for bank %s", bank.id, exc_info=True)
 
         db.commit()
 
@@ -638,8 +648,11 @@ def _reprocess_pdf_worker(pdf_id: int, user_id: int) -> dict:
         pdf.is_processed = True
         pdf.error_message = None
 
-        # Parser found nothing at all — try the AI fallback before giving up.
-        ai_transaction_extraction.fill_missing_transactions(db, user_id, parse_result)
+        if bank.bank_type == "investment":
+            parse_result["transactions"] = []
+        else:
+            # Parser found nothing at all — try the AI fallback before giving up.
+            ai_transaction_extraction.fill_missing_transactions(db, user_id, parse_result)
 
         transactions_added = 0
         for trans_data in parse_result['transactions']:
@@ -671,6 +684,10 @@ def _reprocess_pdf_worker(pdf_id: int, user_id: int) -> dict:
             investment_service.record_ppf_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
         except Exception:
             logger.warning("PPF extraction failed for bank %s", bank.id, exc_info=True)
+        try:
+            investment_service.record_cas_statement(db, bank, parse_result.get("_raw_text"), bank_email.received_date)
+        except Exception:
+            logger.warning("CAS extraction failed for bank %s", bank.id, exc_info=True)
         db.commit()
 
         return {
