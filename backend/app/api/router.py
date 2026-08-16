@@ -34,3 +34,4 @@ api_router.include_router(gmail_accounts.router, prefix="/gmail-accounts", tags=
 api_router.include_router(watchers.router, prefix="/watchers", tags=["Transaction Watchers"])
 api_router.include_router(imports.router, prefix="/imports", tags=["Imports"])
 api_router.include_router(reward_points.router, prefix="/reward-points", tags=["Reward Points"])
+api_router.include_router(family_dashboard.router, prefix="/family-dashboard", tags=["Family Dashboard"])
