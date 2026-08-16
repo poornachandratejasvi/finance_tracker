@@ -94,8 +94,18 @@ function Transactions() {
   const [total, setTotal] = useState(0);
 
   const [filters, setFilters] = useState(() => {
-    const bankId = new URLSearchParams(location.search).get('bank_id');
-    return bankId ? { ...INITIAL_FILTERS, accountIds: [Number(bankId)] } : INITIAL_FILTERS;
+    const params = new URLSearchParams(location.search);
+    const bankId = params.get('bank_id');
+    const search = params.get('search');
+    const category = params.get('category');
+    const labelId = params.get('label_id');
+    return {
+      ...INITIAL_FILTERS,
+      ...(bankId ? { accountIds: [Number(bankId)] } : {}),
+      ...(search ? { search } : {}),
+      ...(category ? { categoryNames: [category] } : {}),
+      ...(labelId ? { labelIds: [Number(labelId)] } : {}),
+    };
   });
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [sortBy, setSortBy] = useState('date');

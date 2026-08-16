@@ -822,4 +822,10 @@ export const restoreBackupUpload = async (file) => {
   return (await api.post('/api/backup/restore-upload', form, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
 };
 
+// Universal search
+export const globalSearch = async (q) => {
+  const response = await api.get('/api/search/', { params: { q } });
+  return response.data;
+};
+
 export default api;

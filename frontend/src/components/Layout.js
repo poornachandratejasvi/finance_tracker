@@ -36,6 +36,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
 import GroupsIcon from '@mui/icons-material/Groups';
+import GlobalSearch from './GlobalSearch.jsx';
 
 const DRAWER_WIDTH = 236;
 
@@ -166,6 +167,8 @@ const Layout = ({ children }) => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1, cursor: 'pointer' }} onClick={() => navigate('/dashboard')}>
             Finance Tracker
           </Typography>
+
+          <GlobalSearch />
 
           <Tooltip title="Background activity">
             <IconButton color="inherit" onClick={handleActivityOpen} sx={{ ml: 1 }}>

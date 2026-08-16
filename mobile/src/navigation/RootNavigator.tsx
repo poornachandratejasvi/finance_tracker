@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -11,12 +11,14 @@ import DashboardScreen from "../screens/DashboardScreen";
 import TransactionsScreen from "../screens/TransactionsScreen";
 import AddTransactionScreen from "../screens/AddTransactionScreen";
 import AnalyticsScreen from "../screens/AnalyticsScreen";
+import SearchScreen from "../screens/SearchScreen";
 import BanksNavigator from "./BanksNavigator";
 import SettingsNavigator from "./SettingsNavigator";
 
 export type RootStackParamList = {
   Login: undefined;
   Tabs: undefined;
+  Search: undefined;
 };
 
 export type TabParamList = {
@@ -35,13 +37,23 @@ function tabIcon(emoji: string) {
   return () => <Text style={{ fontSize: 20 }}>{emoji}</Text>;
 }
 
-function AppTabs() {
+function AppTabs({ navigation }: any) {
   return (
     <Tab.Navigator screenOptions={{ headerTitleAlign: "center" }}>
       <Tab.Screen
         name="Dashboard"
         component={DashboardScreen}
-        options={{ tabBarIcon: tabIcon("📊") }}
+        options={{
+          tabBarIcon: tabIcon("📊"),
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => navigation.navigate("Search")}
+              style={{ paddingHorizontal: 16 }}
+            >
+              <Text style={{ fontSize: 18 }}>🔍</Text>
+            </TouchableOpacity>
+          ),
+        }}
       />
       <Tab.Screen
         name="Transactions"
@@ -100,7 +112,14 @@ export default function RootNavigator() {
     <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
-          <Stack.Screen name="Tabs" component={AppTabs} />
+          <>
+            <Stack.Screen name="Tabs" component={AppTabs} />
+            <Stack.Screen
+              name="Search"
+              component={SearchScreen}
+              options={{ headerShown: true, title: "Search", presentation: "modal" }}
+            />
+          </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
         )}
