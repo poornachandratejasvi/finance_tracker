@@ -302,12 +302,12 @@ def delete_bank(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access)
 ):
-    """Delete a bank. Scoped to the caller's own banks -- a VIEWER can't delete anything."""
+    """Delete a bank. Scoped to the caller's own banks, or any household
+    member's if the caller is an admin -- a VIEWER can't delete anything."""
 
-    # Scope to the current user's own bank — never delete another user's bank/data by id.
     bank = db.query(Bank).filter(
         Bank.id == bank_id,
-        Bank.user_id == current_user.id,
+        Bank.user_id.in_(visible_user_ids(db, current_user)),
     ).first()
 
     if not bank:
@@ -364,10 +364,11 @@ def update_bank(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access)
 ):
-    """Update bank. Scoped to the caller's own banks -- a VIEWER can't edit anything."""
+    """Update bank. Scoped to the caller's own banks, or any household
+    member's if the caller is an admin -- a VIEWER can't edit anything."""
     bank = db.query(Bank).filter(
         Bank.id == bank_id,
-        Bank.user_id == current_user.id
+        Bank.user_id.in_(visible_user_ids(db, current_user))
     ).first()
     if not bank:
         raise HTTPException(
@@ -411,7 +412,7 @@ def get_bank_account_password(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
     bank = db.query(Bank).filter(
         Bank.id == bank_id,
-        Bank.user_id == current_user.id
+        Bank.user_id.in_(visible_user_ids(db, current_user))
     ).first()
     if not bank:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bank not found")
@@ -427,7 +428,7 @@ def get_bank_password_candidates(
     """Get password candidates for a bank (used for PDF unlock retries)."""
     bank = db.query(Bank).filter(
         Bank.id == bank_id,
-        Bank.user_id == current_user.id
+        Bank.user_id.in_(visible_user_ids(db, current_user))
     ).first()
 
     if not bank:
@@ -454,7 +455,7 @@ def update_bank_password_candidates(
     """Update password candidates for a bank."""
     bank = db.query(Bank).filter(
         Bank.id == bank_id,
-        Bank.user_id == current_user.id
+        Bank.user_id.in_(visible_user_ids(db, current_user))
     ).first()
 
     if not bank:
@@ -512,18 +513,22 @@ async def upload_bank_pdf(
     """Upload and process bank statement PDF"""
     import logging
     logger = logging.getLogger(__name__)
-    
-    # Validate bank exists AND belongs to the current user (never accept another
-    # user's bank_id, which would also expose their stored account password).
+
+    # Validate bank exists AND is visible to the caller (own bank, or any
+    # household member's bank if the caller is an admin).
     bank = db.query(Bank).filter(
         Bank.id == bank_id,
-        Bank.user_id == current_user.id,
+        Bank.user_id.in_(visible_user_ids(db, current_user)),
     ).first()
     if not bank:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Bank not found"
         )
+    # Attribute everything this upload creates to the bank's actual owner, not
+    # necessarily the caller -- an admin uploading a statement on behalf of a
+    # household member must not have it land in the admin's own data instead.
+    owner_id = bank.user_id
 
     # Validate PDF file
     if not file.filename.lower().endswith('.pdf'):
@@ -553,14 +558,14 @@ async def upload_bank_pdf(
         pdf_password = password or bank.account_password
         
         # Ensure a GmailAccount exists for manual uploads so PDFs appear in listings
-        manual_email = f"manual+{current_user.id}@local"
+        manual_email = f"manual+{owner_id}@local"
         gmail_account = db.query(GmailAccount).filter(
-            GmailAccount.user_id == current_user.id,
+            GmailAccount.user_id == owner_id,
             GmailAccount.email == manual_email
         ).first()
         if not gmail_account:
             gmail_account = GmailAccount(
-                user_id=current_user.id,
+                user_id=owner_id,
                 email=manual_email,
                 credentials='{}',
                 is_active=False
@@ -624,7 +629,7 @@ async def upload_bank_pdf(
         bank_email.is_processed = True
 
         # Parser found nothing at all — try the AI fallback before giving up.
-        ai_transaction_extraction.fill_missing_transactions(db, current_user.id, parse_result)
+        ai_transaction_extraction.fill_missing_transactions(db, owner_id, parse_result)
 
         # Add transactions
         transactions_added = 0
@@ -636,19 +641,19 @@ async def upload_bank_pdf(
                 )
             
             transaction, _reconciled = create_or_reconcile_transaction(
-                db, current_user.id, bank.id, trans_data, pdf_statement_id=pdf_statement.id
+                db, owner_id, bank.id, trans_data, pdf_statement_id=pdf_statement.id
             )
-            apply_auto_rules_and_notify(db, current_user.id, transaction)
+            apply_auto_rules_and_notify(db, owner_id, transaction)
             transactions_added += 1
 
         apply_statement_balance(
             bank, parse_result, fallback_date=bank_email.received_date,
-            ai_context={"db": db, "user_id": current_user.id},
+            ai_context={"db": db, "user_id": owner_id},
         )
         try:
             reward_points_service.record_statement_reward_points(
                 db, bank, pdf_statement.id, parse_result.get("_raw_text"),
-                bank_email.received_date, ai_context={"db": db, "user_id": current_user.id},
+                bank_email.received_date, ai_context={"db": db, "user_id": owner_id},
             )
         except Exception:
             logger.warning("Reward-points extraction failed for bank %s", bank.id, exc_info=True)

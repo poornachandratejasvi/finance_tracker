@@ -234,28 +234,32 @@ def create_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access)
 ):
-    """Create a new transaction manually"""
-    # Ensure the target bank belongs to the current user (no cross-user attribution).
+    """Create a new transaction manually. Scoped to the caller's own banks, or
+    any household member's if the caller is an admin -- attributed to that
+    bank's actual owner, not necessarily the caller, so an admin adding a
+    transaction on a member's behalf doesn't have it land in the admin's own
+    data (same reasoning as banks.py's upload_bank_pdf)."""
     bank = db.query(Bank).filter(
         Bank.id == trans_data.bank_id,
-        Bank.user_id == current_user.id,
+        Bank.user_id.in_(visible_user_ids(db, current_user)),
     ).first()
     if not bank:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Bank not found",
         )
+    owner_id = bank.user_id
 
     # Auto-categorize if not provided: user keyword rules first, then the built-in heuristic.
     if not trans_data.category:
         from app.services.categorization import get_active_rules, match_category
         trans_data.category = (
-            match_category(trans_data.description, get_active_rules(db, current_user.id))
+            match_category(trans_data.description, get_active_rules(db, owner_id))
             or TransactionService.categorize_transaction(trans_data.description)
         )
 
     transaction = Transaction(
-        user_id=current_user.id,
+        user_id=owner_id,
         is_manual=True,  # Mark as manually created
         source="manual",
         **trans_data.dict()
@@ -277,7 +281,7 @@ def create_transaction(
     try:
         from app.services.autorules import get_active_rules, match_rule, apply_rule
         ttype = transaction.transaction_type.value if hasattr(transaction.transaction_type, "value") else str(transaction.transaction_type)
-        rule = match_rule(transaction.description, ttype, get_active_rules(db, current_user.id))
+        rule = match_rule(transaction.description, ttype, get_active_rules(db, owner_id))
         if rule:
             if apply_rule(db, transaction, rule):
                 db.commit()
@@ -287,19 +291,19 @@ def create_transaction(
             # anything, but the user still wants to be told it matched.
             if rule.notify_discord:
                 from app.services import discord_service
-                discord_service.send_rule_match_notification(db, current_user.id, transaction, rule)
+                discord_service.send_rule_match_notification(db, owner_id, transaction, rule)
     except Exception:
         db.rollback()
 
     try:
         from app.services.notification_rules import check_match
-        check_match(db, current_user.id, transaction)
+        check_match(db, owner_id, transaction)
     except Exception:
         db.rollback()
 
     try:
         from app.services.transaction_hooks import check_transaction_watchers
-        check_transaction_watchers(db, current_user.id, transaction)
+        check_transaction_watchers(db, owner_id, transaction)
         db.commit()
     except Exception:
         db.rollback()
@@ -486,7 +490,7 @@ def get_transaction(
     transaction = db.query(Transaction).filter(
         and_(
             Transaction.id == transaction_id,
-            Transaction.user_id == current_user.id
+            Transaction.user_id.in_(visible_user_ids(db, current_user))
         )
     ).first()
     
@@ -510,7 +514,7 @@ def update_transaction(
     transaction = db.query(Transaction).filter(
         and_(
             Transaction.id == transaction_id,
-            Transaction.user_id == current_user.id
+            Transaction.user_id.in_(visible_user_ids(db, current_user))
         )
     ).first()
     
@@ -540,7 +544,7 @@ def delete_transaction(
     transaction = db.query(Transaction).filter(
         and_(
             Transaction.id == transaction_id,
-            Transaction.user_id == current_user.id
+            Transaction.user_id.in_(visible_user_ids(db, current_user))
         )
     ).first()
     
@@ -568,7 +572,7 @@ def bulk_delete_transactions(
         return {"deleted": 0}
     deleted = (
         db.query(Transaction)
-        .filter(Transaction.user_id == current_user.id, Transaction.id.in_(ids))
+        .filter(Transaction.user_id.in_(visible_user_ids(db, current_user)), Transaction.id.in_(ids))
         .delete(synchronize_session=False)
     )
     db.commit()
@@ -591,7 +595,7 @@ def bulk_confirm_transactions(
     confirmed = (
         db.query(Transaction)
         .filter(
-            Transaction.user_id == current_user.id,
+            Transaction.user_id.in_(visible_user_ids(db, current_user)),
             Transaction.id.in_(ids),
             Transaction.is_confirmed.is_(False),
         )
@@ -611,7 +615,7 @@ def mark_not_duplicate(
     transaction = db.query(Transaction).filter(
         and_(
             Transaction.id == transaction_id,
-            Transaction.user_id == current_user.id
+            Transaction.user_id.in_(visible_user_ids(db, current_user))
         )
     ).first()
     
@@ -642,7 +646,7 @@ def bulk_edit_transactions(
     # Get all transactions
     transactions = db.query(Transaction).filter(
         Transaction.id.in_(transaction_ids),
-        Transaction.user_id == current_user.id
+        Transaction.user_id.in_(visible_user_ids(db, current_user))
     ).all()
     
     if not transactions:
@@ -710,7 +714,7 @@ def update_custom_fields(
     
     transaction = db.query(Transaction).filter(
         Transaction.id == transaction_id,
-        Transaction.user_id == current_user.id
+        Transaction.user_id.in_(visible_user_ids(db, current_user))
     ).first()
     
     if not transaction:
@@ -759,7 +763,7 @@ def remove_duplicates(
         func.count(Transaction.id).label('count'),
         func.array_agg(Transaction.id).label('ids')
     ).filter(
-        Transaction.user_id == current_user.id
+        Transaction.user_id.in_(visible_user_ids(db, current_user))
     ).group_by(
         func.date(Transaction.transaction_date),
         Transaction.amount,
