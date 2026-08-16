@@ -1268,9 +1268,23 @@ class PDFParser:
         in_section = False
         section_start = 0
         section_end = len(lines)
+        seen_statement_header = False
 
         for i, line in enumerate(lines):
             upper = line.strip().upper()
+            # BOB emails a single combined PDF whenever the customer has more than
+            # one linked account (e.g. a savings account plus a PPF account) --
+            # each gets its own "Statement of transactions in <account>" block and
+            # its own WITHDRAWAL/DEPOSIT/BALANCE table, one after another in the
+            # same file. Without this, the section below never stops at the first
+            # account's table and silently absorbs the next account's rows too,
+            # so the last "transaction" (and inferred closing balance) ends up
+            # being the OTHER account's, not this one's.
+            if upper.startswith('STATEMENT OF TRANSACTIONS IN'):
+                if seen_statement_header:
+                    section_end = i
+                    break
+                seen_statement_header = True
             if not in_section and 'WITHDRAWAL' in upper and 'DEPOSIT' in upper and 'BALANCE' in upper:
                 in_section = True
                 section_start = i + 1
