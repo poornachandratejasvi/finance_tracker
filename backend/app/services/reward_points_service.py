@@ -71,15 +71,56 @@ def all_bank_summaries(db: Session, user_id: int) -> List[dict]:
     return [bank_summary(db, b) for b in banks]
 
 
+def monthly_summary(db: Session, user_id: int, bank_id: Optional[int] = None, months: int = 12) -> List[dict]:
+    """Per-month {month: 'YYYY-MM', gained, used, expired, net}, most recent
+    first. Grouped by entry_date (the statement's own cycle date for auto/ai
+    entries, falling back to created_at for legacy rows and manual entries).
+
+    'gained'/'used'/'expired' come straight from earned/redeemed/expired
+    entries when a statement's breakdown was extractable. For a bank/month
+    where only a lump 'adjustment' entry exists (no breakdown available, or a
+    manual entry of that type), its net delta is counted as gained (if
+    positive) or used (if negative) -- there's no way to tell "used" from
+    "expired" for an un-broken-down adjustment.
+    """
+    q = db.query(RewardPointEntry).filter(RewardPointEntry.user_id == user_id)
+    if bank_id is not None:
+        q = q.filter(RewardPointEntry.bank_id == bank_id)
+    entries = q.all()
+
+    buckets: dict = {}
+    for e in entries:
+        d = e.entry_date or e.created_at
+        if not d:
+            continue
+        key = d.strftime("%Y-%m")
+        b = buckets.setdefault(key, {"month": key, "gained": 0.0, "used": 0.0, "expired": 0.0, "net": 0.0})
+        b["net"] += e.points
+        if e.entry_type == "earned":
+            b["gained"] += e.points
+        elif e.entry_type == "redeemed":
+            b["used"] += -e.points
+        elif e.entry_type == "expired":
+            b["expired"] += -e.points
+        elif e.points > 0:
+            b["gained"] += e.points
+        else:
+            b["used"] += -e.points
+
+    ordered = sorted(buckets.values(), key=lambda b: b["month"], reverse=True)
+    return ordered[:months]
+
+
 def create_entry(
     db: Session, user_id: int, bank_id: int, entry_type: str, points: float,
     expiry_date=None, description: Optional[str] = None,
 ) -> RewardPointEntry:
     signed = points if entry_type in ("earned",) else -abs(points) if entry_type in ("redeemed", "expired") else points
+    now = utcnow()
     entry = RewardPointEntry(
         user_id=user_id, bank_id=bank_id, entry_type=entry_type, points=signed,
         expiry_date=expiry_date if entry_type == "earned" else None,
-        description=description, source="manual",
+        entry_date=now, description=description, source="manual",
     )
     db.add(entry)
     db.commit()
@@ -102,13 +143,23 @@ def record_statement_reward_points(
     db: Session, bank: Bank, pdf_statement_id: Optional[int], text: str,
     statement_date, ai_context: Optional[dict] = None,
 ) -> Optional[RewardPointEntry]:
-    """Best-effort: extract this statement's printed reward-points closing
-    balance (regex first, AI fallback) and reconcile the ledger's running total
-    to it via a single 'adjustment' entry. Returns the created entry, or None if
-    nothing was extracted, the statement is older than what's already
-    reconciled, or a reconciliation entry already exists for this statement.
-    Never raises -- callers treat this as non-critical, same as
-    apply_statement_balance's own AI fallback.
+    """Best-effort: extract this statement's printed reward-points activity and
+    reconcile the ledger's running total to it, tagging every entry with this
+    statement's own cycle date (statement_date) so the monthly gained/used/
+    expired view groups it into the right month even when processed later.
+
+    When the statement prints a per-cycle breakdown (opening/earned/disbursed/
+    adjusted-lapsed -- see PDFParser.extract_reward_points_breakdown), records
+    separate 'earned'/'redeemed'/'expired' entries for it plus a small residual
+    'adjustment' entry for whatever gap remains versus the closing total (so the
+    running balance always matches the issuer's printed figure exactly, even if
+    the breakdown regex is imperfect). Otherwise falls back to a single
+    'adjustment' entry for the whole delta, same as before.
+
+    Returns the last entry created, or None if nothing was extracted, the
+    statement is older than what's already reconciled, or a reconciliation
+    entry already exists for this statement. Never raises -- callers treat this
+    as non-critical, same as apply_statement_balance's own AI fallback.
     """
     if (getattr(bank, "bank_type", "") or "").lower() != "credit":
         return None
@@ -148,14 +199,40 @@ def record_statement_reward_points(
         bank.reward_points_updated_at = statement_date
         return None
 
-    entry = RewardPointEntry(
-        user_id=bank.user_id, bank_id=bank.id, pdf_statement_id=pdf_statement_id,
-        entry_type="adjustment", points=delta, source=source,
-        description=f"Reconciled to statement's printed balance ({new_total:,.0f} pts)",
-    )
-    db.add(entry)
+    breakdown = PDFParser.extract_reward_points_breakdown(text)
+    last_entry = None
+
+    def _add(entry_type: str, points: float, description: str) -> None:
+        nonlocal last_entry
+        last_entry = RewardPointEntry(
+            user_id=bank.user_id, bank_id=bank.id, pdf_statement_id=pdf_statement_id,
+            entry_type=entry_type, points=points, entry_date=statement_date,
+            source=source, description=description,
+        )
+        db.add(last_entry)
+
+    accounted = 0.0
+    if breakdown:
+        if breakdown["earned"] > 0.01:
+            _add("earned", breakdown["earned"], f"Earned this cycle (statement printed {breakdown['earned']:,.0f})")
+            accounted += breakdown["earned"]
+        if breakdown["redeemed"] > 0.01:
+            _add("redeemed", -breakdown["redeemed"], f"Redeemed this cycle (statement printed {breakdown['redeemed']:,.0f})")
+            accounted -= breakdown["redeemed"]
+        if breakdown["expired"] > 0.01:
+            _add("expired", -breakdown["expired"], f"Expired/lapsed this cycle (statement printed {breakdown['expired']:,.0f})")
+            accounted -= breakdown["expired"]
+
+    residual = delta - accounted
+    if abs(residual) >= 0.01 or last_entry is None:
+        _add(
+            "adjustment", residual,
+            f"Reconciled to statement's printed balance ({new_total:,.0f} pts)"
+            if last_entry is None else "Reconciliation to statement's printed balance",
+        )
+
     bank.reward_points_updated_at = statement_date
-    return entry
+    return last_entry
 
 
 def check_expiring_reward_points(db: Session, user_ids=None) -> dict:

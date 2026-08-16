@@ -479,3 +479,11 @@ export interface RewardPointsResponse {
   summaries: RewardPointSummary[];
   entries: RewardPointEntry[];
 }
+
+export interface RewardPointsMonth {
+  month: string; // 'YYYY-MM'
+  gained: number;
+  used: number;
+  expired: number;
+  net: number;
+}

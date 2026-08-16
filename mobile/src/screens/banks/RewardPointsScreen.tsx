@@ -13,10 +13,15 @@ import {
 } from "react-native";
 
 import { listBanks } from "../../api/banks";
-import { createRewardEntry, deleteRewardEntry, getRewardPoints } from "../../api/rewardPoints";
+import { createRewardEntry, deleteRewardEntry, getRewardPoints, getRewardPointsMonthly } from "../../api/rewardPoints";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
-import { Bank, RewardEntryType, RewardPointEntry, RewardPointSummary } from "../../types";
+import { Bank, RewardEntryType, RewardPointEntry, RewardPointSummary, RewardPointsMonth } from "../../types";
 import { formatDate, todayIsoDate } from "../../utils/format";
+
+function monthLabel(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
 
 const ENTRY_TYPES: RewardEntryType[] = ["earned", "redeemed", "expired", "adjustment"];
 
@@ -27,6 +32,7 @@ export default function RewardPointsScreen() {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [summaries, setSummaries] = useState<RewardPointSummary[]>([]);
   const [entries, setEntries] = useState<RewardPointEntry[]>([]);
+  const [monthly, setMonthly] = useState<RewardPointsMonth[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -39,10 +45,15 @@ export default function RewardPointsScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [bankList, data] = await Promise.all([listBanks(), getRewardPoints()]);
+      const [bankList, data, monthlyData] = await Promise.all([
+        listBanks(),
+        getRewardPoints(),
+        getRewardPointsMonthly(),
+      ]);
       setBanks(bankList.filter((b) => (b.bank_type || "").toLowerCase() === "credit"));
       setSummaries(data.summaries);
       setEntries(data.entries);
+      setMonthly(monthlyData.months);
     } catch {
       // keep prior state; pull-to-refresh can retry
     }
@@ -156,6 +167,40 @@ export default function RewardPointsScreen() {
           </TouchableOpacity>
         </View>
       ))}
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Monthly Summary</Text>
+        {monthly.length === 0 && <Text style={styles.empty}>No reward points activity yet.</Text>}
+        {monthly.map((m) => {
+          const gained = Math.round(m.gained);
+          const used = Math.round(m.used);
+          const expired = Math.round(m.expired);
+          const net = Math.round(m.net);
+          return (
+            <View key={m.month} style={styles.monthRow}>
+              <Text style={styles.monthLabel}>{monthLabel(m.month)}</Text>
+              <View style={styles.monthStats}>
+                <Text style={[styles.monthStat, { color: colors.primary }]}>
+                  {gained > 0 ? `+${gained.toLocaleString()}` : "—"}
+                </Text>
+                <Text style={[styles.monthStat, { color: used > 0 ? colors.danger : colors.textSecondary }]}>
+                  {used > 0 ? `-${used.toLocaleString()}` : "—"}
+                </Text>
+                <Text style={[styles.monthStat, { color: expired > 0 ? colors.danger : colors.textSecondary }]}>
+                  {expired > 0 ? `-${expired.toLocaleString()}` : "—"}
+                </Text>
+                <Text style={[styles.monthNet, { color: colors.text }]}>
+                  {net > 0 ? "+" : ""}
+                  {net.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+        {monthly.length > 0 && (
+          <Text style={styles.hint}>Gained · Used · Expired · Net</Text>
+        )}
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>History</Text>
@@ -273,6 +318,18 @@ const makeStyles = (c: ThemeColors) =>
     balance: { fontSize: 26, fontWeight: "700", color: c.text, marginTop: 4 },
     meta: { fontSize: 12, color: c.textSecondary, marginTop: 2 },
     sectionTitle: { fontSize: 15, fontWeight: "700", color: c.text, marginBottom: 10 },
+    monthRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 8,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.border,
+    },
+    monthLabel: { fontSize: 13, fontWeight: "600", color: c.text },
+    monthStats: { flexDirection: "row", gap: 12 },
+    monthStat: { fontSize: 12, minWidth: 44, textAlign: "right" },
+    monthNet: { fontSize: 13, fontWeight: "700", minWidth: 50, textAlign: "right" },
     chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
     expiryChip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14 },
     expiryChipText: { color: "#fff", fontSize: 11, fontWeight: "600" },

@@ -21,6 +21,7 @@ def _entry_response(e) -> dict:
     return {
         "id": e.id, "bank_id": e.bank_id, "entry_type": e.entry_type,
         "points": e.points, "expiry_date": e.expiry_date.isoformat() if e.expiry_date else None,
+        "entry_date": e.entry_date.isoformat() if e.entry_date else None,
         "description": e.description, "source": e.source, "created_at": e.created_at.isoformat(),
     }
 
@@ -38,6 +39,17 @@ def list_reward_points(
         "summaries": summaries,
         "entries": [_entry_response(e) for e in entries],
     }
+
+
+@router.get("/monthly")
+def monthly_reward_points(
+    bank_id: Optional[int] = None,
+    months: int = 12,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Per-month gained/used/expired/net totals, most recent month first."""
+    return {"months": reward_points_service.monthly_summary(db, current_user.id, bank_id, months)}
 
 
 class RewardEntryCreate(BaseModel):

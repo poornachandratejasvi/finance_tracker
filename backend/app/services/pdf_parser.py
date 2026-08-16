@@ -1115,6 +1115,33 @@ class PDFParser:
         return None
 
     @staticmethod
+    def extract_reward_points_breakdown(text: str) -> Optional[dict]:
+        """Extract this cycle's reward-points activity (opening/earned/redeemed/
+        expired), when the issuer prints a per-cycle summary table rather than
+        just a closing balance. Confirmed against 4 consecutive real HDFC
+        statements: "Reward Points Opening Balance Earned Disbursed
+        Adjusted/Lapsed\\n<closing>\\n<opening> <earned> <disbursed> <adjusted>".
+        Best-effort/single-layout for now -- returns None (never raises) for any
+        statement that doesn't match, same as extract_reward_points.
+        """
+        if not text:
+            return None
+        number = r'([0-9][0-9,]*(?:\.[0-9]+)?)'
+        m = re.search(
+            r'reward\s+points\s+opening\s+balance\s+earned\s+disbursed\s+adjusted\s*/\s*lapsed'
+            r'\s*\n\s*[0-9][0-9,]*(?:\.[0-9]+)?'  # closing total, printed first -- extract_reward_points already grabs this
+            rf'\s*\n\s*{number}\s+{number}\s+{number}\s+{number}',
+            text, re.IGNORECASE,
+        )
+        if not m:
+            return None
+        try:
+            opening, earned, disbursed, adjusted = (float(g.replace(',', '')) for g in m.groups())
+        except (ValueError, AttributeError):
+            return None
+        return {"opening": opening, "earned": earned, "redeemed": disbursed, "expired": adjusted}
+
+    @staticmethod
     def parse_sc_savings(text: str, statement_period: Optional[Tuple[Optional[datetime], Optional[datetime]]] = None) -> List[Dict]:
         """Parse Standard Chartered savings account statement.
 

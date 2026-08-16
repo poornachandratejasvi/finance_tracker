@@ -26,7 +26,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
-import { getBanks, getRewardPoints, createRewardEntry, deleteRewardEntry } from '../services/api';
+import { getBanks, getRewardPoints, getRewardPointsMonthly, createRewardEntry, deleteRewardEntry } from '../services/api';
 
 const ENTRY_TYPES = [
   { value: 'earned', label: 'Earned' },
@@ -41,6 +41,8 @@ export default function RewardPoints() {
   const [banks, setBanks] = useState([]);
   const [summaries, setSummaries] = useState([]);
   const [entries, setEntries] = useState([]);
+  const [monthly, setMonthly] = useState([]);
+  const [monthlyBankId, setMonthlyBankId] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [err, setErr] = useState('');
@@ -57,9 +59,24 @@ export default function RewardPoints() {
     }
   };
 
+  const loadMonthly = async (bankId) => {
+    try {
+      const data = await getRewardPointsMonthly(bankId || undefined);
+      setMonthly(data.months);
+    } catch {
+      setErr('Failed to load monthly reward points summary');
+    }
+  };
+
   useEffect(() => {
     load();
+    loadMonthly('');
   }, []);
+
+  const monthLabel = (m) => {
+    const [y, mo] = m.split('-');
+    return new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+  };
 
   const openDialog = (bankId) => {
     setForm({ ...emptyForm, bank_id: bankId || banks[0]?.id || '' });
@@ -146,6 +163,61 @@ export default function RewardPoints() {
           </Grid>
         ))}
       </Grid>
+
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6">Monthly Summary</Typography>
+          <TextField
+            select size="small" label="Card" value={monthlyBankId} sx={{ minWidth: 180 }}
+            onChange={(e) => { setMonthlyBankId(e.target.value); loadMonthly(e.target.value); }}
+          >
+            <MenuItem value="">All cards</MenuItem>
+            {banks.map((b) => (
+              <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>
+            ))}
+          </TextField>
+        </Box>
+        {monthly.length === 0 ? (
+          <Typography color="text.secondary">No reward points activity yet.</Typography>
+        ) : (
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Month</TableCell>
+                <TableCell align="right">Gained</TableCell>
+                <TableCell align="right">Used</TableCell>
+                <TableCell align="right">Expired</TableCell>
+                <TableCell align="right">Net</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {monthly.map((m) => {
+                const gained = Math.round(m.gained);
+                const used = Math.round(m.used);
+                const expired = Math.round(m.expired);
+                const net = Math.round(m.net);
+                return (
+                  <TableRow key={m.month}>
+                    <TableCell>{monthLabel(m.month)}</TableCell>
+                    <TableCell align="right" sx={{ color: 'success.main' }}>
+                      {gained > 0 ? `+${gained.toLocaleString()}` : '—'}
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: used > 0 ? 'error.main' : 'text.secondary' }}>
+                      {used > 0 ? `-${used.toLocaleString()}` : '—'}
+                    </TableCell>
+                    <TableCell align="right" sx={{ color: expired > 0 ? 'error.main' : 'text.secondary' }}>
+                      {expired > 0 ? `-${expired.toLocaleString()}` : '—'}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600 }}>
+                      {net > 0 ? '+' : ''}{net.toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </Paper>
 
       <Paper sx={{ p: 2 }}>
         <Typography variant="h6" gutterBottom>History</Typography>

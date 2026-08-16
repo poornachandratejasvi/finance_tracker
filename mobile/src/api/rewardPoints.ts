@@ -1,9 +1,16 @@
 import { api } from "./client";
-import { RewardEntryType, RewardPointEntry, RewardPointsResponse } from "../types";
+import { RewardEntryType, RewardPointEntry, RewardPointsResponse, RewardPointsMonth } from "../types";
 
 export async function getRewardPoints(bankId?: number): Promise<RewardPointsResponse> {
   const { data } = await api.get<RewardPointsResponse>("/api/reward-points/", {
     params: bankId ? { bank_id: bankId } : undefined,
+  });
+  return data;
+}
+
+export async function getRewardPointsMonthly(bankId?: number, months = 12): Promise<{ months: RewardPointsMonth[] }> {
+  const { data } = await api.get<{ months: RewardPointsMonth[] }>("/api/reward-points/monthly", {
+    params: bankId ? { bank_id: bankId, months } : { months },
   });
   return data;
 }

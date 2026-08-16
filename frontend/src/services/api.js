@@ -517,6 +517,12 @@ export const checkExpiringRewardPoints = async () => {
   const response = await api.post('/api/reward-points/check-expiring');
   return response.data;
 };
+export const getRewardPointsMonthly = async (bankId, months = 12) => {
+  const params = { months };
+  if (bankId) params.bank_id = bankId;
+  const response = await api.get('/api/reward-points/monthly', { params });
+  return response.data;
+};
 
 // Net worth history
 export const getNetWorth = async (days = 180) => {

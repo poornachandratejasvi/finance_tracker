@@ -188,6 +188,18 @@ def _ensure_columns() -> None:
             if userless:
                 logger.info("Created a private household for %d existing user(s)", len(userless))
 
+    if "reward_point_entries" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("reward_point_entries")}
+        _add_column_if_missing(columns, "entry_date", "ALTER TABLE reward_point_entries ADD COLUMN entry_date TIMESTAMP")
+        if "entry_date" not in columns:
+            # Existing entries predate this column -- backfill from created_at so
+            # they still show up in the right month rather than vanishing from
+            # the monthly view.
+            with engine.begin() as connection:
+                connection.execute(text(
+                    "UPDATE reward_point_entries SET entry_date = created_at WHERE entry_date IS NULL"
+                ))
+
     if "templates" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("templates")}
         _add_column_if_missing(columns, "label_ids", "ALTER TABLE templates ADD COLUMN label_ids TEXT")

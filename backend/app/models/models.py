@@ -650,6 +650,11 @@ class RewardPointEntry(Base):
     pdf_statement_id = Column(Integer, ForeignKey("pdf_statements.id", ondelete="CASCADE"), nullable=True)
     entry_type = Column(String(20), nullable=False)  # earned | redeemed | expired | adjustment
     points = Column(Float, nullable=False)
+    # The month/cycle this entry belongs to, for the monthly gained/used/expired
+    # view -- the statement's own cycle date for auto/ai entries (so a backfill
+    # run today still lands in the right historical month), created_at for
+    # manual entries.
+    entry_date = Column(DateTime, nullable=True)
     expiry_date = Column(DateTime, nullable=True)
     description = Column(String(255), nullable=True)
     source = Column(String(10), default="manual")  # manual | auto | ai
