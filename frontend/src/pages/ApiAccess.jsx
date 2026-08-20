@@ -298,12 +298,14 @@ export default function ApiAccess() {
         <Divider sx={{ my: 2 }} />
 
         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Advanced — download a pre-built shortcut file</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Downloads a complete <code>.shortcut</code> file with your URL + a fresh token baked in.
-          Note: since iOS 15, Apple requires shortcut files to be <b>signed</b> — this file imports
-          only after signing on a Mac (<code>shortcuts sign</code>) or on iOS 12–14. On a stock
-          modern iPhone use the Setup Kit above instead.
-        </Typography>
+        <Alert severity="warning" sx={{ mb: 1 }}>
+          <Typography variant="body2">
+            On a stock iPhone this download <b>will fail to import</b> ("Can't Import Shortcut" /
+            "isn't signed") — since iOS 15, Apple only accepts raw shortcut files like this one after
+            they're signed on a Mac (<code>shortcuts sign</code>). Unless you have a Mac to sign it
+            with, use the <b>Setup Kit</b> above instead — it works on every iPhone with no signing.
+          </Typography>
+        </Alert>
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
           <Button
             variant="outlined"
@@ -376,10 +378,14 @@ export default function ApiAccess() {
         <Divider sx={{ my: 2 }} />
 
         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Advanced — download a pre-built shortcut file</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Same signing caveat as above: since iOS 15, this file imports only after signing on a Mac
-          (<code>shortcuts sign</code>) or on iOS 12–14. On a stock modern iPhone use the Setup Kit above instead.
-        </Typography>
+        <Alert severity="warning" sx={{ mb: 1 }}>
+          <Typography variant="body2">
+            Same signing caveat as above: on a stock iPhone this download <b>will fail to import</b>
+            ("Can't Import Shortcut" / "isn't signed") unless you sign it on a Mac first
+            (<code>shortcuts sign</code>). Use the <b>Setup Kit</b> above instead — it works on every
+            iPhone with no signing.
+          </Typography>
+        </Alert>
         <Button
           variant="outlined"
           startIcon={smsScBusy ? <CircularProgress size={18} /> : <Download />}
