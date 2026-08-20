@@ -35,9 +35,15 @@ def extract_sms_transaction(db: Session, uid: int, text: str) -> dict:
         "templates vary: the amount may follow 'Rs.', 'INR', 'Rs', a currency "
         "symbol that garbled into a stray letter, or no marker at all (e.g. "
         "'a/c debited by 500'). Identify the transaction amount as a positive "
-        "number, whether money left the account (debit) or arrived (credit), "
-        "and a short human-readable description (e.g. the merchant name or "
-        "'ATM withdrawal' -- not the whole SMS). Respond ONLY with a JSON "
+        "number, and whether money left the SMS RECIPIENT's own account (debit) "
+        "or arrived in it (credit) -- watch for UPI-transfer SMS that mention "
+        "TWO accounts and BOTH words, e.g. 'Your a/c XX1234 is debited for Rs.500 "
+        "... and credited to a/c XX5678': that is a debit (the recipient's own "
+        "account XX1234 lost the money; 'credited' there describes the OTHER "
+        "party's account, not theirs). The recipient's own account is normally "
+        "the one introduced first ('Your a/c ...'). Also produce a short "
+        "human-readable description (e.g. the merchant name or 'ATM withdrawal' "
+        "-- not the whole SMS). Respond ONLY with a JSON "
         'object: {"amount": <number or null>, "transaction_type": "credit" or '
         '"debit" or null, "description": "<short string or null>"}. No prose, '
         "no markdown fences. Use null for anything you can't confidently identify."

@@ -447,6 +447,7 @@ def ingest_transaction(
 # from each one.
 _SMS_AMOUNT_RE = re.compile(r"(?:rs\.?|inr)\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)", re.IGNORECASE)
 _SMS_CREDIT_RE = re.compile(r"credited|received|deposited", re.IGNORECASE)
+_SMS_DEBIT_RE = re.compile(r"debited|withdrawn|withdrew|spent", re.IGNORECASE)
 
 
 def _match_bank_from_sms(db: Session, user: User, sender: Optional[str], body: str) -> Optional[int]:
@@ -524,20 +525,40 @@ def ingest_sms(
         except ValueError:
             amount = None
         if amount is not None:
-            transaction_type = "credit" if _SMS_CREDIT_RE.search(payload.text) else "debit"
+            credit_m = _SMS_CREDIT_RE.search(payload.text)
+            debit_m = _SMS_DEBIT_RE.search(payload.text)
+            if credit_m and debit_m:
+                # Both keywords present -- common for an outgoing UPI transfer
+                # ("Your a/c XX1234 is debited ... and credited to a/c XX5678"),
+                # where "credited" describes the OTHER party's account, not the
+                # user's own. Regex can't safely tell which account is "yours"
+                # here -- leave it unresolved rather than guess wrong, and let
+                # the AI fallback below disambiguate instead.
+                transaction_type = None
+            elif debit_m:
+                transaction_type = "debit"
+            elif credit_m:
+                transaction_type = "credit"
+            else:
+                transaction_type = "debit"  # neither keyword present -- safe default
 
-    if amount is None:
-        # The generic regex couldn't find/parse an amount -- bank SMS templates
+    if amount is None or transaction_type is None:
+        # Either the generic regex couldn't find/parse an amount, or it found
+        # one but the debit/credit direction is ambiguous -- bank SMS templates
         # vary too much for one regex to cover reliably (see ai_sms_extraction.py).
         # Best-effort fallback via the user's own configured AI provider; never
         # raises, just returns {} if nothing usable comes back.
         ai_result = ai_sms_extraction.extract_sms_transaction(db, user.id, payload.text)
         if ai_result:
-            amount = ai_result["amount"]
-            transaction_type = ai_result["transaction_type"]
+            if amount is None:
+                amount = ai_result["amount"]
+            if transaction_type is None:
+                transaction_type = ai_result["transaction_type"]
             if ai_result.get("description"):
                 description = ai_result["description"]
             used_ai = True
+        elif transaction_type is None:
+            transaction_type = "debit"  # AI unavailable/unhelpful -- same safe default as before
 
     if amount is None or amount <= 0:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Couldn't find a Rs./INR amount in this text.")
