@@ -187,6 +187,7 @@ function Transactions() {
     page, rowsPerPage, sortBy, sortDir, debouncedSearch,
     filters.accountIds, filters.categoryNames, filters.labelIds,
     filters.recordTypes, filters.amountMin, filters.amountMax, filters.confirmationStatus,
+    filters.paymentTypes,
   ]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
