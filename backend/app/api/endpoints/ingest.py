@@ -21,6 +21,7 @@ from app.api.endpoints.auth import get_current_active_user
 from app.models.models import User, Bank, Transaction, IngestMapping, ApiToken
 from app.services.transaction_service import TransactionService
 from app.services import shortcut_service
+from app.services import ai_sms_extraction
 
 router = APIRouter()
 
@@ -511,15 +512,35 @@ def ingest_sms(
     in the Transactions list) -- same semantics as every other real-time-alert path, later
     superseded by the matching statement PDF row via create_or_reconcile_transaction
     once the real statement arrives."""
+    amount = None
+    transaction_type = None
+    description = payload.text.strip()[:140]
+    used_ai = False
+
     m = _SMS_AMOUNT_RE.search(payload.text)
-    if not m:
+    if m:
+        try:
+            amount = float(m.group(1).replace(",", ""))
+        except ValueError:
+            amount = None
+        if amount is not None:
+            transaction_type = "credit" if _SMS_CREDIT_RE.search(payload.text) else "debit"
+
+    if amount is None:
+        # The generic regex couldn't find/parse an amount -- bank SMS templates
+        # vary too much for one regex to cover reliably (see ai_sms_extraction.py).
+        # Best-effort fallback via the user's own configured AI provider; never
+        # raises, just returns {} if nothing usable comes back.
+        ai_result = ai_sms_extraction.extract_sms_transaction(db, user.id, payload.text)
+        if ai_result:
+            amount = ai_result["amount"]
+            transaction_type = ai_result["transaction_type"]
+            if ai_result.get("description"):
+                description = ai_result["description"]
+            used_ai = True
+
+    if amount is None or amount <= 0:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Couldn't find a Rs./INR amount in this text.")
-    try:
-        amount = float(m.group(1).replace(",", ""))
-    except ValueError:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Couldn't parse the amount.")
-    if amount <= 0:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Amount must be positive.")
 
     mapping = _active_mapping(db, user)
     matched_bank_id = _match_bank_from_sms(db, user, payload.sender, payload.text)
@@ -531,11 +552,12 @@ def ingest_sms(
     if not db.query(Bank.id).filter(Bank.id == bank_id, Bank.user_id == user.id).first():
         bank_id = _get_external_bank(db, user).id
 
+    notes = "Auto-detected from SMS" + (", AI-parsed" if used_ai else "") + (f" ({payload.sender})" if payload.sender else "")
     record = {
         "amount": amount,
-        "description": payload.text.strip()[:140],
-        "transaction_type": "credit" if _SMS_CREDIT_RE.search(payload.text) else "debit",
-        "notes": f"Auto-detected from SMS" + (f" ({payload.sender})" if payload.sender else ""),
+        "description": description,
+        "transaction_type": transaction_type,
+        "notes": notes,
     }
     result = _ingest_one(db, user, record, None, bank_id, allow_duplicates, source="sms")
     if result.get("error"):
