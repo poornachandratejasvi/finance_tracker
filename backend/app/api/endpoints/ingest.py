@@ -135,7 +135,7 @@ def _active_mapping(db: Session, user: User) -> Optional[IngestMapping]:
 
 
 def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestMapping],
-                default_bank_id: int, allow_duplicates: bool) -> dict:
+                default_bank_id: int, allow_duplicates: bool, source: str = "ingest") -> dict:
     if not isinstance(record, dict):
         return {"created": False, "error": "record must be a JSON object"}
 
@@ -246,7 +246,7 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
         to_account=str(target["to_account"]) if target.get("to_account") is not None else None,
         notes=notes,
         is_manual=True,
-        source="ingest",
+        source=source,
         # Ingested rows are best-effort (no statement to cross-check against yet) — they
         # start Pending like alert-email transactions do, and get auto-confirmed by the
         # same reconciliation path (create_or_reconcile_transaction) once the real
@@ -453,18 +453,29 @@ def _match_bank_from_sms(db: Session, user: User, sender: Optional[str], body: s
     using signals unlikely to false-positive (unlike guessing a per-bank SMS
     template blind, which the generic amount regex above deliberately avoids).
 
-    Strongest signal: the account number's last 4 digits appearing in the
-    message body -- issuers print exactly this in their own alert SMS ("...
-    ending 6951..."). Weaker signal: the bank's short `code` (e.g. "hdfc",
-    "icici") appearing in the SENDER id specifically, not the free-form body --
-    some codes (e.g. "sc", "yes") are common English words and would
-    false-positive constantly against real message text. Only returns a match
-    when exactly one bank fits, so an ambiguous SMS falls through to the
-    existing default-bank behaviour instead of guessing wrong.
+    Strongest signal: the user's own explicit `sms_sender_pattern` (e.g.
+    "HDFCBK", "AD-SBIINB") appearing in the sender id -- set once via the Bank
+    form, same idea as `sender_email` for the Gmail-sync side. Next: the
+    account number's last 4 digits appearing in the message body -- issuers
+    print exactly this in their own alert SMS ("... ending 6951..."). Weakest:
+    the bank's short `code` (e.g. "hdfc", "icici") appearing in the SENDER id
+    specifically, not the free-form body -- some codes (e.g. "sc", "yes") are
+    common English words and would false-positive constantly against real
+    message text. Only returns a match when exactly one bank fits at each
+    tier, so an ambiguous SMS falls through to the existing default-bank
+    behaviour instead of guessing wrong.
     """
     banks = db.query(Bank).filter(Bank.user_id == user.id, Bank.is_active == True).all()  # noqa: E712
-    body_upper = (body or "").upper()
+    sender_upper = (sender or "").upper()
 
+    pattern_matches = {
+        b.id for b in banks
+        if (pattern := (b.sms_sender_pattern or "").upper()) and pattern in sender_upper
+    }
+    if len(pattern_matches) == 1:
+        return next(iter(pattern_matches))
+
+    body_upper = (body or "").upper()
     last4_matches = {
         b.id for b in banks
         if len(digits := re.sub(r"\D", "", b.account_number or "")) >= 4 and digits[-4:] in body_upper
@@ -472,7 +483,6 @@ def _match_bank_from_sms(db: Session, user: User, sender: Optional[str], body: s
     if len(last4_matches) == 1:
         return next(iter(last4_matches))
 
-    sender_upper = (sender or "").upper()
     code_matches = {
         b.id for b in banks
         if (code := (b.code or "").upper()) and len(code) >= 3 and code in sender_upper
@@ -497,7 +507,8 @@ def ingest_sms(
     user: User = Depends(get_user_from_api_key),
 ):
     """Ingest a raw bank transaction SMS. Created unconfirmed (is_confirmed=False,
-    source='ingest') -- same semantics as every other real-time-alert path, later
+    source='sms', distinct from the generic 'ingest' source so it's filterable
+    in the Transactions list) -- same semantics as every other real-time-alert path, later
     superseded by the matching statement PDF row via create_or_reconcile_transaction
     once the real statement arrives."""
     m = _SMS_AMOUNT_RE.search(payload.text)
@@ -526,7 +537,7 @@ def ingest_sms(
         "transaction_type": "credit" if _SMS_CREDIT_RE.search(payload.text) else "debit",
         "notes": f"Auto-detected from SMS" + (f" ({payload.sender})" if payload.sender else ""),
     }
-    result = _ingest_one(db, user, record, None, bank_id, allow_duplicates)
+    result = _ingest_one(db, user, record, None, bank_id, allow_duplicates, source="sms")
     if result.get("error"):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=result["error"])
     return result

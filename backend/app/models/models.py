@@ -90,6 +90,11 @@ class Bank(Base):
     logo_url = Column(String(255))
     sender_email = Column(String(255))  # Primary email (kept for backwards compatibility)
     sender_emails = Column(Text)  # JSON array of multiple emails
+    # The alphanumeric SMS sender ID this bank's alert texts come from (e.g.
+    # "HDFCBK", "AD-SBIINB") -- lets the Android SmsReceiver match a bank
+    # deterministically instead of only guessing from `code` appearing in the
+    # sender id, which false-positives for codes that are also common words.
+    sms_sender_pattern = Column(String(50))
     account_number = Column(String(100))
     account_password = Column(EncryptedText)  # Bank/PDF password, encrypted at rest
     bank_type = Column(String(50), default='savings')  # savings, credit, other

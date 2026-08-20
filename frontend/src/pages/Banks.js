@@ -67,6 +67,7 @@ function Banks() {
     code: '',
     sender_email: '',
     sender_emails: '',
+    sms_sender_pattern: '',
     account_number: '',
     account_password: '',
     bank_type: 'savings',
@@ -204,7 +205,7 @@ function Banks() {
       setBankDialog(false);
       setEditMode(false);
       setEditingBankId(null);
-      setNewBank({ name: '', code: '', sender_email: '', sender_emails: '', account_number: '', account_password: '', bank_type: 'savings', csv_email: '', current_balance: '', pdf_filename_prefix: '' });
+      setNewBank({ name: '', code: '', sender_email: '', sender_emails: '', sms_sender_pattern: '', account_number: '', account_password: '', bank_type: 'savings', csv_email: '', current_balance: '', pdf_filename_prefix: '' });
       setPasswordCandidates([]);
       setNewPasswordCandidate('');
       fetchData();
@@ -450,6 +451,7 @@ function Banks() {
       code: bank.code || '',
       sender_email: bank.sender_email || '',
       sender_emails: senderEmailsStr,
+      sms_sender_pattern: bank.sms_sender_pattern || '',
       account_number: bank.account_number || '',
       account_password: '',
       bank_type: bank.bank_type || 'savings',
@@ -894,6 +896,15 @@ function Banks() {
               helperText="Comma-separated email addresses (e.g., alerts@bank.com, statements@bank.com)"
               sx={{ mb: 2 }}
               placeholder="email1@bank.com, email2@bank.com"
+            />
+            <TextField
+              fullWidth
+              label="SMS Sender ID (Optional)"
+              value={newBank.sms_sender_pattern}
+              onChange={(e) => setNewBank({ ...newBank, sms_sender_pattern: e.target.value })}
+              helperText="The alphanumeric ID your bank's alert texts come from (e.g., HDFCBK, AD-SBIINB) — not a phone number. Lets the Android app match an incoming SMS to this account."
+              sx={{ mb: 2 }}
+              placeholder="HDFCBK"
             />
             <TextField
               fullWidth

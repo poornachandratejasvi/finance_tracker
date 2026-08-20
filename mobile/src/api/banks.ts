@@ -13,6 +13,7 @@ export interface BankPayload {
   color?: string;
   current_balance?: number;
   is_archived?: boolean;
+  sms_sender_pattern?: string;
 }
 
 export async function createBank(payload: BankPayload): Promise<Bank> {

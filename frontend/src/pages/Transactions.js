@@ -172,6 +172,7 @@ function Transactions() {
       if (filters.confirmationStatus && filters.confirmationStatus !== 'all') {
         params.is_confirmed = filters.confirmationStatus === 'confirmed';
       }
+      if (filters.paymentTypes.length) params.source = filters.paymentTypes.join(',');
       if (debouncedSearch) params.search = debouncedSearch;
       const res = await getTransactions(params);
       setTransactions(res.items || []);
@@ -372,6 +373,7 @@ function Transactions() {
         if (filters.confirmationStatus && filters.confirmationStatus !== 'all') {
           params.is_confirmed = filters.confirmationStatus === 'confirmed';
         }
+        if (filters.paymentTypes.length) params.source = filters.paymentTypes.join(',');
         if (debouncedSearch) params.search = debouncedSearch;
         const res = await getTransactions(params);
         rows = res.items || [];
@@ -490,7 +492,7 @@ function Transactions() {
           categories={categories}
           labels={labels}
           amountBound={amountBound}
-          show={['search', 'accounts', 'categories', 'labels', 'recordTypes', 'amount', 'confirmationStatus']}
+          show={['search', 'accounts', 'categories', 'labels', 'recordTypes', 'amount', 'confirmationStatus', 'paymentTypes']}
         />
 
         <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
@@ -580,6 +582,11 @@ function Transactions() {
                               {t.is_confirmed === false && (
                                 <Tooltip title="From a real-time bank alert — not yet matched to the official statement">
                                   <Chip label="Pending" size="small" color="warning" variant="outlined" sx={{ height: 18, fontSize: 11 }} />
+                                </Tooltip>
+                              )}
+                              {t.source === 'sms' && (
+                                <Tooltip title="Auto-detected from a bank SMS on your phone">
+                                  <Chip label="SMS" size="small" color="info" variant="outlined" sx={{ height: 18, fontSize: 11 }} />
                                 </Tooltip>
                               )}
                             </Box>

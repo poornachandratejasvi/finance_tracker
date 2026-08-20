@@ -22,6 +22,7 @@ export interface Bank {
   computed_balance: number | null;
   is_active: boolean;
   is_archived: boolean | null;
+  sms_sender_pattern: string | null;
 }
 
 export interface Category {

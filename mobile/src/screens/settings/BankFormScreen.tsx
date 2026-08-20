@@ -33,6 +33,7 @@ export default function BankFormScreen({ route, navigation }: Props) {
   const [currentBalance, setCurrentBalance] = useState(
     existing?.current_balance != null ? String(existing.current_balance) : ""
   );
+  const [smsSenderPattern, setSmsSenderPattern] = useState(existing?.sms_sender_pattern || "");
   const [isArchived, setIsArchived] = useState(!!existing?.is_archived);
   const [submitting, setSubmitting] = useState(false);
 
@@ -49,6 +50,7 @@ export default function BankFormScreen({ route, navigation }: Props) {
         currency_code: currencyCode.trim().toUpperCase() || "INR",
         color,
         current_balance: currentBalance ? parseFloat(currentBalance) : undefined,
+        sms_sender_pattern: smsSenderPattern.trim() || undefined,
         is_archived: isArchived,
       };
       if (existing) {
@@ -147,6 +149,21 @@ export default function BankFormScreen({ route, navigation }: Props) {
         placeholder="0.00"
         placeholderTextColor={colors.textSecondary}
       />
+
+      <Text style={styles.label}>SMS Sender ID (optional)</Text>
+      <TextInput
+        style={styles.input}
+        value={smsSenderPattern}
+        onChangeText={setSmsSenderPattern}
+        autoCapitalize="characters"
+        placeholder="HDFCBK"
+        placeholderTextColor={colors.textSecondary}
+      />
+      <Text style={styles.hint}>
+        The alphanumeric ID your bank's alert texts come from (e.g. HDFCBK,
+        AD-SBIINB) -- not a phone number. Lets an incoming SMS get matched to
+        this account automatically.
+      </Text>
 
       {existing && (
         <View style={styles.switchRow}>

@@ -33,7 +33,10 @@ const RECORD_STATE_OPTS = [
 const PAYMENT_TYPE_OPTS = [
   { value: 'pdf', label: 'Statement (PDF)' },
   { value: 'manual', label: 'Manual' },
+  { value: 'sms', label: 'SMS' },
+  { value: 'alert', label: 'Email Alert' },
   { value: 'ingest', label: 'API / Ingest' },
+  { value: 'import', label: 'CSV Import' },
 ];
 const TRANSFER_OPTS = [
   { value: true, label: 'Include transfers' },

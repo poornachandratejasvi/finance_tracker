@@ -114,7 +114,10 @@ function TransactionRow({ txn }: { txn: Transaction }) {
           {formatDate(txn.transaction_date)} · {txn.bank_name || "External"}
           {txn.category ? ` · ${txn.category}` : ""}
         </Text>
-        {!txn.is_confirmed && <Text style={styles.pending}>Pending</Text>}
+        <View style={styles.tagRow}>
+          {!txn.is_confirmed && <Text style={styles.pending}>Pending</Text>}
+          {txn.source === "sms" && <Text style={styles.smsTag}>via SMS</Text>}
+        </View>
       </View>
       <Text style={[styles.amount, { color: isCredit ? colors.primary : colors.danger }]}>
         {isCredit ? "+" : "-"}
@@ -140,7 +143,9 @@ const makeStyles = (c: ThemeColors) =>
     rowLeft: { flex: 1, paddingRight: 12 },
     description: { fontSize: 15, fontWeight: "600", color: c.text },
     meta: { fontSize: 12, color: c.textSecondary, marginTop: 2 },
-    pending: { fontSize: 11, color: c.warning, marginTop: 2, fontWeight: "600" },
+    tagRow: { flexDirection: "row", gap: 8, marginTop: 2 },
+    pending: { fontSize: 11, color: c.warning, fontWeight: "600" },
+    smsTag: { fontSize: 11, color: c.primary, fontWeight: "600" },
     amount: { fontSize: 15, fontWeight: "700" },
     error: { color: c.danger, textAlign: "center", marginTop: 40 },
     empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },

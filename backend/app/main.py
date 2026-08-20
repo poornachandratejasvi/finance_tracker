@@ -136,6 +136,7 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "is_archived", "ALTER TABLE banks ADD COLUMN is_archived BOOLEAN DEFAULT FALSE")
         _add_column_if_missing(columns, "balance_source", "ALTER TABLE banks ADD COLUMN balance_source VARCHAR(10) DEFAULT 'auto'")
         _add_column_if_missing(columns, "reward_points_updated_at", "ALTER TABLE banks ADD COLUMN reward_points_updated_at TIMESTAMP")
+        _add_column_if_missing(columns, "sms_sender_pattern", "ALTER TABLE banks ADD COLUMN sms_sender_pattern VARCHAR(50)")
 
     if "pdf_statements" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("pdf_statements")}

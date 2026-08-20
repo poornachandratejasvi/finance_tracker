@@ -55,6 +55,7 @@ def list_transactions(
     max_amount: Optional[float] = None,
     search: Optional[str] = None,
     is_confirmed: Optional[bool] = None,
+    source: Optional[str] = None,
     sort_by: str = Query("date", pattern="^(date|amount|description|category)$"),
     sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
@@ -100,6 +101,10 @@ def list_transactions(
 
     if is_confirmed is not None:
         query = query.filter(Transaction.is_confirmed.is_(is_confirmed))
+
+    sources = _parse_csv_list(source, str)
+    if sources:
+        query = query.filter(Transaction.source.in_(sources))
 
     if search:
         query = query.filter(

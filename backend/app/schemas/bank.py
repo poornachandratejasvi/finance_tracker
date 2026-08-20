@@ -30,6 +30,7 @@ class BankBase(BaseModel):
     logo_url: Optional[str] = None
     sender_email: Optional[str] = None
     sender_emails: Optional[str] = None
+    sms_sender_pattern: Optional[str] = None
     account_number: Optional[str] = None
     account_password: Optional[str] = None
     bank_type: Optional[str] = None
@@ -54,6 +55,7 @@ class BankUpdate(BaseModel):
     logo_url: Optional[str] = None
     sender_email: Optional[str] = None
     sender_emails: Optional[str] = None
+    sms_sender_pattern: Optional[str] = None
     account_number: Optional[str] = None
     account_password: Optional[str] = None
     bank_type: Optional[str] = None
