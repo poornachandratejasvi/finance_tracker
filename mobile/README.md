@@ -111,14 +111,17 @@ validate Swift locally at all (only the config-plugin's file-copying and Xcode-p
 wiring were verified locally — the actual Swift content is unverified until a real
 macOS build runs).
 
-## 5. Android: debug APK + SMS auto-detection
+## 5. Android: release APK + SMS auto-detection
 
-Android needs none of the iOS ceremony above: a **debug-signed APK** installs directly via
-"Install unknown apps" — no LiveContainer-style container app, no Apple-Developer-Program
-equivalent. [.github/workflows/mobile-apk-debug.yml](../.github/workflows/mobile-apk-debug.yml)
-builds one on a plain `ubuntu-latest` runner (Android tooling needs no macOS), same
-`workflow_dispatch` pattern as the iOS workflow — trigger it from the **Actions** tab and
-download the `debug-apk` artifact.
+Android needs none of the iOS ceremony above: a **release-type, debug-signed APK** installs
+directly via "Install unknown apps" — no LiveContainer-style container app, no
+Apple-Developer-Program equivalent. (It's a `release` *build type* — bundles the JS into the
+APK so it runs standalone with no Metro dev server — but still signed with Gradle's default
+debug keystore, since there's no Play Store distribution to worry about.)
+[.github/workflows/mobile-apk-debug.yml](../.github/workflows/mobile-apk-debug.yml) builds one
+on a plain `ubuntu-latest` runner (Android tooling needs no macOS), same `workflow_dispatch`
+pattern as the iOS workflow — trigger it from the **Actions** tab (workflow is named
+**"Build Android APK"**) and download the **`release-apk`** artifact.
 
 It requires the **same** `FINANCE_SERVER_URL` / `FINANCE_API_TOKEN` repository secrets as
 the iOS build (§ 4) — set those up once and both platforms are covered.
