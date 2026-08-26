@@ -56,6 +56,7 @@ def list_transactions(
     search: Optional[str] = None,
     is_confirmed: Optional[bool] = None,
     source: Optional[str] = None,
+    updated_since: Optional[str] = None,
     sort_by: str = Query("date", pattern="^(date|amount|description|category)$"),
     sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
@@ -105,6 +106,11 @@ def list_transactions(
     sources = _parse_csv_list(source, str)
     if sources:
         query = query.filter(Transaction.source.in_(sources))
+
+    if updated_since:
+        updated_dt = _parse_filter_date(updated_since, end_of_day=False)
+        if updated_dt:
+            query = query.filter(Transaction.updated_at >= updated_dt)
 
     if search:
         query = query.filter(
@@ -254,6 +260,21 @@ def create_transaction(
             detail="Bank not found",
         )
     owner_id = bank.user_id
+
+    # Idempotent replay: the mobile app's offline write queue may retry a
+    # submission whose response was lost (e.g. connectivity dropped after the
+    # server committed but before the reply arrived). Returning the existing
+    # row instead of erroring/duplicating makes that retry safe.
+    if trans_data.client_uuid:
+        existing = db.query(Transaction).filter(
+            Transaction.client_uuid == trans_data.client_uuid,
+            Transaction.user_id.in_(visible_user_ids(db, current_user)),
+        ).first()
+        if existing:
+            trans_dict = TransactionResponse.from_orm(existing).dict()
+            trans_dict['bank_name'] = existing.bank.name if existing.bank else None
+            trans_dict['labels'] = [tl.label.name for tl in existing.transaction_labels]
+            return trans_dict
 
     # Auto-categorize if not provided: user keyword rules first, then the built-in heuristic.
     if not trans_data.category:

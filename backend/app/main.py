@@ -166,6 +166,7 @@ def _ensure_columns() -> None:
         # confirmed — only newly-created 'alert' rows are inserted with False.
         _add_column_if_missing(columns, "is_confirmed", "ALTER TABLE transactions ADD COLUMN is_confirmed BOOLEAN DEFAULT TRUE")
         _add_column_if_missing(columns, "confirmed_at", "ALTER TABLE transactions ADD COLUMN confirmed_at TIMESTAMP")
+        _add_column_if_missing(columns, "client_uuid", "ALTER TABLE transactions ADD COLUMN client_uuid VARCHAR(36)")
 
     if "users" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("users")}

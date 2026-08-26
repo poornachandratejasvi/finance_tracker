@@ -20,6 +20,11 @@ class TransactionBase(BaseModel):
 class TransactionCreate(TransactionBase):
     bank_id: int
     pdf_statement_id: Optional[int] = None
+    # Client-generated UUID from the mobile app's offline write queue -- lets a
+    # retried submission (e.g. the network dropped after the server committed
+    # but before the response arrived) return the existing row instead of
+    # creating a duplicate. Never set by any other client (web, ingest paths).
+    client_uuid: Optional[str] = None
 
 
 class TransactionUpdate(BaseModel):
@@ -46,6 +51,7 @@ class TransactionResponse(TransactionBase):
     is_manual: bool = False
     is_confirmed: bool = True
     source: Optional[str] = None
+    client_uuid: Optional[str] = None
     labels: List[str] = []
     label_details: List[dict] = []  # [{id,name,color}] for colored chips
     created_at: datetime

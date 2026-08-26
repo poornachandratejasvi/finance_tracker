@@ -217,6 +217,10 @@ class Transaction(Base):
     is_manual = Column(Boolean, default=False)  # Manually entered transaction
     custom_fields = Column(Text)  # JSON string for custom fields
     source = Column(String(50))  # Origin of the row: 'pdf', 'manual', 'ingest', 'alert', etc.
+    # Client-generated UUID from the mobile app's offline write queue, so a
+    # retried submission is idempotent -- see create_transaction. Never set by
+    # any other client.
+    client_uuid = Column(String(36), index=True)
 
     # 'alert' rows (parsed from a real-time bank SMS/email alert, before the official
     # statement arrives) start life unconfirmed; everything else defaults confirmed.
@@ -355,6 +359,23 @@ class AppSetting(Base):
     key = Column(String(100), primary_key=True)
     value = Column(Text)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class DashboardWidget(Base):
+    """A user's chosen dashboard widgets, in display order. Deliberately stores
+    only WHICH widget + layout, not any data -- each widget_type is rendered by
+    calling an existing endpoint (dashboard/summary, analytics/cashflow,
+    investments/dashboard, etc.) client-side, so adding a widget never means
+    duplicating an aggregation query that already exists."""
+    __tablename__ = "dashboard_widgets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    widget_type = Column(String(50), nullable=False)
+    position = Column(Integer, nullable=False, default=0)
+    size = Column(String(10), default="medium")  # small | medium | large
+    config = Column(Text)  # JSON, widget-specific options (e.g. {"months": 6})
+    created_at = Column(DateTime, default=utcnow)
 
 
 class SyncSchedule(Base):
