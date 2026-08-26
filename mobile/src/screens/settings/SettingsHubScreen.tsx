@@ -36,6 +36,8 @@ const GENERAL_ROWS: Row[] = [
   { key: "Profile", label: "Profile & Preferences", icon: "👤" },
   { key: "AI", label: "AI", icon: "✨" },
   { key: "ApiTokens", label: "REST API", icon: "🔑" },
+  { key: "SmsAutoDetect", label: "SMS Auto-Detect", icon: "📱" },
+  { key: "SmsImport", label: "Import from SMS", icon: "📥" },
   { key: "Users", label: "Users", icon: "👥", adminOnly: true },
   { key: "ExternalAccounts", label: "External Accounts", icon: "📧" },
   { key: "Backup", label: "Backup", icon: "☁️" },

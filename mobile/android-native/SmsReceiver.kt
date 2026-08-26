@@ -38,7 +38,7 @@ class SmsReceiver : BroadcastReceiver() {
                 for (message in messages) {
                     val body = message.messageBody ?: continue
                     val sender = message.originatingAddress ?: "SMS"
-                    send(sender, body)
+                    send(context, sender, body)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing SMS", e)
@@ -48,16 +48,31 @@ class SmsReceiver : BroadcastReceiver() {
         }.start()
     }
 
-    private fun send(sender: String, body: String) {
+    // Runtime-configurable via the app's "Enable SMS Auto-Detect" Settings
+    // toggle (see FinancetrackerNativeModule.kt's setSmsCredentials), which
+    // mints a fresh API token and stores it here at any time with no rebuild
+    // needed. Falls back to the compile-time-baked ApiConfig (see
+    // ApiConfig.kt.template) for anyone who built the APK before this toggle
+    // existed and never opened it -- so an existing working setup doesn't
+    // silently break on upgrade.
+    private fun credentials(context: Context): Pair<String, String> {
+        val prefs = context.getSharedPreferences("ft_sms_config", Context.MODE_PRIVATE)
+        val serverUrl = prefs.getString("server_url", null) ?: ApiConfig.SERVER_URL
+        val apiKey = prefs.getString("api_key", null) ?: ApiConfig.API_KEY
+        return Pair(serverUrl, apiKey)
+    }
+
+    private fun send(context: Context, sender: String, body: String) {
         val payload = JSONObject()
         payload.put("text", body)
         payload.put("sender", sender)
 
+        val (serverUrl, apiKey) = credentials(context)
         try {
-            val url = URL("${ApiConfig.SERVER_URL}/api/ingest/sms")
+            val url = URL("${serverUrl}/api/ingest/sms")
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "POST"
-            connection.setRequestProperty("X-API-Key", ApiConfig.API_KEY)
+            connection.setRequestProperty("X-API-Key", apiKey)
             connection.setRequestProperty("Content-Type", "application/json")
             connection.doOutput = true
             connection.connectTimeout = 15000

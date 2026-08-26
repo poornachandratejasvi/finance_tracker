@@ -17,6 +17,8 @@ import CurrencyFormScreen from "../screens/settings/CurrencyFormScreen";
 import TemplatesScreen from "../screens/settings/TemplatesScreen";
 import TemplateFormScreen from "../screens/settings/TemplateFormScreen";
 import ApiTokensScreen from "../screens/settings/ApiTokensScreen";
+import SmsAutoDetectScreen from "../screens/settings/SmsAutoDetectScreen";
+import SmsImportScreen from "../screens/settings/SmsImportScreen";
 import UsersScreen from "../screens/settings/UsersScreen";
 import UserFormScreen from "../screens/settings/UserFormScreen";
 import ExternalAccountsScreen from "../screens/settings/ExternalAccountsScreen";
@@ -52,6 +54,8 @@ export type SettingsStackParamList = {
   Templates: undefined;
   TemplateForm: { template?: Template } | undefined;
   ApiTokens: undefined;
+  SmsAutoDetect: undefined;
+  SmsImport: undefined;
   Users: undefined;
   UserForm: { user?: AdminUser } | undefined;
   ExternalAccounts: undefined;
@@ -99,6 +103,8 @@ export default function SettingsNavigator() {
       <Stack.Screen name="Templates" component={TemplatesScreen} options={{ title: "Templates" }} />
       <Stack.Screen name="TemplateForm" component={TemplateFormScreen} options={{ title: "Template" }} />
       <Stack.Screen name="ApiTokens" component={ApiTokensScreen} options={{ title: "REST API" }} />
+      <Stack.Screen name="SmsAutoDetect" component={SmsAutoDetectScreen} options={{ title: "SMS Auto-Detect" }} />
+      <Stack.Screen name="SmsImport" component={SmsImportScreen} options={{ title: "Import from SMS" }} />
       <Stack.Screen name="Users" component={UsersScreen} options={{ title: "Users" }} />
       <Stack.Screen name="UserForm" component={UserFormScreen} options={{ title: "User" }} />
       <Stack.Screen
