@@ -75,6 +75,31 @@ export interface BankBalanceSummary {
   period_net: number;
 }
 
+export interface NetWorthPoint {
+  date: string;
+  savings_total: number;
+  credit_total: number;
+  net_worth: number;
+}
+
+export interface NetWorthResponse {
+  series: NetWorthPoint[];
+  current: { savings_total: number; credit_total: number; net_worth: number } | null;
+}
+
+export type DashboardWidgetType =
+  | "net_worth" | "income_expense" | "spending_by_category" | "cashflow_trend"
+  | "balance_trend" | "bank_balances" | "investments_summary"
+  | "reward_points_summary" | "recent_transactions" | "budget_progress";
+
+export interface DashboardWidget {
+  id: number;
+  widget_type: DashboardWidgetType;
+  position: number;
+  size: "small" | "medium" | "large";
+  config: Record<string, unknown> | null;
+}
+
 export interface DashboardSummary {
   total_debit: number;
   total_credit: number;

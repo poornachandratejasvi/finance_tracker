@@ -1,0 +1,30 @@
+import { ComponentType } from "react";
+import { DashboardWidgetType } from "../../types";
+import {
+  NetWorthContent, IncomeExpenseContent, SpendingByCategoryContent, CashflowTrendContent,
+  BalanceTrendContent, BankBalancesContent, InvestmentsSummaryContent, RewardPointsSummaryContent,
+  RecentTransactionsContent, BudgetProgressContent,
+} from "./widgetContents";
+
+// Single source of truth for every addable widget on mobile -- mirrors
+// frontend/src/components/widgets/widgetCatalog.js and must stay in sync
+// with the backend's WIDGET_TYPES (backend/app/api/endpoints/dashboard_widgets.py).
+export const WIDGET_CATALOG: Record<DashboardWidgetType, {
+  label: string;
+  description: string;
+  size: "small" | "medium" | "large";
+  Content: ComponentType;
+}> = {
+  net_worth: { label: "Net Worth", description: "Total savings minus credit owed.", size: "medium", Content: NetWorthContent },
+  income_expense: { label: "Income vs Expense", description: "This period's totals at a glance.", size: "small", Content: IncomeExpenseContent },
+  spending_by_category: { label: "Spending by Category", description: "Where your money went this period.", size: "medium", Content: SpendingByCategoryContent },
+  cashflow_trend: { label: "Cash Flow Trend", description: "Income vs expense over time.", size: "large", Content: CashflowTrendContent },
+  balance_trend: { label: "Balance Trend", description: "Net balance over time.", size: "large", Content: BalanceTrendContent },
+  bank_balances: { label: "Account Balances", description: "Every account, ranked by balance.", size: "medium", Content: BankBalancesContent },
+  investments_summary: { label: "Investments", description: "PPF, mutual funds, stocks and more.", size: "medium", Content: InvestmentsSummaryContent },
+  reward_points_summary: { label: "Reward Points", description: "Credit card points across all cards.", size: "medium", Content: RewardPointsSummaryContent },
+  recent_transactions: { label: "Recent Transactions", description: "Your latest activity.", size: "medium", Content: RecentTransactionsContent },
+  budget_progress: { label: "Budget Progress", description: "Spend vs limit per budgeted category.", size: "medium", Content: BudgetProgressContent },
+};
+
+export const WIDGET_TYPES = Object.keys(WIDGET_CATALOG) as DashboardWidgetType[];

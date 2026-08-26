@@ -13,6 +13,7 @@ import { useAuth } from "../context/AuthContext";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { DashboardSummary } from "../types";
 import { formatCurrency } from "../utils/format";
+import DashboardWidgets from "./widgets/DashboardWidgets";
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -143,6 +144,8 @@ export default function DashboardScreen() {
           )}
         </>
       )}
+
+      <DashboardWidgets />
     </ScrollView>
   );
 }
