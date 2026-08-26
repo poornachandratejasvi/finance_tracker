@@ -22,6 +22,16 @@ function Loading() {
   );
 }
 
+// dashboard/summary is unfiltered (all-time) unless given a date range --
+// every widget that labels itself "this period" needs to explicitly scope to
+// the current month, the same way Dashboard.js does for the main page.
+function currentMonthRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const iso = (d) => d.toISOString().slice(0, 10);
+  return { start_date: iso(start), end_date: iso(now) };
+}
+
 function Empty({ text = 'No data yet.' }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 120 }}>
@@ -62,7 +72,7 @@ export function NetWorthContent() {
 
 export function IncomeExpenseContent() {
   const [data, setData] = useState(null);
-  useEffect(() => { getDashboardSummary().then(setData).catch(() => setData({})); }, []);
+  useEffect(() => { getDashboardSummary(currentMonthRange()).then(setData).catch(() => setData({})); }, []);
   if (!data) return <Loading />;
   const { total_credit = 0, total_debit = 0, net_balance = 0 } = data;
   return (
@@ -86,7 +96,7 @@ export function IncomeExpenseContent() {
 export function SpendingByCategoryContent() {
   const [data, setData] = useState(null);
   const { getMeta } = useCategoryMeta();
-  useEffect(() => { getDashboardSummary().then(setData).catch(() => setData({})); }, []);
+  useEffect(() => { getDashboardSummary(currentMonthRange()).then(setData).catch(() => setData({})); }, []);
   if (!data) return <Loading />;
   const rows = (data.category_summary || []).slice().sort((a, b) => b.total_amount - a.total_amount).slice(0, 8);
   if (!rows.length) return <Empty text="No spending this period." />;

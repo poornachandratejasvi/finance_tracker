@@ -32,6 +32,16 @@ function monthLabel(iso: string): string {
   return d.toLocaleDateString("en-IN", { month: "short", timeZone: "UTC" });
 }
 
+// dashboard/summary is unfiltered (all-time) unless given a date range --
+// every widget labeled "this period" needs to explicitly scope to the
+// current month, the same way DashboardScreen.tsx does for the main screen.
+function currentMonthRange(): { start_date: string; end_date: string } {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { start_date: iso(start), end_date: iso(now) };
+}
+
 function Loading() {
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", minHeight: 80 }}>
@@ -71,7 +81,7 @@ export function NetWorthContent() {
 export function IncomeExpenseContent() {
   const { colors } = useTheme();
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchDashboardSummary>> | null>(null);
-  useEffect(() => { fetchDashboardSummary().then(setData).catch(() => setData(null)); }, []);
+  useEffect(() => { fetchDashboardSummary(currentMonthRange()).then(setData).catch(() => setData(null)); }, []);
   if (!data) return <Loading />;
   return (
     <View style={{ gap: 8 }}>
@@ -102,7 +112,7 @@ function Row({ label, value, color, bold }: { label: string; value: string; colo
 export function SpendingByCategoryContent() {
   const { colors } = useTheme();
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchDashboardSummary>> | null>(null);
-  useEffect(() => { fetchDashboardSummary().then(setData).catch(() => setData(null)); }, []);
+  useEffect(() => { fetchDashboardSummary(currentMonthRange()).then(setData).catch(() => setData(null)); }, []);
   if (!data) return <Loading />;
   const rows = [...(data.category_summary || [])].sort((a, b) => Math.abs(b.total_amount) - Math.abs(a.total_amount)).slice(0, 6);
   if (!rows.length) return <Empty colors={colors} text="No spending this period." />;
