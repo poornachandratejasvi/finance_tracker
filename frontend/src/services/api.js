@@ -833,6 +833,15 @@ export const restoreBackupUpload = async (file) => {
   return (await api.post('/api/backup/restore-upload', form, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
 };
 
+// Dashboard widgets (user-configurable dashboard cards)
+export const getDashboardWidgets = async () => (await api.get('/api/dashboard-widgets/')).data;
+export const getDashboardWidgetTypes = async () => (await api.get('/api/dashboard-widgets/types')).data;
+export const addDashboardWidget = async (data) => (await api.post('/api/dashboard-widgets/', data)).data;
+export const updateDashboardWidget = async (id, data) => (await api.put(`/api/dashboard-widgets/${id}`, data)).data;
+export const reorderDashboardWidgets = async (ids) => (await api.post('/api/dashboard-widgets/reorder', { ids })).data;
+export const deleteDashboardWidget = async (id) => (await api.delete(`/api/dashboard-widgets/${id}`)).data;
+export const getDashboardSummary = async (params = {}) => (await api.get('/api/dashboard/summary', { params })).data;
+
 // Universal search
 export const globalSearch = async (q) => {
   const response = await api.get('/api/search/', { params: { q } });

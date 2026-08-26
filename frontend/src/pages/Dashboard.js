@@ -14,6 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import CategoryIcon from '../components/CategoryIcon.jsx';
 import RecurringTransactionsCard from '../components/RecurringTransactionsCard.jsx';
+import DashboardWidgets from '../components/widgets/DashboardWidgets.jsx';
 import { formatCurrency, formatDate, signedAccountBalance, timeAgo } from '../utils/format';
 import { useCategoryMeta } from '../utils/categories';
 import api, {
@@ -446,6 +447,8 @@ function Dashboard() {
           </Paper>
         </Grid>
       </Grid>
+
+      <DashboardWidgets />
 
       {/* ── Period selector ── */}
       <Paper
