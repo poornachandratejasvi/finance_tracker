@@ -35,7 +35,9 @@ export interface Category {
 }
 
 export interface Transaction {
-  id: number;
+  // A locally-queued, not-yet-synced transaction gets a string id ("local-<uuid>")
+  // instead of the server's numeric id -- see mobile/src/offline/syncEngine.ts.
+  id: number | string;
   user_id: number;
   bank_id: number;
   bank_name: string | null;
@@ -53,6 +55,8 @@ export interface Transaction {
   is_manual: boolean;
   is_confirmed: boolean;
   source: string | null;
+  client_uuid?: string | null;
+  is_pending_sync?: boolean;
   labels: string[];
   created_at: string;
   updated_at: string;

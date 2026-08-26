@@ -18,6 +18,9 @@ import { createTransaction } from "../api/transactions";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { Bank, Category, TransactionType } from "../types";
 import { todayIsoDate } from "../utils/format";
+import { getCachedBanks, getCachedCategories, upsertTransactions } from "../offline/db";
+import { queueOfflineTransaction } from "../offline/syncEngine";
+import { useOffline } from "../offline/OfflineProvider";
 
 export default function AddTransactionScreen() {
   const { colors } = useTheme();
@@ -34,6 +37,7 @@ export default function AddTransactionScreen() {
   const [date, setDate] = useState(todayIsoDate());
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const { isOnline } = useOffline();
 
   useEffect(() => {
     (async () => {
@@ -43,7 +47,13 @@ export default function AddTransactionScreen() {
         setCategories(c);
         if (b.length > 0) setBankId(b[0].id);
       } catch {
-        Alert.alert("Couldn't load accounts", "Pull to refresh the Dashboard tab, then try again.");
+        // Offline (or the server's unreachable) -- fall back to whatever was
+        // last synced, so adding a transaction still works with no internet.
+        const [cachedBanks, cachedCategories] = await Promise.all([getCachedBanks(), getCachedCategories()]);
+        setBanks(cachedBanks);
+        setCategories(cachedCategories);
+        if (cachedBanks.length > 0) setBankId(cachedBanks[0].id);
+        else Alert.alert("Couldn't load accounts", "Connect to the internet at least once to set this up.");
       } finally {
         setLoadingOptions(false);
       }
@@ -73,21 +83,40 @@ export default function AddTransactionScreen() {
       return;
     }
 
+    const payload = {
+      bank_id: bankId as number,
+      transaction_date: `${date}T12:00:00`,
+      description: description.trim(),
+      amount: parsedAmount,
+      transaction_type: type,
+      category: category || undefined,
+      notes: notes.trim() || undefined,
+    };
+
     setSubmitting(true);
     try {
-      await createTransaction({
-        bank_id: bankId,
-        transaction_date: `${date}T12:00:00`,
-        description: description.trim(),
-        amount: parsedAmount,
-        transaction_type: type,
-        category: category || undefined,
-        notes: notes.trim() || undefined,
-      });
+      // Skip the network attempt entirely when already known offline --
+      // avoids hanging on a flaky-but-technically-online axios timeout.
+      if (!isOnline) {
+        await queueOfflineTransaction(payload);
+        Alert.alert("Saved offline", "Will sync once you're back online.");
+        resetForm();
+        return;
+      }
+      const created = await createTransaction(payload);
+      upsertTransactions([created]).catch(() => {});
       Alert.alert("Saved", "Transaction added.");
       resetForm();
     } catch (err: any) {
-      const detail = err?.response?.data?.detail;
+      if (!err?.response) {
+        // No server response at all -- a genuine network failure (not a
+        // validation rejection), so it's safe to queue and retry later.
+        await queueOfflineTransaction(payload);
+        Alert.alert("Saved offline", "Will sync once you're back online.");
+        resetForm();
+        return;
+      }
+      const detail = err.response?.data?.detail;
       Alert.alert("Couldn't save", typeof detail === "string" ? detail : "Please try again.");
     } finally {
       setSubmitting(false);

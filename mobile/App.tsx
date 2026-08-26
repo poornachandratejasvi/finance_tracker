@@ -4,6 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider } from "./src/context/AuthContext";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
+import { OfflineProvider } from "./src/offline/OfflineProvider";
 import RootNavigator from "./src/navigation/RootNavigator";
 
 function AppInner() {
@@ -21,7 +22,9 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
-          <AppInner />
+          <OfflineProvider>
+            <AppInner />
+          </OfflineProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

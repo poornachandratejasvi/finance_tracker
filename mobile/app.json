@@ -28,7 +28,8 @@
       ],
       "./plugins/withAppIntents",
       "./plugins/withSmsReceiver",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-sqlite"
     ]
   }
 }

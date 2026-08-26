@@ -10,6 +10,7 @@ export interface ListTransactionsParams {
   transaction_type?: string;
   category?: string;
   search?: string;
+  updated_since?: string;
 }
 
 export async function listTransactions(
@@ -29,6 +30,7 @@ export interface CreateTransactionPayload {
   transaction_type: TransactionType;
   category?: string;
   notes?: string;
+  client_uuid?: string;
 }
 
 export async function createTransaction(payload: CreateTransactionPayload): Promise<Transaction> {

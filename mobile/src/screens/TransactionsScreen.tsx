@@ -12,6 +12,8 @@ import { listTransactions } from "../api/transactions";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { Transaction } from "../types";
 import { formatCurrency, formatDate } from "../utils/format";
+import { getCachedTransactions, upsertTransactions } from "../offline/db";
+import { useOffline } from "../offline/OfflineProvider";
 
 const PAGE_SIZE = 30;
 
@@ -24,6 +26,8 @@ export default function TransactionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showingCached, setShowingCached] = useState(false);
+  const { isOnline } = useOffline();
 
   const loadPage = useCallback(async (skip: number) => {
     const data = await listTransactions({ skip, limit: PAGE_SIZE });
@@ -36,16 +40,39 @@ export default function TransactionsScreen() {
       const data = await loadPage(0);
       setItems(data.items);
       setTotal(data.total);
+      setShowingCached(false);
+      upsertTransactions(data.items).catch(() => {}); // keep the offline mirror fresh
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "Couldn't load transactions.");
+      // Network failed (offline, or the server's unreachable) -- fall back to
+      // the last-synced local mirror instead of an empty error screen.
+      const cached = await getCachedTransactions(PAGE_SIZE * 3);
+      if (cached.length) {
+        setItems(cached);
+        setTotal(cached.length);
+        setShowingCached(true);
+      } else {
+        setError(err?.response?.data?.detail || "Couldn't load transactions.");
+      }
     }
   }, [loadPage]);
 
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      await initialLoad();
-      setLoading(false);
+      // Paint cached data immediately (before the network call resolves) so
+      // the screen is never a blank spinner on a slow connection -- only the
+      // very first-ever load (nothing cached yet) shows the full spinner.
+      const cached = await getCachedTransactions(PAGE_SIZE * 3);
+      if (cached.length) {
+        setItems(cached);
+        setTotal(cached.length);
+        setShowingCached(true);
+        setLoading(false);
+        await initialLoad(); // refresh from network in the background
+      } else {
+        setLoading(true);
+        await initialLoad();
+        setLoading(false);
+      }
     })();
   }, [initialLoad]);
 
@@ -81,6 +108,13 @@ export default function TransactionsScreen() {
       style={styles.flex}
       data={items}
       keyExtractor={(item) => String(item.id)}
+      ListHeaderComponent={
+        showingCached && !isOnline ? (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>Offline — showing saved data</Text>
+          </View>
+        ) : null
+      }
       contentContainerStyle={styles.list}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       onEndReachedThreshold={0.4}
@@ -117,6 +151,7 @@ function TransactionRow({ txn }: { txn: Transaction }) {
         <View style={styles.tagRow}>
           {!txn.is_confirmed && <Text style={styles.pending}>Pending</Text>}
           {txn.source === "sms" && <Text style={styles.smsTag}>via SMS</Text>}
+          {txn.is_pending_sync && <Text style={styles.smsTag}>Sync pending</Text>}
         </View>
       </View>
       <Text style={[styles.amount, { color: isCredit ? colors.primary : colors.danger }]}>
@@ -146,6 +181,8 @@ const makeStyles = (c: ThemeColors) =>
     tagRow: { flexDirection: "row", gap: 8, marginTop: 2 },
     pending: { fontSize: 11, color: c.warning, fontWeight: "600" },
     smsTag: { fontSize: 11, color: c.primary, fontWeight: "600" },
+    offlineBanner: { backgroundColor: c.chipBg, borderRadius: 8, padding: 10, marginBottom: 8 },
+    offlineBannerText: { color: c.textSecondary, fontSize: 12, textAlign: "center", fontWeight: "600" },
     amount: { fontSize: 15, fontWeight: "700" },
     error: { color: c.danger, textAlign: "center", marginTop: 40 },
     empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
