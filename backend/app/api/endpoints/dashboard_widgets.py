@@ -10,6 +10,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -83,15 +84,19 @@ def add_widget(
 ):
     if payload.widget_type not in WIDGET_TYPES:
         raise HTTPException(status_code=422, detail=f"Unknown widget_type '{payload.widget_type}'")
+    # max(position)+1, not count() -- a prior delete can leave gaps (e.g.
+    # [0,1,3] after removing position 2), and count() would collide with an
+    # existing position instead of appending at the true end.
     max_pos = (
-        db.query(DashboardWidget)
+        db.query(func.max(DashboardWidget.position))
         .filter(DashboardWidget.user_id == current_user.id)
-        .count()
+        .scalar()
     )
+    next_pos = (max_pos + 1) if max_pos is not None else 0
     widget = DashboardWidget(
         user_id=current_user.id,
         widget_type=payload.widget_type,
-        position=max_pos,
+        position=next_pos,
         size=payload.size or "medium",
         config=json.dumps(payload.config) if payload.config else None,
     )
