@@ -37,6 +37,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import CardGiftcardIcon from '@mui/icons-material/CardGiftcard';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import GroupsIcon from '@mui/icons-material/Groups';
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import GlobalSearch from './GlobalSearch.jsx';
 
 const DRAWER_WIDTH = 236;
@@ -53,6 +54,7 @@ const NAV_GROUPS = [
     { label: 'Goals', path: '/goals', icon: <FlagIcon /> },
     { label: 'Reward Points', path: '/reward-points', icon: <CardGiftcardIcon /> },
     { label: 'Investments', path: '/investments', icon: <TrendingUpIcon /> },
+    { label: 'Vehicles', path: '/vehicles', icon: <DirectionsCarIcon /> },
   ] },
   { heading: 'Accounts & Data', items: [
     { label: 'Banks', path: '/banks', icon: <AccountBalanceIcon /> },

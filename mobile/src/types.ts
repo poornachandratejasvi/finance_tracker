@@ -536,6 +536,53 @@ export interface PredictionsResponse {
   days_ahead: number;
 }
 
+export interface VehiclePolicy {
+  id: number;
+  vehicle_id: number;
+  provider: string | null;
+  policy_number: string | null;
+  policy_type: string;
+  premium_amount: number | null;
+  start_date: string | null;
+  expiry_date: string | null;
+  days_until_expiry: number | null;
+  notes: string | null;
+}
+
+export interface Vehicle {
+  id: number;
+  registration_number: string;
+  nickname: string | null;
+  vehicle_type: string;
+  make: string | null;
+  model: string | null;
+  fuel_type: string | null;
+  purchase_date: string | null;
+  notes: string | null;
+  current_policy: VehiclePolicy | null;
+  policy_count: number;
+}
+
+export interface ExpiringPolicy extends VehiclePolicy {
+  vehicle_registration_number: string;
+  vehicle_nickname: string | null;
+}
+
+export interface VehicleDocScanResult {
+  success: boolean;
+  message?: string;
+  registration_number?: string | null;
+  make?: string | null;
+  model?: string | null;
+  fuel_type?: string | null;
+  provider?: string | null;
+  policy_number?: string | null;
+  policy_type?: string | null;
+  premium_amount?: number | null;
+  start_date?: string | null;
+  expiry_date?: string | null;
+}
+
 export type RewardEntryType = "earned" | "redeemed" | "expired" | "adjustment";
 
 export interface RewardPointEntry {

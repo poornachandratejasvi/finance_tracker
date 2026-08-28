@@ -29,7 +29,15 @@
       "./plugins/withAppIntents",
       "./plugins/withSmsReceiver",
       "expo-sharing",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-quick-actions",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Finance Tracker needs photo library access to attach a receipt image.",
+          "cameraPermission": "Finance Tracker needs camera access to take a photo of a receipt."
+        }
+      ]
     ]
   }
 }

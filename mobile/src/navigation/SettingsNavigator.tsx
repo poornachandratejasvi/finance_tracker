@@ -32,10 +32,12 @@ import AboutScreen from "../screens/settings/AboutScreen";
 import BudgetsScreen from "../screens/settings/BudgetsScreen";
 import GoalsScreen from "../screens/settings/GoalsScreen";
 import GoalFormScreen from "../screens/settings/GoalFormScreen";
+import VehiclesScreen from "../screens/settings/VehiclesScreen";
+import VehicleFormScreen from "../screens/settings/VehicleFormScreen";
 import JobsScreen from "../screens/settings/JobsScreen";
 import AutomationScreen from "../screens/settings/AutomationScreen";
 import AskAiScreen from "../screens/settings/AskAiScreen";
-import { Category, Label, AutoRule, NotificationRule, Currency, Template, AdminUser, Goal } from "../types";
+import { Category, Label, AutoRule, NotificationRule, Currency, Template, AdminUser, Goal, Vehicle } from "../types";
 
 export type SettingsStackParamList = {
   SettingsHub: undefined;
@@ -69,6 +71,8 @@ export type SettingsStackParamList = {
   Budgets: undefined;
   Goals: undefined;
   GoalForm: { goal?: Goal } | undefined;
+  Vehicles: undefined;
+  VehicleForm: { vehicle?: Vehicle } | undefined;
   Jobs: undefined;
   Automation: undefined;
   AskAi: undefined;
@@ -122,6 +126,8 @@ export default function SettingsNavigator() {
       <Stack.Screen name="Budgets" component={BudgetsScreen} options={{ title: "Budgets" }} />
       <Stack.Screen name="Goals" component={GoalsScreen} options={{ title: "Goals" }} />
       <Stack.Screen name="GoalForm" component={GoalFormScreen} options={{ title: "Goal" }} />
+      <Stack.Screen name="Vehicles" component={VehiclesScreen} options={{ title: "Vehicles" }} />
+      <Stack.Screen name="VehicleForm" component={VehicleFormScreen} options={{ title: "Vehicle" }} />
       <Stack.Screen name="Jobs" component={JobsScreen} options={{ title: "Jobs" }} />
       <Stack.Screen name="Automation" component={AutomationScreen} options={{ title: "Automation" }} />
       <Stack.Screen name="AskAi" component={AskAiScreen} options={{ title: "Ask AI" }} />

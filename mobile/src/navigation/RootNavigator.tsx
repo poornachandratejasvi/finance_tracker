@@ -1,17 +1,19 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
-import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
+import { DarkTheme, DefaultTheme, NavigationContainer, useNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { registerQuickActions, useQuickActionRouter } from "../utils/quickActions";
 import LoginScreen from "../screens/LoginScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import TransactionsScreen from "../screens/TransactionsScreen";
-import AddTransactionScreen from "../screens/AddTransactionScreen";
+import AddTransactionScreen, { ReceiptPrefill } from "../screens/AddTransactionScreen";
 import AnalyticsScreen from "../screens/AnalyticsScreen";
 import SearchScreen from "../screens/SearchScreen";
+import ScanReceiptScreen from "../screens/ScanReceiptScreen";
 import BanksNavigator from "./BanksNavigator";
 import SettingsNavigator from "./SettingsNavigator";
 
@@ -19,12 +21,13 @@ export type RootStackParamList = {
   Login: undefined;
   Tabs: undefined;
   Search: undefined;
+  ScanReceipt: undefined;
 };
 
 export type TabParamList = {
   Dashboard: undefined;
   Transactions: undefined;
-  Add: undefined;
+  Add: { prefill?: ReceiptPrefill } | undefined;
   Analytics: undefined;
   Banks: undefined;
   Settings: undefined;
@@ -63,7 +66,18 @@ function AppTabs({ navigation }: any) {
       <Tab.Screen
         name="Add"
         component={AddTransactionScreen}
-        options={{ tabBarIcon: tabIcon("➕"), title: "Add Transaction" }}
+        options={{
+          tabBarIcon: tabIcon("➕"),
+          title: "Add Transaction",
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => navigation.navigate("ScanReceipt")}
+              style={{ paddingHorizontal: 16 }}
+            >
+              <Text style={{ fontSize: 18 }}>📷</Text>
+            </TouchableOpacity>
+          ),
+        }}
       />
       <Tab.Screen
         name="Analytics"
@@ -87,6 +101,12 @@ function AppTabs({ navigation }: any) {
 export default function RootNavigator() {
   const { loading, isAuthenticated } = useAuth();
   const { colors, isDark } = useTheme();
+  const navigationRef = useNavigationContainerRef<RootStackParamList>();
+
+  useEffect(() => {
+    registerQuickActions();
+  }, []);
+  useQuickActionRouter(navigationRef, !loading && isAuthenticated);
 
   if (loading) {
     return (
@@ -109,7 +129,7 @@ export default function RootNavigator() {
   };
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
           <>
@@ -118,6 +138,11 @@ export default function RootNavigator() {
               name="Search"
               component={SearchScreen}
               options={{ headerShown: true, title: "Search", presentation: "modal" }}
+            />
+            <Stack.Screen
+              name="ScanReceipt"
+              component={ScanReceiptScreen}
+              options={{ headerShown: true, title: "Scan Receipt", presentation: "modal" }}
             />
           </>
         ) : (

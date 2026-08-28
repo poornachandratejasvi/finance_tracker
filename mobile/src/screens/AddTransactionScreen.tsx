@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
 
 import { listBanks } from "../api/banks";
 import { listCategories } from "../api/categories";
@@ -21,10 +22,22 @@ import { todayIsoDate } from "../utils/format";
 import { getCachedBanks, getCachedCategories, upsertTransactions } from "../offline/db";
 import { queueOfflineTransaction } from "../offline/syncEngine";
 import { useOffline } from "../offline/OfflineProvider";
+import { TabParamList } from "../navigation/RootNavigator";
+
+export interface ReceiptPrefill {
+  amount?: number;
+  description?: string | null;
+  transaction_date?: string | null;
+  category?: string | null;
+}
+
+type AddRouteProp = RouteProp<TabParamList, "Add">;
 
 export default function AddTransactionScreen() {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  const route = useRoute<AddRouteProp>();
+  const navigation = useNavigation();
   const [banks, setBanks] = useState<Bank[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
@@ -38,6 +51,21 @@ export default function AddTransactionScreen() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { isOnline } = useOffline();
+
+  // A receipt scan hands its extracted draft here via route params (rather than
+  // creating a transaction directly) so the user always reviews/edits an OCR/AI
+  // guess before it's saved. Clear the param after consuming it so switching
+  // away and back to this tab doesn't silently re-apply a stale prefill.
+  useEffect(() => {
+    const prefill = route.params?.prefill;
+    if (!prefill) return;
+    if (prefill.amount) setAmount(String(prefill.amount));
+    if (prefill.description) setDescription(prefill.description);
+    if (prefill.transaction_date) setDate(prefill.transaction_date);
+    if (prefill.category) setCategory(prefill.category);
+    setType("debit");
+    navigation.setParams({ prefill: undefined } as never);
+  }, [route.params?.prefill]);
 
   useEffect(() => {
     (async () => {

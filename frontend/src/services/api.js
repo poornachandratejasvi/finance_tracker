@@ -856,4 +856,24 @@ export const globalSearch = async (q) => {
   return response.data;
 };
 
+// Vehicles + insurance policies
+export const listVehicles = async () => (await api.get('/api/vehicles/')).data;
+export const createVehicle = async (data) => (await api.post('/api/vehicles/', data)).data;
+export const updateVehicle = async (id, data) => (await api.put(`/api/vehicles/${id}`, data)).data;
+export const deleteVehicle = async (id) => (await api.delete(`/api/vehicles/${id}`)).data;
+export const listVehiclePolicies = async (vehicleId) => (await api.get(`/api/vehicles/${vehicleId}/policies`)).data;
+export const createVehiclePolicy = async (vehicleId, data) => (await api.post(`/api/vehicles/${vehicleId}/policies`, data)).data;
+export const updateVehiclePolicy = async (policyId, data) => (await api.put(`/api/vehicles/policies/${policyId}`, data)).data;
+export const deleteVehiclePolicy = async (policyId) => (await api.delete(`/api/vehicles/policies/${policyId}`)).data;
+export const getExpiringPolicies = async (withinDays = 45) =>
+  (await api.get('/api/vehicles/expiring', { params: { within_days: withinDays } })).data;
+export const scanVehicleDocument = async (docType, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return (await api.post('/api/vehicles/scan-document', form, {
+    params: { doc_type: docType },
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })).data;
+};
+
 export default api;

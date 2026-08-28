@@ -764,3 +764,51 @@ class InvestmentEntry(Base):
     account = relationship("InvestmentAccount")
 
     __table_args__ = (Index("ix_investment_entries_account", "investment_account_id"),)
+
+
+class Vehicle(Base):
+    """A vehicle the user owns -- purely manual record-keeping (no live VAHAN/
+    RTO lookup integration: India has no open public API for per-vehicle RC
+    data, only paid B2B KYC vendors or a restricted government-only VAHAN API,
+    disproportionate for a personal tracker). Optionally OCR-assisted from a
+    photo of the RC via the same receipt-OCR pipeline used for receipts."""
+    __tablename__ = "vehicles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    registration_number = Column(String(20), nullable=False)
+    nickname = Column(String(100), nullable=True)
+    vehicle_type = Column(String(20), default="car")  # car | bike | scooter | commercial | other
+    make = Column(String(60), nullable=True)
+    model = Column(String(60), nullable=True)
+    fuel_type = Column(String(20), nullable=True)  # petrol | diesel | electric | cng | hybrid
+    purchase_date = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")
+    policies = relationship("VehicleInsurancePolicy", cascade="all, delete-orphan", back_populates="vehicle")
+
+
+class VehicleInsurancePolicy(Base):
+    """A motor insurance policy for a vehicle. One vehicle can have a history
+    of policies (renewed each year) -- keep old ones for record-keeping rather
+    than overwriting, and treat the one with the latest expiry_date as current."""
+    __tablename__ = "vehicle_insurance_policies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vehicle_id = Column(Integer, ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider = Column(String(100), nullable=True)
+    policy_number = Column(String(60), nullable=True)
+    policy_type = Column(String(20), default="comprehensive")  # third_party | comprehensive
+    premium_amount = Column(Float, nullable=True)
+    start_date = Column(DateTime, nullable=True)
+    expiry_date = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    vehicle = relationship("Vehicle", back_populates="policies")
+    user = relationship("User")
