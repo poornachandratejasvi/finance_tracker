@@ -84,6 +84,8 @@ def build_add_transaction_shortcut(
     token: str,
     include_type: bool = True,
     include_category: bool = False,
+    include_account: bool = True,
+    account_names: Optional[List[str]] = None,
     notify_title: str = "Finance Tracker",
 ) -> bytes:
     """Build the .shortcut plist bytes for an 'Add Transaction' shortcut."""
@@ -110,6 +112,18 @@ def build_add_transaction_shortcut(
         ask_cat, cat_uuid = _ask("Category (leave blank to auto-categorize)", "Text", "Category", default="")
         actions.append(ask_cat)
         json_items.append(_dict_item("category", _var_token(cat_uuid, "Category")))
+
+    if include_account:
+        # Free-text (not "Choose from Menu") because /api/ingest/transaction already
+        # fuzzy-matches this against the caller's real bank names (exact, then
+        # contains, then code) -- a fixed menu baked in at shortcut-creation time
+        # would go stale the moment a bank is renamed or added.
+        names_hint = ", ".join(account_names or []) or "no banks configured yet"
+        ask_account, account_uuid = _ask(
+            f"Account (e.g. one of: {names_hint} — leave blank for default)", "Text", "Account", default="",
+        )
+        actions.append(ask_account)
+        json_items.append(_dict_item("account", _var_token(account_uuid, "Account")))
 
     # Get Contents of URL — POST JSON with the API-key header.
     actions.append({

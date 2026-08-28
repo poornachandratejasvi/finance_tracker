@@ -328,6 +328,7 @@ class ShortcutRequest(BaseModel):
     token_name: Optional[str] = "iOS Shortcut"
     include_type: bool = True                   # ask Expense/Income
     include_category: bool = False              # ask Category (blank = auto)
+    include_account: bool = True                # ask which account/bank it belongs to
 
 
 @router.post("/shortcut")
@@ -359,11 +360,14 @@ def generate_ios_shortcut(
         db.commit()
         token = full_token
 
+    account_names = [b.name for b in db.query(Bank).filter(Bank.user_id == current_user.id).all()]
     data = shortcut_service.build_add_transaction_shortcut(
         base_url=base,
         token=token,
         include_type=payload.include_type,
         include_category=payload.include_category,
+        include_account=payload.include_account,
+        account_names=account_names,
     )
     return Response(
         content=data,

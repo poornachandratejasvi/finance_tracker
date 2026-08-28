@@ -29,6 +29,7 @@ export default function ApiAccess() {
   const [scBaseUrl, setScBaseUrl] = useState(API_BASE);
   const [scIncludeType, setScIncludeType] = useState(true);
   const [scIncludeCategory, setScIncludeCategory] = useState(false);
+  const [scIncludeAccount, setScIncludeAccount] = useState(true);
   const [scBusy, setScBusy] = useState(false);
   const [kit, setKit] = useState(null);     // {token, url} shown after "Create setup kit"
   const [kitBusy, setKitBusy] = useState(false);
@@ -97,6 +98,7 @@ export default function ApiAccess() {
         base_url: base,
         include_type: scIncludeType,
         include_category: scIncludeCategory,
+        include_account: scIncludeAccount,
         token_name: 'iOS Shortcut',
       });
       setMsg(`Downloaded "${name}" (URL + fresh token baked in). Sign it on a Mac with \`shortcuts sign\` before importing on iOS 15+, or use the Setup Kit above on a stock iPhone.`);
@@ -245,8 +247,8 @@ export default function ApiAccess() {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           On iPhone/iPad, the built-in <b>Shortcuts</b> app <i>is</i> the plugin platform — no App
           Store add-on needed. The fastest reliable way is the <b>Setup Kit</b>: tap the button to
-          mint a token, then paste three values into a tiny 3-action shortcut (≈2 min). This works on
-          every iPhone.
+          mint a token, then paste three values into a tiny shortcut (≈3 min) that also lets you
+          pick the expense/income type and which account it belongs to. This works on every iPhone.
         </Typography>
 
         <TextField
@@ -273,7 +275,11 @@ export default function ApiAccess() {
             {[
               { label: '1. POST URL', value: kit.url },
               { label: '2. Header  X-API-Key', value: kit.token },
-              { label: '3. Request body (JSON)', value: '{ "amount": 250, "description": "Swiggy dinner" }' },
+              {
+                label: '3. Request body (JSON)',
+                value: '{ "amount": 250, "description": "Swiggy dinner", "type": "Expense", "account": "'
+                  + (banks[0]?.name || 'Your Bank Name') + '" }',
+              },
             ].map((row) => (
               <Box key={row.label} sx={{ mb: 1 }}>
                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>{row.label}</Typography>
@@ -288,7 +294,23 @@ export default function ApiAccess() {
               <Box component="ol" sx={{ pl: 3, my: 0, '& li': { mb: 0.25 } }}>
                 <li><Typography variant="body2"><b>Ask for Input</b> (Number) → “Amount”.</Typography></li>
                 <li><Typography variant="body2"><b>Ask for Input</b> (Text) → “Description”.</Typography></li>
-                <li><Typography variant="body2"><b>Get Contents of URL</b> → paste URL (1), Method <b>POST</b>, add header <code>X-API-Key</code> = value (2), Request Body <b>JSON</b> with <code>amount</code> = the Amount variable and <code>description</code> = the Description variable.</Typography></li>
+                <li><Typography variant="body2">
+                  <b>Choose from Menu</b> → items “Expense” and “Income” → rename the result variable to “Type”
+                  (this is what decides spend vs. credit — the request body's <code>type</code> field below reads it).
+                </Typography></li>
+                <li><Typography variant="body2">
+                  <b>Choose from Menu</b> → one item per account you want to pick from, using your account names
+                  exactly as configured in Settings → Banks{banks.length > 0 && (
+                    <> (you have: {banks.map((b) => `"${b.name}"`).join(', ')})</>
+                  )} → rename the result variable to “Account”. (A close/partial match to the account name also
+                  works, but exact is safest.)
+                </Typography></li>
+                <li><Typography variant="body2">
+                  <b>Get Contents of URL</b> → paste URL (1), Method <b>POST</b>, add header <code>X-API-Key</code> =
+                  value (2), Request Body <b>JSON</b> with <code>amount</code> = Amount variable,{' '}
+                  <code>description</code> = Description variable, <code>type</code> = Type variable, and{' '}
+                  <code>account</code> = Account variable.
+                </Typography></li>
                 <li><Typography variant="body2">Name it “Add Transaction”, add to Home Screen / Siri. Done.</Typography></li>
               </Box>
             </Alert>
@@ -322,6 +344,10 @@ export default function ApiAccess() {
           <FormControlLabel
             control={<Checkbox size="small" checked={scIncludeCategory} onChange={(e) => setScIncludeCategory(e.target.checked)} />}
             label="Ask Category"
+          />
+          <FormControlLabel
+            control={<Checkbox size="small" checked={scIncludeAccount} onChange={(e) => setScIncludeAccount(e.target.checked)} />}
+            label="Ask Account"
           />
         </Box>
       </Paper>
