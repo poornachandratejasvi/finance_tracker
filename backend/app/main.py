@@ -137,6 +137,10 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "balance_source", "ALTER TABLE banks ADD COLUMN balance_source VARCHAR(10) DEFAULT 'auto'")
         _add_column_if_missing(columns, "reward_points_updated_at", "ALTER TABLE banks ADD COLUMN reward_points_updated_at TIMESTAMP")
         _add_column_if_missing(columns, "sms_sender_pattern", "ALTER TABLE banks ADD COLUMN sms_sender_pattern VARCHAR(50)")
+        # Debt payoff calculator inputs -- only meaningful for bank_type='credit'/'loan'
+        # accounts; NULL elsewhere just means "not tracked as a debt to pay off."
+        _add_column_if_missing(columns, "interest_rate", "ALTER TABLE banks ADD COLUMN interest_rate FLOAT")
+        _add_column_if_missing(columns, "minimum_payment", "ALTER TABLE banks ADD COLUMN minimum_payment FLOAT")
 
     if "pdf_statements" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("pdf_statements")}
@@ -167,6 +171,14 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "is_confirmed", "ALTER TABLE transactions ADD COLUMN is_confirmed BOOLEAN DEFAULT TRUE")
         _add_column_if_missing(columns, "confirmed_at", "ALTER TABLE transactions ADD COLUMN confirmed_at TIMESTAMP")
         _add_column_if_missing(columns, "client_uuid", "ALTER TABLE transactions ADD COLUMN client_uuid VARCHAR(36)")
+        # Round-up savings: marks a debit transaction as already counted into a
+        # goal's round-up total, so re-running the sweep never double-counts it.
+        _add_column_if_missing(columns, "roundup_swept", "ALTER TABLE transactions ADD COLUMN roundup_swept BOOLEAN DEFAULT FALSE")
+
+    if "savings_goals" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("savings_goals")}
+        _add_column_if_missing(columns, "roundup_enabled", "ALTER TABLE savings_goals ADD COLUMN roundup_enabled BOOLEAN DEFAULT FALSE")
+        _add_column_if_missing(columns, "roundup_to", "ALTER TABLE savings_goals ADD COLUMN roundup_to INTEGER DEFAULT 10")
 
     if "users" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("users")}

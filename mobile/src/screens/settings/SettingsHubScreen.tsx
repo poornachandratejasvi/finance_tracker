@@ -28,6 +28,7 @@ const TOOLS_ROWS: Row[] = [
   { key: "Budgets", label: "Budgets", icon: "💰" },
   { key: "Goals", label: "Goals", icon: "🎯" },
   { key: "Vehicles", label: "Vehicles", icon: "🚗" },
+  { key: "DebtPayoff", label: "Debt Payoff", icon: "💳" },
   { key: "Jobs", label: "Jobs", icon: "🔄" },
   { key: "Automation", label: "Automation", icon: "🤖" },
   { key: "AskAi", label: "Ask AI", icon: "💬" },

@@ -74,6 +74,8 @@ function Banks() {
     csv_email: '',
     current_balance: '',
     pdf_filename_prefix: '',
+    interest_rate: '',
+    minimum_payment: '',
   });
   
   // Password candidates for the bank being edited
@@ -180,7 +182,15 @@ function Banks() {
       } else {
         delete bankData.current_balance;
       }
-      
+      for (const field of ['interest_rate', 'minimum_payment']) {
+        if (bankData[field] !== '' && bankData[field] !== null && bankData[field] !== undefined) {
+          const parsed = parseFloat(bankData[field]);
+          bankData[field] = Number.isNaN(parsed) ? null : parsed;
+        } else {
+          delete bankData[field];
+        }
+      }
+
       if (editMode) {
         await updateBank(editingBankId, bankData);
         // Save password candidates if any are set
@@ -205,7 +215,7 @@ function Banks() {
       setBankDialog(false);
       setEditMode(false);
       setEditingBankId(null);
-      setNewBank({ name: '', code: '', sender_email: '', sender_emails: '', sms_sender_pattern: '', account_number: '', account_password: '', bank_type: 'savings', csv_email: '', current_balance: '', pdf_filename_prefix: '' });
+      setNewBank({ name: '', code: '', sender_email: '', sender_emails: '', sms_sender_pattern: '', account_number: '', account_password: '', bank_type: 'savings', csv_email: '', current_balance: '', pdf_filename_prefix: '', interest_rate: '', minimum_payment: '' });
       setPasswordCandidates([]);
       setNewPasswordCandidate('');
       fetchData();
@@ -458,6 +468,8 @@ function Banks() {
       csv_email: bank.csv_email || '',
       current_balance: bank.current_balance ?? '',
       pdf_filename_prefix: bank.pdf_filename_prefix || '',
+      interest_rate: bank.interest_rate ?? '',
+      minimum_payment: bank.minimum_payment ?? '',
     });
     setExistingPasswordSet(bank.has_password === true);
     setShowPassword(false);
@@ -926,6 +938,7 @@ function Banks() {
             >
               <MenuItem value="savings">Savings Account</MenuItem>
               <MenuItem value="credit">Credit Card</MenuItem>
+              <MenuItem value="loan">Loan (personal, car, home, etc.)</MenuItem>
               <MenuItem value="investment">Investment Statement (e.g. CDSL/NSDL CAS)</MenuItem>
               <MenuItem value="other">Other</MenuItem>
             </TextField>
@@ -948,17 +961,39 @@ function Banks() {
             />
             <TextField
               fullWidth
-              label={newBank.bank_type === 'credit' ? 'Current Outstanding Amount (Optional)' : 'Current Balance (Optional)'}
+              label={['credit', 'loan'].includes(newBank.bank_type) ? 'Current Outstanding Amount (Optional)' : 'Current Balance (Optional)'}
               type="number"
               value={newBank.current_balance}
               onChange={(e) => setNewBank({ ...newBank, current_balance: e.target.value })}
               helperText={
                 newBank.bank_type === 'credit'
                   ? "What you currently owe on this card. Overrides the auto-detected Total Amount Due — set this any time the automatic statement detection is stale or wrong."
-                  : "Overrides the auto-detected balance"
+                  : newBank.bank_type === 'loan'
+                    ? "What you currently owe on this loan."
+                    : "Overrides the auto-detected balance"
               }
               sx={{ mb: 2 }}
             />
+            {['credit', 'loan'].includes(newBank.bank_type) && (
+              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                <TextField
+                  label="Interest Rate % (Optional)"
+                  type="number"
+                  value={newBank.interest_rate || ''}
+                  onChange={(e) => setNewBank({ ...newBank, interest_rate: e.target.value })}
+                  helperText="Annual rate — used by the Debt Payoff calculator"
+                  fullWidth
+                />
+                <TextField
+                  label="Minimum Payment (Optional)"
+                  type="number"
+                  value={newBank.minimum_payment || ''}
+                  onChange={(e) => setNewBank({ ...newBank, minimum_payment: e.target.value })}
+                  helperText="Leave blank to estimate as 2% of balance"
+                  fullWidth
+                />
+              </Box>
+            )}
             <TextField
               fullWidth
               label={editMode && existingPasswordSet ? 'Change Password (leave blank to keep current)' : 'Account Password (Optional)'}

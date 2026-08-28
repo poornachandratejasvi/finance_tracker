@@ -31,6 +31,8 @@ const CATEGORY_LABELS: Record<InvestmentCategory, string> = {
   bonds: "Bonds",
   gold: "Gold",
   vehicle: "Vehicle",
+  crypto: "Crypto",
+  collectible: "Collectibles",
 };
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as InvestmentCategory[];
 

@@ -486,6 +486,17 @@ export const updateGoal = async (id, data) => {
 export const deleteGoal = async (id) => {
   await api.delete(`/api/goals/${id}`);
 };
+export const getRoundupPreview = async (goalId) => (await api.get(`/api/goals/${goalId}/roundup-preview`)).data;
+export const sweepRoundups = async (goalId) => (await api.post(`/api/goals/${goalId}/sweep-roundups`)).data;
+
+// Debt payoff calculator
+export const getDebtSummary = async () => (await api.get('/api/debt/summary')).data;
+export const getDebtPayoffPlan = async (strategy = 'avalanche', extraPayment = 0) =>
+  (await api.get('/api/debt/payoff-plan', { params: { strategy, extra_payment: extraPayment } })).data;
+
+// Gamification (zero-spend streaks)
+export const getZeroSpendStreaks = async (lookbackDays = 180) =>
+  (await api.get('/api/gamification/streaks', { params: { lookback_days: lookbackDays } })).data;
 
 // Imports (CSV/Excel -> transactions, via column mapping)
 export const previewImportFile = async (file) => {

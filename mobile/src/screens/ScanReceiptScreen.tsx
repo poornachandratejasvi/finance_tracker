@@ -39,6 +39,9 @@ export default function ScanReceiptScreen() {
             description: result.description,
             transaction_date: result.transaction_date,
             category: result.category,
+            items: result.items,
+            tax: result.tax,
+            tip: result.tip,
           },
         },
       } as never);

@@ -29,6 +29,7 @@ import RewardPoints from './pages/RewardPoints.jsx';
 import FamilyDashboard from './pages/FamilyDashboard.jsx';
 import Investments from './pages/Investments.jsx';
 import Vehicles from './pages/Vehicles.jsx';
+import DebtPayoff from './pages/DebtPayoff.jsx';
 
 const queryClient = new QueryClient();
 
@@ -56,6 +57,7 @@ function App() {
                 <Route path="/budgets" element={<ProtectedRoute><Layout><Budgets /></Layout></ProtectedRoute>} />
                 <Route path="/goals" element={<ProtectedRoute><Layout><Goals /></Layout></ProtectedRoute>} />
                 <Route path="/vehicles" element={<ProtectedRoute><Layout><Vehicles /></Layout></ProtectedRoute>} />
+                <Route path="/debt-payoff" element={<ProtectedRoute><Layout><DebtPayoff /></Layout></ProtectedRoute>} />
                 <Route path="/assistant" element={<ProtectedRoute><Layout><AskAI /></Layout></ProtectedRoute>} />
                 <Route path="/imports" element={<ProtectedRoute><Layout><Imports /></Layout></ProtectedRoute>} />
                 <Route path="/reward-points" element={<ProtectedRoute><Layout><RewardPoints /></Layout></ProtectedRoute>} />

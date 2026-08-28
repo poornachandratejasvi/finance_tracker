@@ -7,7 +7,7 @@ import {
 import {
   getNetWorth, getAnalyticsCashflow, getBudgetStatus, getRewardPoints, getInvestmentsDashboard,
   getTransactions, getDashboardSummary, getAnalyticsHeatmap, getTopMerchants,
-  detectRecurringTransactions, getAnomalies, getPredictions,
+  detectRecurringTransactions, getAnomalies, getPredictions, getZeroSpendStreaks,
 } from '../../services/api';
 import { formatCurrency, formatDate, amountColor } from '../../utils/format';
 import { useCategoryMeta } from '../../utils/categories';
@@ -437,6 +437,33 @@ export function CashflowForecastContent() {
           </Box>
         ))}
       </Box>
+    </Box>
+  );
+}
+
+// Zero-spend streak: consecutive days with no debit transaction at all. Pure
+// engagement feature computed from existing transaction history, no new data.
+export function ZeroSpendStreakContent() {
+  const [data, setData] = useState(null);
+  useEffect(() => { getZeroSpendStreaks(180).then(setData).catch(() => setData(null)); }, []);
+  if (!data) return <Loading />;
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+      <Typography variant="h3" fontWeight={800}>{data.current_streak}</Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>day zero-spend streak</Typography>
+      <Typography variant="body2" color="text.secondary">Best: {data.longest_streak} days</Typography>
+      {data.badges.length > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'center', mt: 1 }}>
+          {data.badges.slice(-3).map((b) => (
+            <Chip key={b} label={b} size="small" color="success" variant="outlined" />
+          ))}
+        </Box>
+      )}
+      {data.next_badge && (
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+          {data.next_badge.days_needed} more day{data.next_badge.days_needed === 1 ? '' : 's'} for "{data.next_badge.label}"
+        </Typography>
+      )}
     </Box>
   );
 }

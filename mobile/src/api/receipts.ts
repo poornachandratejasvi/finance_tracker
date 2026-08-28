@@ -1,5 +1,10 @@
 import { api } from "./client";
 
+export interface ReceiptLineItem {
+  name: string;
+  amount: number;
+}
+
 export interface ReceiptScanResult {
   success: boolean;
   reason?: "no_text" | "no_extraction";
@@ -10,6 +15,9 @@ export interface ReceiptScanResult {
   transaction_date?: string | null;
   category?: string | null;
   transaction_type?: "debit";
+  items?: ReceiptLineItem[];
+  tax?: number | null;
+  tip?: number | null;
 }
 
 export async function scanReceipt(photoUri: string): Promise<ReceiptScanResult> {

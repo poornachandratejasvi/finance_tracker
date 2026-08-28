@@ -30,7 +30,7 @@ WIDGET_TYPES = (
     # analytics/top-merchants, watchers/detect-recurring, ai/anomalies,
     # ai/predictions) -- no new aggregation logic, same as every widget above.
     "spending_heatmap", "top_merchants", "recurring_subscriptions",
-    "spending_anomalies", "cashflow_forecast",
+    "spending_anomalies", "cashflow_forecast", "zero_spend_streak",
 )
 
 

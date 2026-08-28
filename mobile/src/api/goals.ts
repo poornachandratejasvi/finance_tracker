@@ -1,5 +1,5 @@
 import { api } from "./client";
-import { Goal } from "../types";
+import { Goal, RoundupPreview, RoundupSweepResult } from "../types";
 
 export async function listGoals(): Promise<Goal[]> {
   const { data } = await api.get<Goal[]>("/api/goals/");
@@ -13,6 +13,18 @@ export interface GoalPayload {
   target_date?: string | null;
   color?: string;
   is_active?: boolean;
+  roundup_enabled?: boolean;
+  roundup_to?: number;
+}
+
+export async function getRoundupPreview(goalId: number): Promise<RoundupPreview> {
+  const { data } = await api.get<RoundupPreview>(`/api/goals/${goalId}/roundup-preview`);
+  return data;
+}
+
+export async function sweepRoundups(goalId: number): Promise<RoundupSweepResult> {
+  const { data } = await api.post<RoundupSweepResult>(`/api/goals/${goalId}/sweep-roundups`);
+  return data;
 }
 
 export async function createGoal(payload: GoalPayload): Promise<Goal> {

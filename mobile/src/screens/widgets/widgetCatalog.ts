@@ -5,6 +5,7 @@ import {
   BalanceTrendContent, BankBalancesContent, InvestmentsSummaryContent, RewardPointsSummaryContent,
   RecentTransactionsContent, BudgetProgressContent, SpendingHeatmapContent, TopMerchantsContent,
   RecurringSubscriptionsContent, SpendingAnomaliesContent, CashflowForecastContent,
+  ZeroSpendStreakContent,
 } from "./widgetContents";
 
 // Single source of truth for every addable widget on mobile -- mirrors
@@ -31,6 +32,7 @@ export const WIDGET_CATALOG: Record<DashboardWidgetType, {
   recurring_subscriptions: { label: "Recurring & Subscriptions", description: "Auto-detected subscriptions and standing instructions.", size: "medium", Content: RecurringSubscriptionsContent },
   spending_anomalies: { label: "Spending Anomalies", description: "Unusually large transactions, flagged automatically.", size: "medium", Content: SpendingAnomaliesContent },
   cashflow_forecast: { label: "Cash Flow Forecast", description: "Expected upcoming income and bills.", size: "medium", Content: CashflowForecastContent },
+  zero_spend_streak: { label: "Zero-Spend Streak", description: "Consecutive no-spend days, with badges.", size: "small", Content: ZeroSpendStreakContent },
 };
 
 export const WIDGET_TYPES = Object.keys(WIDGET_CATALOG) as DashboardWidgetType[];

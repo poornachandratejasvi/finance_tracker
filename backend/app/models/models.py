@@ -95,6 +95,9 @@ class Bank(Base):
     # deterministically instead of only guessing from `code` appearing in the
     # sender id, which false-positives for codes that are also common words.
     sms_sender_pattern = Column(String(50))
+    # Debt payoff calculator inputs (credit/loan accounts only) -- annual %, e.g. 42.0.
+    interest_rate = Column(Float, nullable=True)
+    minimum_payment = Column(Float, nullable=True)
     account_number = Column(String(100))
     account_password = Column(EncryptedText)  # Bank/PDF password, encrypted at rest
     bank_type = Column(String(50), default='savings')  # savings, credit, other
@@ -221,6 +224,7 @@ class Transaction(Base):
     # retried submission is idempotent -- see create_transaction. Never set by
     # any other client.
     client_uuid = Column(String(36), index=True)
+    roundup_swept = Column(Boolean, default=False)
 
     # 'alert' rows (parsed from a real-time bank SMS/email alert, before the official
     # statement arrives) start life unconfirmed; everything else defaults confirmed.
@@ -427,6 +431,10 @@ class SavingsGoal(Base):
     target_date = Column(DateTime)
     color = Column(String(7), default="#4e79a7")
     is_active = Column(Boolean, default=True)
+    # Round-up savings: when enabled, sweeping rounds each not-yet-swept debit
+    # transaction up to the nearest `roundup_to` and adds the difference here.
+    roundup_enabled = Column(Boolean, default=False)
+    roundup_to = Column(Integer, default=10)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 

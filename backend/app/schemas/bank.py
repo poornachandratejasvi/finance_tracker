@@ -43,6 +43,8 @@ class BankBase(BaseModel):
     exclude_from_stats: Optional[bool] = None
     is_archived: Optional[bool] = None
     pdf_filename_prefix: Optional[str] = None
+    interest_rate: Optional[float] = None
+    minimum_payment: Optional[float] = None
 
 
 class BankCreate(BankBase):
@@ -69,6 +71,8 @@ class BankUpdate(BaseModel):
     is_archived: Optional[bool] = None
     pdf_filename_prefix: Optional[str] = None
     is_active: Optional[bool] = None
+    interest_rate: Optional[float] = None
+    minimum_payment: Optional[float] = None
 
 
 class BankResponse(BankBase):

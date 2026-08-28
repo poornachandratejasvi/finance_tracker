@@ -14,6 +14,8 @@ export interface BankPayload {
   current_balance?: number;
   is_archived?: boolean;
   sms_sender_pattern?: string;
+  interest_rate?: number;
+  minimum_payment?: number;
 }
 
 export async function createBank(payload: BankPayload): Promise<Bank> {

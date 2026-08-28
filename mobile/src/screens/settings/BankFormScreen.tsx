@@ -18,7 +18,7 @@ import { BanksStackParamList } from "../../navigation/BanksNavigator";
 
 type Props = NativeStackScreenProps<BanksStackParamList, "BankForm">;
 
-const BANK_TYPES = ["savings", "credit", "investment", "other"];
+const BANK_TYPES = ["savings", "credit", "loan", "investment", "other"];
 const COLORS = ["#1b6b4c", "#b3261e", "#0b5fff", "#b8860b", "#7d3fc4", "#008080"];
 
 export default function BankFormScreen({ route, navigation }: Props) {
@@ -35,6 +35,8 @@ export default function BankFormScreen({ route, navigation }: Props) {
   );
   const [smsSenderPattern, setSmsSenderPattern] = useState(existing?.sms_sender_pattern || "");
   const [isArchived, setIsArchived] = useState(!!existing?.is_archived);
+  const [interestRate, setInterestRate] = useState(existing?.interest_rate != null ? String(existing.interest_rate) : "");
+  const [minimumPayment, setMinimumPayment] = useState(existing?.minimum_payment != null ? String(existing.minimum_payment) : "");
   const [submitting, setSubmitting] = useState(false);
 
   const onSave = async () => {
@@ -52,6 +54,8 @@ export default function BankFormScreen({ route, navigation }: Props) {
         current_balance: currentBalance ? parseFloat(currentBalance) : undefined,
         sms_sender_pattern: smsSenderPattern.trim() || undefined,
         is_archived: isArchived,
+        interest_rate: interestRate ? parseFloat(interestRate) : undefined,
+        minimum_payment: minimumPayment ? parseFloat(minimumPayment) : undefined,
       };
       if (existing) {
         await updateBank(existing.id, payload);
@@ -149,6 +153,30 @@ export default function BankFormScreen({ route, navigation }: Props) {
         placeholder="0.00"
         placeholderTextColor={colors.textSecondary}
       />
+
+      {(bankType === "credit" || bankType === "loan") && (
+        <>
+          <Text style={styles.label}>Interest rate % / year (optional)</Text>
+          <TextInput
+            style={styles.input}
+            value={interestRate}
+            onChangeText={setInterestRate}
+            keyboardType="decimal-pad"
+            placeholder="e.g. 42"
+            placeholderTextColor={colors.textSecondary}
+          />
+
+          <Text style={styles.label}>Minimum payment (optional)</Text>
+          <TextInput
+            style={styles.input}
+            value={minimumPayment}
+            onChangeText={setMinimumPayment}
+            keyboardType="decimal-pad"
+            placeholder="Leave blank to estimate as 2% of balance"
+            placeholderTextColor={colors.textSecondary}
+          />
+        </>
+      )}
 
       <Text style={styles.label}>SMS Sender ID (optional)</Text>
       <TextInput

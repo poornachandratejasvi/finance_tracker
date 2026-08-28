@@ -9,6 +9,7 @@ import { getInvestmentsDashboard } from "../../api/investments";
 import { listTransactions } from "../../api/transactions";
 import { detectRecurringWatchers } from "../../api/automation";
 import { getAnomalies, getPredictions } from "../../api/ai";
+import { getZeroSpendStreaks } from "../../api/gamification";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { formatCurrency, formatDate } from "../../utils/format";
 
@@ -462,6 +463,36 @@ export function CashflowForecastContent() {
           </View>
         ))}
       </View>
+    </View>
+  );
+}
+
+// Zero-spend streak: consecutive days with no debit transaction at all. Pure
+// engagement feature computed from existing transaction history, no new data.
+export function ZeroSpendStreakContent() {
+  const { colors } = useTheme();
+  const [data, setData] = useState<Awaited<ReturnType<typeof getZeroSpendStreaks>> | null>(null);
+  useEffect(() => { getZeroSpendStreaks(180).then(setData).catch(() => setData(null)); }, []);
+  if (!data) return <Loading />;
+  return (
+    <View style={{ alignItems: "center", justifyContent: "center", flex: 1 }}>
+      <Text style={{ fontSize: 34, fontWeight: "800", color: colors.text }}>{data.current_streak}</Text>
+      <Text style={{ color: colors.textSecondary, fontSize: 11, marginBottom: 6 }}>day zero-spend streak</Text>
+      <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Best: {data.longest_streak} days</Text>
+      {data.badges.length > 0 && (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "center", marginTop: 8 }}>
+          {data.badges.slice(-3).map((b) => (
+            <View key={b} style={{ borderWidth: 1, borderColor: colors.primary, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 }}>
+              <Text style={{ color: colors.primary, fontSize: 10, fontWeight: "600" }}>{b}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {data.next_badge && (
+        <Text style={{ color: colors.textSecondary, fontSize: 10, marginTop: 8, textAlign: "center" }}>
+          {data.next_badge.days_needed} more day{data.next_badge.days_needed === 1 ? "" : "s"} for "{data.next_badge.label}"
+        </Text>
+      )}
     </View>
   );
 }

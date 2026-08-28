@@ -1,13 +1,14 @@
 import {
   AccountBalance, TrendingUp, PieChartOutline, ShowChart, Timeline,
   AccountBalanceWallet, Savings, CardGiftcard, Receipt, Speed,
-  CalendarMonth, Storefront, Autorenew, WarningAmber, Insights,
+  CalendarMonth, Storefront, Autorenew, WarningAmber, Insights, LocalFireDepartment,
 } from '@mui/icons-material';
 import {
   NetWorthContent, IncomeExpenseContent, SpendingByCategoryContent, CashflowTrendContent,
   BalanceTrendContent, BankBalancesContent, InvestmentsSummaryContent, RewardPointsSummaryContent,
   RecentTransactionsContent, BudgetProgressContent, SpendingHeatmapContent, TopMerchantsContent,
   RecurringSubscriptionsContent, SpendingAnomaliesContent, CashflowForecastContent,
+  ZeroSpendStreakContent,
 } from './widgetContents.jsx';
 
 // Single source of truth for every addable widget -- must stay in sync with
@@ -30,6 +31,7 @@ export const WIDGET_CATALOG = {
   recurring_subscriptions: { label: 'Recurring & Subscriptions', description: 'Auto-detected subscriptions and standing instructions.', icon: Autorenew, size: 'medium', Content: RecurringSubscriptionsContent },
   spending_anomalies: { label: 'Spending Anomalies', description: 'Unusually large transactions, flagged automatically.', icon: WarningAmber, size: 'medium', Content: SpendingAnomaliesContent },
   cashflow_forecast: { label: 'Cash Flow Forecast', description: 'Expected upcoming income and bills.', icon: Insights, size: 'medium', Content: CashflowForecastContent },
+  zero_spend_streak: { label: 'Zero-Spend Streak', description: 'Consecutive no-spend days, with badges.', icon: LocalFireDepartment, size: 'small', Content: ZeroSpendStreakContent },
 };
 
 export const WIDGET_TYPES = Object.keys(WIDGET_CATALOG);

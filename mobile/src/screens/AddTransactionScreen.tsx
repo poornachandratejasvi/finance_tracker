@@ -29,6 +29,28 @@ export interface ReceiptPrefill {
   description?: string | null;
   transaction_date?: string | null;
   category?: string | null;
+  items?: { name: string; amount: number }[];
+  tax?: number | null;
+  tip?: number | null;
+}
+
+// Formats a scanned receipt's line items (with tax/tip split proportionally
+// across items by their share of the subtotal) into readable notes text --
+// no new DB schema for line items, just a readable breakdown alongside the
+// transaction like any other manual note.
+function formatReceiptNotes(items?: { name: string; amount: number }[], tax?: number | null, tip?: number | null): string {
+  if (!items || !items.length) return "";
+  const subtotal = items.reduce((s, i) => s + i.amount, 0);
+  const extra = (tax || 0) + (tip || 0);
+  const lines = items.map((i) => {
+    const share = subtotal > 0 ? (i.amount / subtotal) * extra : 0;
+    const total = i.amount + share;
+    return `- ${i.name}: ${i.amount.toFixed(2)}${share > 0.005 ? ` (+${share.toFixed(2)} tax/tip = ${total.toFixed(2)})` : ""}`;
+  });
+  const parts = [`Receipt items:`, ...lines];
+  if (tax) parts.push(`Tax: ${tax.toFixed(2)}`);
+  if (tip) parts.push(`Tip: ${tip.toFixed(2)}`);
+  return parts.join("\n");
 }
 
 type AddRouteProp = RouteProp<TabParamList, "Add">;
@@ -63,6 +85,8 @@ export default function AddTransactionScreen() {
     if (prefill.description) setDescription(prefill.description);
     if (prefill.transaction_date) setDate(prefill.transaction_date);
     if (prefill.category) setCategory(prefill.category);
+    const receiptNotes = formatReceiptNotes(prefill.items, prefill.tax, prefill.tip);
+    if (receiptNotes) setNotes(receiptNotes);
     setType("debit");
     navigation.setParams({ prefill: undefined } as never);
   }, [route.params?.prefill]);

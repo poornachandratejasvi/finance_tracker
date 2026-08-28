@@ -1,4 +1,8 @@
-"""Savings goals CRUD + progress."""
+"""Savings goals CRUD + progress, plus round-up savings (round each new debit
+transaction up to the nearest configurable amount and sweep the difference
+into a goal). This is pure bookkeeping -- no real money moves anywhere,
+consistent with the rest of this app never touching actual bank rails."""
+import math
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -8,7 +12,7 @@ from datetime import datetime
 from app.core.database import get_db
 from app.core.time_utils import utcnow
 from app.api.endpoints.auth import get_current_active_user, require_write_access
-from app.models.models import User, SavingsGoal
+from app.models.models import User, SavingsGoal, Transaction, TransactionType
 
 router = APIRouter()
 
@@ -19,6 +23,8 @@ class GoalCreate(BaseModel):
     current_amount: float = 0.0
     target_date: Optional[str] = None
     color: Optional[str] = "#4e79a7"
+    roundup_enabled: bool = False
+    roundup_to: int = 10
 
 
 class GoalUpdate(BaseModel):
@@ -28,6 +34,8 @@ class GoalUpdate(BaseModel):
     target_date: Optional[str] = None
     color: Optional[str] = None
     is_active: Optional[bool] = None
+    roundup_enabled: Optional[bool] = None
+    roundup_to: Optional[int] = None
 
 
 def _parse_date(s: Optional[str]) -> Optional[datetime]:
@@ -51,6 +59,8 @@ def _to_dict(g: SavingsGoal) -> dict:
         "target_date": g.target_date.isoformat() + "Z" if g.target_date else None,
         "color": g.color,
         "is_active": g.is_active,
+        "roundup_enabled": g.roundup_enabled,
+        "roundup_to": g.roundup_to,
         "created_at": g.created_at.isoformat() + "Z" if g.created_at else None,
     }
 
@@ -71,6 +81,8 @@ def create_goal(payload: GoalCreate, db: Session = Depends(get_db), current_user
         target_date=_parse_date(payload.target_date),
         color=payload.color or "#4e79a7",
         is_active=True,
+        roundup_enabled=payload.roundup_enabled,
+        roundup_to=payload.roundup_to or 10,
     )
     db.add(g)
     db.commit()
@@ -95,6 +107,10 @@ def update_goal(goal_id: int, payload: GoalUpdate, db: Session = Depends(get_db)
         g.color = payload.color
     if payload.is_active is not None:
         g.is_active = payload.is_active
+    if payload.roundup_enabled is not None:
+        g.roundup_enabled = payload.roundup_enabled
+    if payload.roundup_to is not None:
+        g.roundup_to = payload.roundup_to
     g.updated_at = utcnow()
     db.commit()
     db.refresh(g)
@@ -108,3 +124,56 @@ def delete_goal(goal_id: int, db: Session = Depends(get_db), current_user: User 
         raise HTTPException(status_code=404, detail="Goal not found")
     db.delete(g)
     db.commit()
+
+
+def _roundup_amount(amount: float, to: int) -> float:
+    """The spare change from rounding amount up to the nearest `to` (e.g. amount=243,
+    to=10 -> 7). Already-round amounts contribute 0, not a full `to` extra."""
+    if to <= 0:
+        return 0.0
+    rounded = math.ceil(amount / to) * to
+    return round(rounded - amount, 2)
+
+
+def _unswept_debits(db: Session, user_id: int):
+    return (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.DEBIT,
+            Transaction.roundup_swept.isnot(True),
+        )
+        .all()
+    )
+
+
+@router.get("/{goal_id}/roundup-preview")
+def roundup_preview(goal_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """How much would sweeping right now add -- read-only, doesn't mark anything swept."""
+    g = db.query(SavingsGoal).filter(SavingsGoal.id == goal_id, SavingsGoal.user_id == current_user.id).first()
+    if not g:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    txns = _unswept_debits(db, current_user.id)
+    total = round(sum(_roundup_amount(t.amount, g.roundup_to) for t in txns), 2)
+    return {"pending_amount": total, "transaction_count": len(txns), "roundup_to": g.roundup_to}
+
+
+@router.post("/{goal_id}/sweep-roundups")
+def sweep_roundups(goal_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
+    """Round every not-yet-swept debit up to the goal's roundup_to and add the
+    spare change to current_amount, marking those transactions swept so a
+    second sweep (or another goal's sweep) never double-counts them."""
+    g = db.query(SavingsGoal).filter(SavingsGoal.id == goal_id, SavingsGoal.user_id == current_user.id).first()
+    if not g:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    txns = _unswept_debits(db, current_user.id)
+    total = 0.0
+    for t in txns:
+        total += _roundup_amount(t.amount, g.roundup_to)
+        t.roundup_swept = True
+    total = round(total, 2)
+    g.current_amount = round((g.current_amount or 0.0) + total, 2)
+    g.updated_at = utcnow()
+    db.commit()
+    db.refresh(g)
+    return {"swept_amount": total, "transaction_count": len(txns), "goal": _to_dict(g)}

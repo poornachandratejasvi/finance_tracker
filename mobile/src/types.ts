@@ -23,6 +23,8 @@ export interface Bank {
   is_active: boolean;
   is_archived: boolean | null;
   sms_sender_pattern: string | null;
+  interest_rate: number | null;
+  minimum_payment: number | null;
 }
 
 export interface Category {
@@ -96,7 +98,7 @@ export type DashboardWidgetType =
   | "balance_trend" | "bank_balances" | "investments_summary"
   | "reward_points_summary" | "recent_transactions" | "budget_progress"
   | "spending_heatmap" | "top_merchants" | "recurring_subscriptions"
-  | "spending_anomalies" | "cashflow_forecast";
+  | "spending_anomalies" | "cashflow_forecast" | "zero_spend_streak";
 
 export interface DashboardWidget {
   id: number;
@@ -380,7 +382,60 @@ export interface Goal {
   target_date: string | null;
   color: string;
   is_active: boolean;
+  roundup_enabled: boolean;
+  roundup_to: number;
   created_at: string;
+}
+
+export interface RoundupPreview {
+  pending_amount: number;
+  transaction_count: number;
+  roundup_to: number;
+}
+
+export interface RoundupSweepResult {
+  swept_amount: number;
+  transaction_count: number;
+  goal: Goal;
+}
+
+export interface DebtAccount {
+  bank_id: number;
+  name: string;
+  balance: number;
+  interest_rate: number | null;
+  minimum_payment: number;
+  minimum_payment_is_estimated: boolean;
+}
+
+export interface DebtSummary {
+  debts: DebtAccount[];
+  total_balance: number;
+  missing_interest_rate: string[];
+}
+
+export interface DebtPayoffScheduleItem {
+  bank_id: number;
+  name: string;
+  payoff_month: number | null;
+}
+
+export interface DebtPayoffPlan {
+  strategy: "avalanche" | "snowball";
+  extra_payment: number;
+  months: number | null;
+  capped: boolean;
+  total_interest: number;
+  order: string[];
+  schedule: DebtPayoffScheduleItem[];
+}
+
+export interface ZeroSpendStreaks {
+  current_streak: number;
+  longest_streak: number;
+  lookback_days: number;
+  badges: string[];
+  next_badge: { days_needed: number; label: string } | null;
 }
 
 export interface PdfStatement {
@@ -655,7 +710,8 @@ export interface FamilyDashboardResponse {
 }
 
 export type InvestmentCategory =
-  | "ppf" | "mutual_fund" | "stocks" | "nps" | "epf" | "bonds" | "gold" | "vehicle";
+  | "ppf" | "mutual_fund" | "stocks" | "nps" | "epf" | "bonds" | "gold" | "vehicle"
+  | "crypto" | "collectible";
 
 export type InvestmentEntryType = "buy" | "sell" | "contribution" | "withdrawal" | "value_update";
 

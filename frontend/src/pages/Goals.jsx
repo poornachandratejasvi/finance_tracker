@@ -2,12 +2,16 @@ import React, { useEffect, useState } from 'react';
 import {
   Container, Typography, Paper, Box, Button, TextField, IconButton, Alert,
   LinearProgress, Grid, Dialog, DialogTitle, DialogContent, DialogActions, Chip,
+  FormControlLabel, Switch, MenuItem,
 } from '@mui/material';
-import { Add, Delete, Edit } from '@mui/icons-material';
-import { listGoals, createGoal, updateGoal, deleteGoal } from '../services/api';
+import { Add, Delete, Edit, Savings } from '@mui/icons-material';
+import { listGoals, createGoal, updateGoal, deleteGoal, sweepRoundups } from '../services/api';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
-const blank = { name: '', target_amount: '', current_amount: '', target_date: '', color: '#4e79a7' };
+const blank = {
+  name: '', target_amount: '', current_amount: '', target_date: '', color: '#4e79a7',
+  roundup_enabled: false, roundup_to: 10,
+};
 
 export default function Goals() {
   const [goals, setGoals] = useState([]);
@@ -16,6 +20,7 @@ export default function Goals() {
   const [form, setForm] = useState(blank);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
+  const [sweeping, setSweeping] = useState(null);
 
   const load = async () => {
     try { setGoals(await listGoals()); } catch (e) { setErr('Failed to load goals'); }
@@ -28,6 +33,7 @@ export default function Goals() {
     setForm({
       name: g.name, target_amount: g.target_amount, current_amount: g.current_amount,
       target_date: g.target_date ? g.target_date.slice(0, 10) : '', color: g.color || '#4e79a7',
+      roundup_enabled: g.roundup_enabled || false, roundup_to: g.roundup_to || 10,
     });
     setOpen(true);
   };
@@ -41,6 +47,8 @@ export default function Goals() {
       current_amount: parseFloat(form.current_amount) || 0,
       target_date: form.target_date || null,
       color: form.color,
+      roundup_enabled: form.roundup_enabled,
+      roundup_to: parseInt(form.roundup_to, 10) || 10,
     };
     try {
       if (editing) await updateGoal(editing, payload);
@@ -52,6 +60,23 @@ export default function Goals() {
   const remove = async (id) => {
     if (!window.confirm('Delete this goal?')) return;
     try { await deleteGoal(id); load(); } catch (e) { setErr('Failed to delete goal'); }
+  };
+
+  const sweep = async (goal) => {
+    setErr(''); setMsg(''); setSweeping(goal.id);
+    try {
+      const result = await sweepRoundups(goal.id);
+      setMsg(
+        result.swept_amount > 0
+          ? `Swept ${inr(result.swept_amount)} from ${result.transaction_count} transaction(s) into "${goal.name}".`
+          : `No new spare change to sweep into "${goal.name}" right now.`
+      );
+      load();
+    } catch (e) {
+      setErr('Failed to sweep round-ups.');
+    } finally {
+      setSweeping(null);
+    }
   };
 
   return (
@@ -92,6 +117,14 @@ export default function Goals() {
                   <Typography variant="caption" color="text.secondary">{inr(g.remaining)} to go</Typography>
                   {g.target_date && <Chip label={`by ${g.target_date.slice(0, 10)}`} size="small" variant="outlined" />}
                 </Box>
+                {g.roundup_enabled && (
+                  <Box sx={{ mt: 1.5, pt: 1.5, borderTop: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Chip icon={<Savings fontSize="small" />} label={`Round-up to ₹${g.roundup_to}`} size="small" variant="outlined" />
+                    <Button size="small" onClick={() => sweep(g)} disabled={sweeping === g.id}>
+                      {sweeping === g.id ? 'Sweeping…' : 'Sweep Now'}
+                    </Button>
+                  </Box>
+                )}
               </Paper>
             </Grid>
           ))}
@@ -107,6 +140,19 @@ export default function Goals() {
             <TextField label="Current amount (₹)" type="number" value={form.current_amount} onChange={(e) => setForm({ ...form, current_amount: e.target.value })} fullWidth />
             <TextField label="Target date" type="date" value={form.target_date} onChange={(e) => setForm({ ...form, target_date: e.target.value })} InputLabelProps={{ shrink: true }} fullWidth />
             <TextField label="Color" type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} sx={{ width: 100 }} />
+            <FormControlLabel
+              control={<Switch checked={form.roundup_enabled} onChange={(e) => setForm({ ...form, roundup_enabled: e.target.checked })} />}
+              label="Round-up savings — round each expense up and sweep the spare change here"
+            />
+            {form.roundup_enabled && (
+              <TextField
+                select label="Round up to nearest" value={form.roundup_to}
+                onChange={(e) => setForm({ ...form, roundup_to: e.target.value })}
+                helperText="Only one goal at a time can claim the round-up backlog — sweeping consumes it."
+              >
+                {[10, 50, 100].map((v) => <MenuItem key={v} value={v}>₹{v}</MenuItem>)}
+              </TextField>
+            )}
           </Box>
         </DialogContent>
         <DialogActions>

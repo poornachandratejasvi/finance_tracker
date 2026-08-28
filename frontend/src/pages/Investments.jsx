@@ -35,6 +35,8 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import DiamondIcon from '@mui/icons-material/Diamond';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import ElderlyIcon from '@mui/icons-material/Elderly';
+import CurrencyBitcoinIcon from '@mui/icons-material/CurrencyBitcoin';
+import CollectionsIcon from '@mui/icons-material/Collections';
 import {
   getInvestmentsDashboard, createInvestmentAccount, deleteInvestmentAccount,
   getInvestmentEntries, createInvestmentEntry, deleteInvestmentEntry,
@@ -49,6 +51,8 @@ const CATEGORY_META = {
   bonds: { label: 'Bonds', icon: <DescriptionIcon /> },
   gold: { label: 'Gold', icon: <DiamondIcon /> },
   vehicle: { label: 'Vehicle', icon: <DirectionsCarIcon /> },
+  crypto: { label: 'Crypto', icon: <CurrencyBitcoinIcon /> },
+  collectible: { label: 'Collectibles', icon: <CollectionsIcon /> },
 };
 
 const ENTRY_TYPES = [

@@ -26,25 +26,29 @@ def extract_receipt_transaction(db: Session, uid: int, ocr_text: str) -> dict:
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
     system = (
-        "You extract a single purchase from raw OCR text of a receipt photo. OCR "
+        "You extract a purchase from raw OCR text of a receipt photo. OCR "
         "text is noisy: misread characters, jumbled line order, stray symbols. "
         f"Today's date is {today} -- use it to fill in a missing year or resolve "
         "a relative/partial date. Identify: the TOTAL amount actually paid (not "
-        "a subtotal, a tax line, or a single item's price -- prefer a line "
-        "labelled 'total' or 'grand total', or the largest amount near the "
-        "bottom of the receipt), the merchant/store name (for the description), "
-        "the purchase date if present, and a likely spending category (e.g. "
-        "Groceries, Dining, Fuel, Shopping, Pharmacy) if reasonably inferable "
-        'from the merchant or items. Respond ONLY with a JSON object: {"amount": '
+        "a subtotal -- prefer a line labelled 'total' or 'grand total', or the "
+        "largest amount near the bottom of the receipt), the merchant/store name "
+        "(for the description), the purchase date if present, a likely spending "
+        "category (e.g. Groceries, Dining, Fuel, Shopping, Pharmacy) if "
+        "reasonably inferable, the individual line items with their prices (name "
+        "+ price per item, skip a line you can't confidently parse as a "
+        "purchased item rather than guessing), the tax amount, and the tip/"
+        "service charge amount. Respond ONLY with a JSON object: {\"amount\": "
         '<number or null>, "description": "<merchant name or null>", '
         '"transaction_date": "<YYYY-MM-DD or null>", "category": "<string or '
-        'null>"}. No prose, no markdown fences. Use null for anything you '
-        "can't confidently identify."
+        'null>", "items": [{"name": "<string>", "amount": <number>}, ...] (empty '
+        'array if none confidently identified), "tax": <number or null>, "tip": '
+        '<number or null>}. No prose, no markdown fences. Use null for anything '
+        "you can't confidently identify."
     )
     prompt = f"RECEIPT OCR TEXT:\n{ocr_text.strip()[:2000]}"
 
     try:
-        raw = ai_service.complete(db, uid, system, prompt, max_tokens=200)
+        raw = ai_service.complete(db, uid, system, prompt, max_tokens=500)
     except Exception as e:
         logger.info("AI receipt extraction unavailable: %s", str(e)[:150])
         return {}
@@ -60,9 +64,25 @@ def extract_receipt_transaction(db: Session, uid: int, ocr_text: str) -> dict:
     description = data.get("description")
     date = data.get("transaction_date")
     category = data.get("category")
+
+    items = []
+    for item in (data.get("items") or []):
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name")
+        item_amount = item.get("amount")
+        if isinstance(name, str) and name.strip() and isinstance(item_amount, (int, float)) and item_amount > 0:
+            items.append({"name": name.strip()[:100], "amount": round(float(item_amount), 2)})
+
+    tax = data.get("tax")
+    tip = data.get("tip")
+
     return {
         "amount": float(amount),
         "description": description.strip()[:140] if isinstance(description, str) and description.strip() else "Receipt purchase",
         "transaction_date": date if isinstance(date, str) and len(date) == 10 else None,
         "category": category.strip() if isinstance(category, str) and category.strip() else None,
+        "items": items,
+        "tax": round(float(tax), 2) if isinstance(tax, (int, float)) and tax > 0 else None,
+        "tip": round(float(tip), 2) if isinstance(tip, (int, float)) and tip > 0 else None,
     }
