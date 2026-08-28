@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { fetchCurrentUser, logout as apiLogout } from "../api/auth";
-import { loginRequest, restoreSession } from "../api/client";
+import { loginRequest, restoreSession, cacheUser, getCachedUser } from "../api/client";
 import { User } from "../types";
 import { requestAndroidPermissions } from "../utils/androidPermissions";
 
@@ -27,9 +27,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const me = await fetchCurrentUser();
           setUser(me);
+          await cacheUser(me);
           await requestAndroidPermissions();
-        } catch {
-          setUser(null);
+        } catch (err: any) {
+          if (!err?.response) {
+            // No server response at all -- offline/unreachable, not a rejected
+            // token. Fall back to the last-known profile so a no-internet launch
+            // still lands in the app (cached data) instead of forcing a login
+            // screen the user can't actually complete without connectivity.
+            const cached = await getCachedUser<User>();
+            setUser(cached);
+          } else {
+            // A real response came back (401/403) -- the token is genuinely
+            // invalid/revoked, so logging out is correct here.
+            setUser(null);
+          }
         }
       }
       setLoading(false);
@@ -40,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await loginRequest(serverUrl, username, password);
     const me = await fetchCurrentUser();
     setUser(me);
+    await cacheUser(me);
     await requestAndroidPermissions();
   };
 
@@ -51,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = async () => {
     const me = await fetchCurrentUser();
     setUser(me);
+    await cacheUser(me);
   };
 
   const value = useMemo(

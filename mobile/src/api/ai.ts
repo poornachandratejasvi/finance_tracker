@@ -1,5 +1,5 @@
 import { api } from "./client";
-import { AIConfig } from "../types";
+import { AIConfig, AnomaliesResponse, PredictionsResponse } from "../types";
 
 export async function getAIConfig(): Promise<AIConfig> {
   const { data } = await api.get<AIConfig>("/api/ai/config");
@@ -35,5 +35,16 @@ export interface AskAiResponse {
 
 export async function askAI(question: string): Promise<AskAiResponse> {
   const { data } = await api.post<AskAiResponse>("/api/ai/query", { question });
+  return data;
+}
+
+export async function getPredictions(daysAhead: number = 45): Promise<PredictionsResponse> {
+  const { data } = await api.get<PredictionsResponse>("/api/ai/predictions", { params: { days_ahead: daysAhead } });
+  return data;
+}
+
+// Statistical (free) by default; pass useAi=true to refine with the configured provider.
+export async function getAnomalies(useAi: boolean = false): Promise<AnomaliesResponse> {
+  const { data } = await api.get<AnomaliesResponse>("/api/ai/anomalies", { params: { use_ai: useAi } });
   return data;
 }

@@ -1,5 +1,5 @@
 import { api } from "./client";
-import { AnalyticsComparison, BalanceTrendResponse, CashflowResponse } from "../types";
+import { AnalyticsComparison, BalanceTrendResponse, CashflowResponse, HeatmapResponse, TopMerchantsResponse } from "../types";
 
 export interface AnalyticsFilters {
   bank_id?: string;
@@ -56,6 +56,22 @@ export async function fetchBalanceTrend(
 ): Promise<BalanceTrendResponse> {
   const { data } = await api.get<BalanceTrendResponse>("/api/analytics/balance-trend", {
     params: { start_date: startDate, end_date: endDate, granularity, ...filters },
+  });
+  return data;
+}
+
+export async function fetchHeatmap(days: number = 119): Promise<HeatmapResponse> {
+  const { data } = await api.get<HeatmapResponse>("/api/analytics/heatmap", { params: { days } });
+  return data;
+}
+
+export async function fetchTopMerchants(
+  startDate?: string,
+  endDate?: string,
+  limit: number = 8
+): Promise<TopMerchantsResponse> {
+  const { data } = await api.get<TopMerchantsResponse>("/api/analytics/top-merchants", {
+    params: { start_date: startDate, end_date: endDate, limit },
   });
   return data;
 }

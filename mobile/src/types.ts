@@ -94,7 +94,9 @@ export interface NetWorthResponse {
 export type DashboardWidgetType =
   | "net_worth" | "income_expense" | "spending_by_category" | "cashflow_trend"
   | "balance_trend" | "bank_balances" | "investments_summary"
-  | "reward_points_summary" | "recent_transactions" | "budget_progress";
+  | "reward_points_summary" | "recent_transactions" | "budget_progress"
+  | "spending_heatmap" | "top_merchants" | "recurring_subscriptions"
+  | "spending_anomalies" | "cashflow_forecast";
 
 export interface DashboardWidget {
   id: number;
@@ -475,7 +477,63 @@ export interface WatcherSuggestion {
   bank_name: string | null;
   suggested_keywords: string[];
   match_amount?: number | null;
+  sample_description: string;
+  amount: number;
+  frequency: string;
+  occurrences: number;
+  transaction_type: string;
   [key: string]: unknown;
+}
+
+export interface HeatmapDay {
+  date: string;
+  amount: number;
+}
+
+export interface HeatmapResponse {
+  days: HeatmapDay[];
+  max_amount: number;
+}
+
+export interface TopMerchant {
+  merchant: string;
+  sample_description: string;
+  total: number;
+  count: number;
+}
+
+export interface TopMerchantsResponse {
+  merchants: TopMerchant[];
+}
+
+export interface SpendingAnomaly {
+  description: string;
+  amount: number;
+  date: string;
+  reason: string;
+}
+
+export interface AnomaliesResponse {
+  anomalies: SpendingAnomaly[];
+  ai: boolean;
+}
+
+export interface TransactionPrediction {
+  description: string;
+  category: string | null;
+  bank_name: string | null;
+  amount: number;
+  transaction_type: string;
+  predicted_date: string;
+  occurrences: number;
+  avg_interval_days: number;
+}
+
+export interface PredictionsResponse {
+  predictions: TransactionPrediction[];
+  expected_expense: number;
+  expected_income: number;
+  days_ahead: number;
 }
 
 export type RewardEntryType = "earned" | "redeemed" | "expired" | "adjustment";

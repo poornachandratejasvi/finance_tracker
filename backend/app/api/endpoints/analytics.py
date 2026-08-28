@@ -18,6 +18,7 @@ from app.models.models import User, Transaction, Bank, TransactionLabel, Transac
 from app.api.endpoints.auth import get_current_active_user
 from app.utils.parsing import parse_csv_list as _parse_csv_list
 from app.services.currency_service import get_rate_map, get_base_currency
+from app.services.recurring_detection import _signature as _merchant_signature
 
 router = APIRouter()
 
@@ -241,3 +242,73 @@ def balance_trend(
         series.append({"date": e["date"], "balance": round(running, 2)})
     return {"granularity": granularity, "series": series, "ending_balance": round(running, 2),
             "net_change": cf["totals"]["net"]}
+
+
+@router.get("/heatmap")
+def spending_heatmap(
+    days: int = Query(119, ge=7, le=366),
+    bank_id: Optional[str] = None, category: Optional[str] = None, label_id: Optional[str] = None,
+    currency: Optional[str] = None,
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user),
+):
+    """Daily expense totals for the last N days (GitHub-contribution-style calendar).
+    Debit-only -- a heatmap mixing in income spikes would just show payday, not spend."""
+    rate_map = get_rate_map(db, current_user.id)
+    since = datetime.utcnow() - timedelta(days=days - 1)
+    q = _base_query(db, current_user.id, bank_id=bank_id, category=category, label_id=label_id,
+                    transaction_type="debit", currency=currency)
+    q = q.join(Bank, Transaction.bank_id == Bank.id, isouter=True)
+    q = q.filter(Transaction.transaction_date >= since.replace(hour=0, minute=0, second=0, microsecond=0))
+    rows = (
+        q.with_entities(
+            func.to_char(Transaction.transaction_date, 'YYYY-MM-DD').label('day'),
+            _effective_currency().label('code'),
+            func.sum(Transaction.amount).label('amt'),
+        )
+        .group_by('day', _effective_currency())
+        .all()
+    )
+    totals = {}
+    for day, code, amt in rows:
+        totals[day] = totals.get(day, 0.0) + float(amt or 0) * rate_map.get(code or 'INR', 1.0)
+    result = []
+    for i in range(days):
+        d = (since + timedelta(days=i)).strftime('%Y-%m-%d')
+        result.append({"date": d, "amount": round(totals.get(d, 0.0), 2)})
+    return {"days": result, "max_amount": round(max((d["amount"] for d in result), default=0.0), 2)}
+
+
+@router.get("/top-merchants")
+def top_merchants(
+    start_date: Optional[str] = None, end_date: Optional[str] = None,
+    limit: int = Query(8, ge=1, le=30),
+    bank_id: Optional[str] = None, category: Optional[str] = None, label_id: Optional[str] = None,
+    currency: Optional[str] = None,
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user),
+):
+    """Highest-spend merchants over a period. Real bank descriptions are too noisy
+    (reference numbers, UPI handles) to group on directly -- reuses the same
+    description-signature grouping recurring_detection uses for subscriptions,
+    so 'AMAZON PAY 8231...' and 'AMAZON PAY 5567...' collapse into one merchant."""
+    rate_map = get_rate_map(db, current_user.id)
+    q = _base_query(db, current_user.id, bank_id=bank_id, category=category, label_id=label_id,
+                    transaction_type="debit", currency=currency)
+    q = q.join(Bank, Transaction.bank_id == Bank.id, isouter=True)
+    if start_date:
+        q = q.filter(Transaction.transaction_date >= _dt(start_date))
+    if end_date:
+        q = q.filter(Transaction.transaction_date <= _dt(end_date, True))
+    rows = q.with_entities(
+        Transaction.description, _effective_currency().label('code'), Transaction.amount,
+    ).all()
+    merchants = {}
+    for desc, code, amt in rows:
+        sig = _merchant_signature(desc) or (desc or "Unknown").strip()[:40]
+        base = float(amt or 0) * rate_map.get(code or 'INR', 1.0)
+        entry = merchants.setdefault(sig, {"merchant": sig, "sample_description": desc, "total": 0.0, "count": 0})
+        entry["total"] += base
+        entry["count"] += 1
+    ranked = sorted(merchants.values(), key=lambda m: m["total"], reverse=True)[:limit]
+    for m in ranked:
+        m["total"] = round(m["total"], 2)
+    return {"merchants": ranked}

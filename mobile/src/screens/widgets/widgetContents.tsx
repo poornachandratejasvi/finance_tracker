@@ -2,13 +2,15 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, View, Text, StyleSheet } from "react-native";
 
 import { fetchDashboardSummary, fetchNetWorth } from "../../api/dashboard";
-import { fetchCashflow, fetchBalanceTrend } from "../../api/analytics";
+import { fetchCashflow, fetchBalanceTrend, fetchHeatmap, fetchTopMerchants } from "../../api/analytics";
 import { getBudgetStatus } from "../../api/budgets";
 import { getRewardPoints } from "../../api/rewardPoints";
 import { getInvestmentsDashboard } from "../../api/investments";
 import { listTransactions } from "../../api/transactions";
+import { detectRecurringWatchers } from "../../api/automation";
+import { getAnomalies, getPredictions } from "../../api/ai";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
-import { formatCurrency } from "../../utils/format";
+import { formatCurrency, formatDate } from "../../utils/format";
 
 // Every widget content component fetches its own data on mount, independent
 // of the others, against an EXISTING endpoint (dashboard/summary,
@@ -303,6 +305,163 @@ export function BudgetProgressContent() {
           </View>
         </View>
       ))}
+    </View>
+  );
+}
+
+// GitHub-contribution-style calendar: last ~17 weeks of daily spend, colored by
+// intensity relative to the busiest day in range. Reuses analytics/heatmap
+// (debit-only, already currency-converted) -- no client-side aggregation.
+export function SpendingHeatmapContent() {
+  const { colors } = useTheme();
+  const [data, setData] = useState<Awaited<ReturnType<typeof fetchHeatmap>> | null>(null);
+  useEffect(() => { fetchHeatmap(119).then(setData).catch(() => setData({ days: [], max_amount: 0 })); }, []);
+  if (!data) return <Loading />;
+  if (!data.days.length) return <Empty colors={colors} />;
+  const max = data.max_amount || 1;
+  const colorFor = (amt: number) => {
+    if (!amt) return colors.chipBg;
+    const t = Math.min(1, amt / max);
+    const alpha = 0.15 + t * 0.75;
+    return `rgba(228, 87, 86, ${alpha.toFixed(2)})`;
+  };
+  const firstDow = new Date(data.days[0].date + "T00:00:00").getDay();
+  const padded: (typeof data.days[number] | null)[] = [...Array(firstDow).fill(null), ...data.days];
+  const weeks: (typeof data.days[number] | null)[][] = [];
+  for (let i = 0; i < padded.length; i += 7) weeks.push(padded.slice(i, i + 7));
+  return (
+    <View>
+      <Text style={{ color: colors.textSecondary, fontSize: 11, marginBottom: 8 }}>
+        Daily spend, last {data.days.length} days
+      </Text>
+      <View style={{ flexDirection: "row", gap: 3 }}>
+        {weeks.map((week, wi) => (
+          <View key={wi} style={{ gap: 3 }}>
+            {week.map((d, di) => (
+              <View
+                key={di}
+                style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: d ? colorFor(d.amount) : "transparent" }}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// Highest-spend merchants over the period, grouped by description signature
+// (same grouping recurring_detection uses) so reference-number noise doesn't
+// split one merchant into a dozen near-duplicate rows.
+export function TopMerchantsContent() {
+  const { colors } = useTheme();
+  const [data, setData] = useState<Awaited<ReturnType<typeof fetchTopMerchants>> | null>(null);
+  useEffect(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+    const end = now.toISOString().slice(0, 10);
+    fetchTopMerchants(start, end, 8).then(setData).catch(() => setData({ merchants: [] }));
+  }, []);
+  if (!data) return <Loading />;
+  if (!data.merchants.length) return <Empty colors={colors} text="No spending this period." />;
+  const max = Math.max(...data.merchants.map((m) => m.total), 1);
+  return (
+    <View style={{ gap: 10 }}>
+      {data.merchants.map((m, i) => (
+        <View key={i}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
+            <Text style={{ color: colors.text, fontSize: 13, flex: 1, marginRight: 8 }} numberOfLines={1}>
+              {m.sample_description || m.merchant}
+            </Text>
+            <Text style={{ color: colors.text, fontWeight: "700", fontSize: 13 }}>{formatCurrency(m.total)}</Text>
+          </View>
+          <View style={{ height: 5, borderRadius: 3, backgroundColor: colors.chipBg, overflow: "hidden" }}>
+            <View style={{ height: "100%", width: `${(m.total / max) * 100}%`, backgroundColor: colors.primary, borderRadius: 3 }} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// Subscriptions/standing-instructions the same detector powers on Settings >
+// Watchers -- surfaced here as a read-only glance.
+export function RecurringSubscriptionsContent() {
+  const { colors } = useTheme();
+  const [items, setItems] = useState<Awaited<ReturnType<typeof detectRecurringWatchers>> | null>(null);
+  useEffect(() => {
+    detectRecurringWatchers()
+      .then((r) => setItems((r || []).slice().sort((a, b) => b.amount - a.amount).slice(0, 6)))
+      .catch(() => setItems([]));
+  }, []);
+  if (!items) return <Loading />;
+  if (!items.length) return <Empty colors={colors} text="No recurring patterns detected yet." />;
+  return (
+    <View style={{ gap: 10 }}>
+      {items.map((r, i) => (
+        <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <Text style={{ color: colors.text, fontSize: 13 }} numberOfLines={1}>{r.sample_description}</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>{r.frequency}</Text>
+          </View>
+          <Text style={{ color: colors.text, fontWeight: "700", fontSize: 13 }}>{formatCurrency(r.amount)}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// Statistical (free, no AI call) large-transaction flags -- same endpoint
+// Settings > AI's anomaly tab uses, just default (non-AI) mode for a zero-cost widget.
+export function SpendingAnomaliesContent() {
+  const { colors } = useTheme();
+  const [data, setData] = useState<Awaited<ReturnType<typeof getAnomalies>> | null>(null);
+  useEffect(() => { getAnomalies(false).then(setData).catch(() => setData({ anomalies: [], ai: false })); }, []);
+  if (!data) return <Loading />;
+  if (!data.anomalies.length) return <Empty colors={colors} text="No unusual spending detected." />;
+  return (
+    <View style={{ gap: 10 }}>
+      {data.anomalies.map((a, i) => (
+        <View key={i} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <View style={{ flex: 1, marginRight: 8 }}>
+            <Text style={{ color: colors.text, fontSize: 13 }} numberOfLines={1}>{a.description}</Text>
+            <Text style={{ color: colors.warning, fontSize: 11, marginTop: 2 }} numberOfLines={2}>{a.reason}</Text>
+          </View>
+          <Text style={{ color: colors.danger, fontWeight: "700", fontSize: 13 }}>{formatCurrency(a.amount)}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// Statistical forecast (average interval between past occurrences of the same
+// description) -- same endpoint Settings > AI's predictions tab uses.
+export function CashflowForecastContent() {
+  const { colors } = useTheme();
+  const [data, setData] = useState<Awaited<ReturnType<typeof getPredictions>> | null>(null);
+  useEffect(() => { getPredictions(45).then(setData).catch(() => setData({ predictions: [], expected_income: 0, expected_expense: 0, days_ahead: 45 })); }, []);
+  if (!data) return <Loading />;
+  if (!data.predictions.length) return <Empty colors={colors} text="Not enough recurring history to forecast yet." />;
+  return (
+    <View>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 10 }}>
+        <View>
+          <Text style={{ color: colors.textSecondary, fontSize: 11 }}>Expected in, next {data.days_ahead}d</Text>
+          <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 14 }}>{formatCurrency(data.expected_income)}</Text>
+        </View>
+        <View style={{ alignItems: "flex-end" }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 11 }}>Expected out</Text>
+          <Text style={{ color: colors.danger, fontWeight: "700", fontSize: 14 }}>{formatCurrency(data.expected_expense)}</Text>
+        </View>
+      </View>
+      <View style={{ gap: 6, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6 }}>
+        {data.predictions.slice(0, 6).map((p, i) => (
+          <View key={i} style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <Text style={{ color: colors.text, fontSize: 12, flex: 1, marginRight: 8 }} numberOfLines={1}>{p.description}</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{formatDate(p.predicted_date)}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }

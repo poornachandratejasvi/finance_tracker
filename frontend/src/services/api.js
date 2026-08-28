@@ -767,6 +767,14 @@ export const getAnalyticsBalanceTrend = async (params = {}) => {
   const response = await api.get('/api/analytics/balance-trend', { params });
   return response.data;
 };
+export const getAnalyticsHeatmap = async (params = {}) => {
+  const response = await api.get('/api/analytics/heatmap', { params });
+  return response.data;
+};
+export const getTopMerchants = async (params = {}) => {
+  const response = await api.get('/api/analytics/top-merchants', { params });
+  return response.data;
+};
 
 // Saved filters ("My filter")
 export const getSavedFilters = async (scope) => {

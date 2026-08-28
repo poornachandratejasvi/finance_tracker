@@ -7,6 +7,7 @@ const KEYS = {
   serverUrl: "ft_server_url",
   accessToken: "ft_access_token",
   refreshToken: "ft_refresh_token",
+  cachedUser: "ft_cached_user",
 } as const;
 
 function normalizeUrl(url: string): string {
@@ -46,7 +47,25 @@ export async function clearSession(): Promise<void> {
   await Promise.all([
     SecureStore.deleteItemAsync(KEYS.accessToken),
     SecureStore.deleteItemAsync(KEYS.refreshToken),
+    SecureStore.deleteItemAsync(KEYS.cachedUser),
   ]);
+}
+
+/** Last-known /api/users/me response, so a launch with no connectivity can restore
+ * the logged-in state from cache instead of forcing the login screen on a network
+ * error that has nothing to do with the token actually being invalid. */
+export async function cacheUser(user: unknown): Promise<void> {
+  await SecureStore.setItemAsync(KEYS.cachedUser, JSON.stringify(user));
+}
+
+export async function getCachedUser<T = unknown>(): Promise<T | null> {
+  const raw = await SecureStore.getItemAsync(KEYS.cachedUser);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
 }
 
 /** Full reset (Settings > Personal data & privacy) -- also forgets the saved server URL,

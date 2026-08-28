@@ -1,11 +1,13 @@
 import {
   AccountBalance, TrendingUp, PieChartOutline, ShowChart, Timeline,
   AccountBalanceWallet, Savings, CardGiftcard, Receipt, Speed,
+  CalendarMonth, Storefront, Autorenew, WarningAmber, Insights,
 } from '@mui/icons-material';
 import {
   NetWorthContent, IncomeExpenseContent, SpendingByCategoryContent, CashflowTrendContent,
   BalanceTrendContent, BankBalancesContent, InvestmentsSummaryContent, RewardPointsSummaryContent,
-  RecentTransactionsContent, BudgetProgressContent,
+  RecentTransactionsContent, BudgetProgressContent, SpendingHeatmapContent, TopMerchantsContent,
+  RecurringSubscriptionsContent, SpendingAnomaliesContent, CashflowForecastContent,
 } from './widgetContents.jsx';
 
 // Single source of truth for every addable widget -- must stay in sync with
@@ -23,6 +25,11 @@ export const WIDGET_CATALOG = {
   reward_points_summary: { label: 'Reward Points', description: 'Credit card points across all cards.', icon: CardGiftcard, size: 'medium', Content: RewardPointsSummaryContent },
   recent_transactions: { label: 'Recent Transactions', description: 'Your latest activity.', icon: Receipt, size: 'medium', Content: RecentTransactionsContent },
   budget_progress: { label: 'Budget Progress', description: 'Spend vs limit per budgeted category.', icon: Speed, size: 'medium', Content: BudgetProgressContent },
+  spending_heatmap: { label: 'Spending Heatmap', description: 'Daily spend, calendar-style, last ~4 months.', icon: CalendarMonth, size: 'large', Content: SpendingHeatmapContent },
+  top_merchants: { label: 'Top Merchants', description: 'Where you spend the most this period.', icon: Storefront, size: 'medium', Content: TopMerchantsContent },
+  recurring_subscriptions: { label: 'Recurring & Subscriptions', description: 'Auto-detected subscriptions and standing instructions.', icon: Autorenew, size: 'medium', Content: RecurringSubscriptionsContent },
+  spending_anomalies: { label: 'Spending Anomalies', description: 'Unusually large transactions, flagged automatically.', icon: WarningAmber, size: 'medium', Content: SpendingAnomaliesContent },
+  cashflow_forecast: { label: 'Cash Flow Forecast', description: 'Expected upcoming income and bills.', icon: Insights, size: 'medium', Content: CashflowForecastContent },
 };
 
 export const WIDGET_TYPES = Object.keys(WIDGET_CATALOG);

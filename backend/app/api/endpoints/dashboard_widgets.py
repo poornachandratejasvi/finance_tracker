@@ -26,6 +26,11 @@ WIDGET_TYPES = (
     "net_worth", "income_expense", "spending_by_category", "cashflow_trend",
     "balance_trend", "bank_balances", "investments_summary",
     "reward_points_summary", "recent_transactions", "budget_progress",
+    # Added later: all reuse existing endpoints (analytics/heatmap,
+    # analytics/top-merchants, watchers/detect-recurring, ai/anomalies,
+    # ai/predictions) -- no new aggregation logic, same as every widget above.
+    "spending_heatmap", "top_merchants", "recurring_subscriptions",
+    "spending_anomalies", "cashflow_forecast",
 )
 
 

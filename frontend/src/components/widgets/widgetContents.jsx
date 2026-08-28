@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, CircularProgress, LinearProgress, List, ListItem, ListItemText } from '@mui/material';
+import { Box, Typography, CircularProgress, LinearProgress, List, ListItem, ListItemText, Tooltip, Chip } from '@mui/material';
 import {
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis,
   Tooltip as ReTooltip, CartesianGrid,
 } from 'recharts';
-import { getNetWorth, getAnalyticsCashflow, getBudgetStatus, getRewardPoints, getInvestmentsDashboard, getTransactions, getDashboardSummary } from '../../services/api';
+import {
+  getNetWorth, getAnalyticsCashflow, getBudgetStatus, getRewardPoints, getInvestmentsDashboard,
+  getTransactions, getDashboardSummary, getAnalyticsHeatmap, getTopMerchants,
+  detectRecurringTransactions, getAnomalies, getPredictions,
+} from '../../services/api';
 import { formatCurrency, formatDate, amountColor } from '../../utils/format';
 import { useCategoryMeta } from '../../utils/categories';
 
@@ -277,6 +281,162 @@ export function BudgetProgressContent() {
           />
         </Box>
       ))}
+    </Box>
+  );
+}
+
+// GitHub-contribution-style calendar: last ~17 weeks of daily spend, colored by
+// intensity relative to the busiest day in range. Reuses analytics/heatmap
+// (debit-only, already currency-converted) -- no client-side aggregation.
+export function SpendingHeatmapContent() {
+  const [data, setData] = useState(null);
+  useEffect(() => { getAnalyticsHeatmap({ days: 119 }).then(setData).catch(() => setData({ days: [], max_amount: 0 })); }, []);
+  if (!data) return <Loading />;
+  const days = data.days || [];
+  if (!days.length) return <Empty />;
+  const max = data.max_amount || 1;
+  const colorFor = (amt) => {
+    if (!amt) return 'rgba(128,128,128,0.12)';
+    const t = Math.min(1, amt / max);
+    const alpha = 0.15 + t * 0.75;
+    return `rgba(228, 87, 86, ${alpha.toFixed(2)})`;
+  };
+  // Pad to a full first week so the grid always starts on the same weekday column.
+  const firstDow = new Date(days[0].date + 'T00:00:00').getDay();
+  const padded = [...Array(firstDow).fill(null), ...days];
+  const weeks = [];
+  for (let i = 0; i < padded.length; i += 7) weeks.push(padded.slice(i, i + 7));
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
+        Daily spend, last {days.length} days
+      </Typography>
+      <Box sx={{ display: 'flex', gap: '3px', flex: 1, overflowX: 'auto' }}>
+        {weeks.map((week, wi) => (
+          <Box key={wi} sx={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            {week.map((d, di) => (
+              <Tooltip key={di} title={d ? `${formatDate(d.date)}: ${formatCurrency(d.amount)}` : ''} arrow>
+                <Box sx={{ width: 12, height: 12, borderRadius: '2px', bgcolor: d ? colorFor(d.amount) : 'transparent' }} />
+              </Tooltip>
+            ))}
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+// Highest-spend merchants over the period, grouped by description signature
+// (same grouping recurring_detection uses) so reference-number noise doesn't
+// split one merchant into a dozen near-duplicate rows.
+export function TopMerchantsContent() {
+  const [data, setData] = useState(null);
+  useEffect(() => { getTopMerchants(currentMonthRange()).then(setData).catch(() => setData({ merchants: [] })); }, []);
+  if (!data) return <Loading />;
+  const merchants = data.merchants || [];
+  if (!merchants.length) return <Empty text="No spending this period." />;
+  const max = Math.max(...merchants.map((m) => m.total), 1);
+  return (
+    <Box sx={{ height: '100%', overflowY: 'auto' }}>
+      {merchants.map((m, i) => (
+        <Box key={i} sx={{ mb: 1 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
+            <Typography variant="body2" noWrap sx={{ maxWidth: '65%' }}>
+              {m.sample_description || m.merchant}
+            </Typography>
+            <Typography variant="body2" fontWeight={700}>{formatCurrency(m.total, { compact: true })}</Typography>
+          </Box>
+          <Box sx={{ height: 5, borderRadius: 3, bgcolor: 'action.hover', overflow: 'hidden' }}>
+            <Box sx={{ height: '100%', width: `${(m.total / max) * 100}%`, bgcolor: 'primary.main', borderRadius: 3 }} />
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+// Subscriptions/standing-instructions the same detector powers on the Watchers
+// page -- surfaced here as a read-only glance so you don't have to visit
+// Settings to see what's recurring.
+export function RecurringSubscriptionsContent() {
+  const [items, setItems] = useState(null);
+  useEffect(() => {
+    detectRecurringTransactions().then((r) => setItems((r || []).slice().sort((a, b) => b.amount - a.amount).slice(0, 6)))
+      .catch(() => setItems([]));
+  }, []);
+  if (!items) return <Loading />;
+  if (!items.length) return <Empty text="No recurring patterns detected yet." />;
+  return (
+    <List dense disablePadding sx={{ height: '100%', overflowY: 'auto' }}>
+      {items.map((r, i) => (
+        <ListItem key={i} disableGutters sx={{ py: 0.5 }}>
+          <ListItemText
+            primary={r.sample_description}
+            secondary={<Chip label={r.frequency} size="small" variant="outlined" sx={{ height: 18, fontSize: 11 }} />}
+            primaryTypographyProps={{ noWrap: true }}
+          />
+          <Typography fontWeight={700} sx={{ flexShrink: 0, pl: 1 }}>{formatCurrency(r.amount, { compact: true })}</Typography>
+        </ListItem>
+      ))}
+    </List>
+  );
+}
+
+// Statistical (free, no AI call) large-transaction flags -- same endpoint the
+// Ask AI page's anomaly tab uses, just default (non-AI) mode for a zero-cost widget.
+export function SpendingAnomaliesContent() {
+  const [data, setData] = useState(null);
+  useEffect(() => { getAnomalies(false).then(setData).catch(() => setData({ anomalies: [] })); }, []);
+  if (!data) return <Loading />;
+  const anomalies = data.anomalies || [];
+  if (!anomalies.length) return <Empty text="No unusual spending detected." />;
+  return (
+    <List dense disablePadding sx={{ height: '100%', overflowY: 'auto' }}>
+      {anomalies.map((a, i) => (
+        <ListItem key={i} disableGutters sx={{ py: 0.5, alignItems: 'flex-start' }}>
+          <ListItemText
+            primary={a.description}
+            secondary={a.reason}
+            primaryTypographyProps={{ noWrap: true }}
+            secondaryTypographyProps={{ variant: 'caption', color: 'warning.main' }}
+          />
+          <Typography fontWeight={700} color="error.main" sx={{ flexShrink: 0, pl: 1 }}>
+            {formatCurrency(a.amount, { compact: true })}
+          </Typography>
+        </ListItem>
+      ))}
+    </List>
+  );
+}
+
+// Statistical forecast (average interval between past occurrences of the same
+// description) -- same endpoint AskAI's predictions tab uses.
+export function CashflowForecastContent() {
+  const [data, setData] = useState(null);
+  useEffect(() => { getPredictions(45).then(setData).catch(() => setData({ predictions: [] })); }, []);
+  if (!data) return <Loading />;
+  const predictions = data.predictions || [];
+  if (!predictions.length) return <Empty text="Not enough recurring history to forecast yet." />;
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+        <Box>
+          <Typography variant="caption" color="text.secondary">Expected in, next {data.days_ahead}d</Typography>
+          <Typography fontWeight={700} color="success.main">{formatCurrency(data.expected_income, { compact: true })}</Typography>
+        </Box>
+        <Box sx={{ textAlign: 'right' }}>
+          <Typography variant="caption" color="text.secondary">Expected out</Typography>
+          <Typography fontWeight={700} color="error.main">{formatCurrency(data.expected_expense, { compact: true })}</Typography>
+        </Box>
+      </Box>
+      <Box sx={{ flex: 1, overflowY: 'auto', borderTop: 1, borderColor: 'divider', pt: 0.5 }}>
+        {predictions.slice(0, 6).map((p, i) => (
+          <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.4 }}>
+            <Typography variant="body2" noWrap sx={{ maxWidth: '60%' }}>{p.description}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>{formatDate(p.predicted_date)}</Typography>
+          </Box>
+        ))}
+      </Box>
     </Box>
   );
 }
