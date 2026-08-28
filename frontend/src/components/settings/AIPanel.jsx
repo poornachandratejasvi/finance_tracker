@@ -622,7 +622,8 @@ export default function AIPanel() {
           </Box>
         </Box>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          Tokens consumed per provider/model since the last reset (counted from each provider's response).
+          Tokens consumed per provider/model this calendar month{usage?.month ? ` (${usage.month})` : ''}
+          — counted from each provider's response, and auto-resets on the 1st. "Reset" clears it early if you want to.
         </Typography>
 
         {usageLoading && !usage ? (

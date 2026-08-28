@@ -120,28 +120,44 @@ def has_key(db: Session, uid: int, provider: str) -> bool:
     return get_key(db, uid, provider) is not None
 
 
-# ---------- token-usage tracking (per provider:model, per user) ----------
+# ---------- token-usage tracking (per provider:model, per user, resets each calendar month) ----------
 def _usage_key(uid: int) -> str:
     return f"ai_usage:{uid}"
+
+
+def _current_month() -> str:
+    from datetime import datetime
+    return datetime.utcnow().strftime("%Y-%m")
+
+
+def _load_usage_entries(db: Session, uid: int):
+    """Returns (entries, row). Entries from a previous calendar month are
+    discarded here rather than via a scheduled job -- no cron to miss if the
+    server happens to be down on the 1st; the very next AI call or usage-page
+    view of the new month just starts from empty."""
+    row = db.query(AppSetting).filter(AppSetting.key == _usage_key(uid)).first()
+    if not row or not row.value:
+        return {}, row
+    try:
+        payload = json.loads(row.value)
+    except (ValueError, TypeError):
+        return {}, row
+    if payload.get("month") != _current_month():
+        return {}, row
+    return payload.get("entries") or {}, row
 
 
 def _record_usage(db: Session, uid: int, provider: str, model: str, usage: dict) -> None:
     if not usage:
         return
-    row = db.query(AppSetting).filter(AppSetting.key == _usage_key(uid)).first()
-    data = {}
-    if row and row.value:
-        try:
-            data = json.loads(row.value)
-        except (ValueError, TypeError):
-            data = {}
+    entries, row = _load_usage_entries(db, uid)
     k = f"{provider}:{model or 'default'}"
-    entry = data.get(k) or {"input": 0, "output": 0, "calls": 0}
+    entry = entries.get(k) or {"input": 0, "output": 0, "calls": 0}
     entry["input"] += int(usage.get("input") or 0)
     entry["output"] += int(usage.get("output") or 0)
     entry["calls"] += 1
-    data[k] = entry
-    payload = json.dumps(data)
+    entries[k] = entry
+    payload = json.dumps({"month": _current_month(), "entries": entries})
     if row:
         row.value = payload
     else:
@@ -150,15 +166,9 @@ def _record_usage(db: Session, uid: int, provider: str, model: str, usage: dict)
 
 
 def get_usage(db: Session, uid: int) -> list:
-    row = db.query(AppSetting).filter(AppSetting.key == _usage_key(uid)).first()
-    data = {}
-    if row and row.value:
-        try:
-            data = json.loads(row.value)
-        except (ValueError, TypeError):
-            data = {}
+    entries, _ = _load_usage_entries(db, uid)
     out = []
-    for k, v in data.items():
+    for k, v in entries.items():
         provider, _, model = k.partition(":")
         out.append({
             "provider": provider, "model": model,
@@ -167,6 +177,11 @@ def get_usage(db: Session, uid: int) -> list:
         })
     out.sort(key=lambda x: x["total_tokens"], reverse=True)
     return out
+
+
+def usage_month(db: Session, uid: int) -> str:
+    """The calendar month the current usage figures cover (for display), e.g. '2026-08'."""
+    return _current_month()
 
 
 def reset_usage(db: Session, uid: int) -> None:
@@ -223,28 +238,58 @@ def _ollama_complete(base_url: str, model: str, system: str, prompt: str, max_to
     return text, usage
 
 
+_MAX_MODEL_ATTEMPTS = 4  # the configured model, plus up to 3 fallbacks
+
+
 def _call_provider(db: Session, uid: int, provider: str, cfg: dict, system: str, prompt: str, max_tokens: int):
-    """Returns (text, model, usage)."""
+    """Returns (text, model, usage). Tries the configured model first; if it
+    errors (a specific model tier can be deprecated, rate-limited, or
+    quota-exhausted independently of the API key itself still being valid),
+    fetches the provider's other available models and tries a few more
+    before giving up on this provider entirely and moving to the next
+    provider in the priority chain (handled by complete(), below)."""
     if provider == "claude":
         key = get_key(db, uid, "claude")
         if not key:
             raise RuntimeError("Claude key not set")
-        model = cfg["claude"].get("model")
-        text, usage = _claude_complete(key, model, system, prompt, max_tokens)
-        return text, model, usage
-    if provider == "gemini":
+        call = lambda model: _claude_complete(key, model, system, prompt, max_tokens)
+        configured_model = cfg["claude"].get("model")
+    elif provider == "gemini":
         key = get_key(db, uid, "gemini")
         if not key:
             raise RuntimeError("Gemini key not set")
-        model = cfg["gemini"].get("model")
-        text, usage = _gemini_complete(key, model, system, prompt, max_tokens)
-        return text, model, usage
-    if provider == "ollama":
+        call = lambda model: _gemini_complete(key, model, system, prompt, max_tokens)
+        configured_model = cfg["gemini"].get("model")
+    elif provider == "ollama":
         oc = cfg.get("ollama", {})
-        model = oc.get("model")
-        text, usage = _ollama_complete(oc.get("base_url"), model, system, prompt, max_tokens)
-        return text, model, usage
-    raise RuntimeError(f"Unknown provider {provider}")
+        call = lambda model: _ollama_complete(oc.get("base_url"), model, system, prompt, max_tokens)
+        configured_model = oc.get("model")
+    else:
+        raise RuntimeError(f"Unknown provider {provider}")
+
+    candidates = [configured_model]
+    last_err = None
+    for attempt, model in enumerate(candidates):
+        if not model:
+            continue
+        try:
+            text, usage = call(model)
+            return text, model, usage
+        except Exception as e:
+            last_err = e
+            logger.info("AI model %s/%s failed, trying next model: %s", provider, model, str(e)[:120])
+            if attempt == 0:
+                # Only fetch alternates once, on the first failure -- avoids
+                # hammering the provider's model-list endpoint on every retry.
+                try:
+                    for m in list_models(db, uid, provider):
+                        if m not in candidates:
+                            candidates.append(m)
+                        if len(candidates) >= _MAX_MODEL_ATTEMPTS:
+                            break
+                except Exception:
+                    pass
+    raise last_err or RuntimeError(f"No usable model for {provider}")
 
 
 def complete(db: Session, uid: int, system: str, prompt: str, max_tokens: int = 1024) -> str:

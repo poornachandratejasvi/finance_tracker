@@ -477,10 +477,13 @@ def ai_anomaly_detection(
 
 @router.get("/usage")
 def ai_token_usage(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """Per provider:model token usage (input/output/total + call count) for this user."""
+    """Per provider:model token usage (input/output/total + call count) for this
+    user, for the current calendar month -- auto-resets on the 1st (see
+    ai_service._load_usage_entries), no manual action needed."""
     rows = ai_service.get_usage(db, current_user.id)
     return {
         "usage": rows,
+        "month": ai_service.usage_month(db, current_user.id),
         "totals": {
             "input_tokens": sum(r["input_tokens"] for r in rows),
             "output_tokens": sum(r["output_tokens"] for r in rows),
