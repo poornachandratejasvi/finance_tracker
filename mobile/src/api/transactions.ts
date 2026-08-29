@@ -57,3 +57,7 @@ export async function updateTransaction(id: number, payload: UpdateTransactionPa
 export async function deleteTransaction(id: number): Promise<void> {
   await api.delete(`/api/transactions/${id}`);
 }
+
+export async function confirmTransaction(id: number): Promise<void> {
+  await api.post("/api/transactions/bulk-confirm", { transaction_ids: [id] });
+}

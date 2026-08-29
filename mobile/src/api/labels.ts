@@ -25,3 +25,7 @@ export async function updateLabel(labelId: number, payload: Partial<LabelPayload
 export async function deleteLabel(labelId: number): Promise<void> {
   await api.delete(`/api/labels/${labelId}`);
 }
+
+export async function bulkLabelTransactions(transactionIds: number[], labelId: number): Promise<void> {
+  await api.post("/api/labels/bulk-label", { transaction_ids: transactionIds, label_id: labelId });
+}
