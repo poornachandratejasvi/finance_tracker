@@ -4,7 +4,7 @@ import {
   Select, MenuItem, FormControl, InputLabel, ToggleButton, ToggleButtonGroup, Chip,
   IconButton, Typography, Divider, Tooltip, Alert, CircularProgress, Autocomplete,
 } from '@mui/material';
-import { Add, Delete, Close, AutoAwesome } from '@mui/icons-material';
+import { Add, Delete, Close, AutoAwesome, History } from '@mui/icons-material';
 import CategoryIcon from './CategoryIcon';
 import { ICON_KEYS, getCategoryIconComponent, invalidateCategories } from '../utils/categories';
 import { formatCurrency } from '../utils/format';
@@ -95,6 +95,24 @@ export default function TransactionDialog({
   const [ruleKeywords, setRuleKeywords] = useState([]);
   const [ruleKwInput, setRuleKwInput] = useState('');
   const [ruleSaving, setRuleSaving] = useState(false);
+
+  // Edit/delete history sub-dialog
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState([]);
+
+  const handleOpenHistory = async () => {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    try {
+      const { data } = await api.get('/api/transactions/audit-log', { params: { transaction_id: transaction.id } });
+      setHistoryEntries(data);
+    } catch {
+      setHistoryEntries([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const bankCurrency = (id) => {
     const b = banks.find((x) => String(x.id) === String(id));
@@ -666,11 +684,16 @@ export default function TransactionDialog({
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2, justifyContent: 'space-between' }}>
-        <Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
           {isEdit && (
-            <Button color="error" startIcon={<Delete />} onClick={handleDelete} disabled={saving}>
-              Delete
-            </Button>
+            <>
+              <Button startIcon={<History />} onClick={handleOpenHistory} disabled={saving}>
+                History
+              </Button>
+              <Button color="error" startIcon={<Delete />} onClick={handleDelete} disabled={saving}>
+                Delete
+              </Button>
+            </>
           )}
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -739,6 +762,42 @@ export default function TransactionDialog({
           >
             {ruleSaving ? 'Creating…' : 'Create rule'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit/delete history — read-only audit trail for this transaction */}
+      <Dialog open={historyOpen} onClose={() => setHistoryOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <History fontSize="small" /> Edit History
+        </DialogTitle>
+        <DialogContent dividers>
+          {historyLoading ? (
+            <Box display="flex" justifyContent="center" py={3}><CircularProgress size={24} /></Box>
+          ) : historyEntries.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">No edits recorded for this transaction.</Typography>
+          ) : (
+            historyEntries.map((entry) => (
+              <Box key={entry.id} sx={{ mb: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="caption" color="text.secondary">
+                  {new Date(entry.changed_at).toLocaleString()} — {entry.action === 'deleted' ? 'Deleted' : 'Edited'}
+                </Typography>
+                {entry.action === 'updated' ? (
+                  Object.entries(entry.changes).map(([field, { old, new: newVal }]) => (
+                    <Typography key={field} variant="body2" sx={{ mt: 0.5 }}>
+                      <b>{field}</b>: {String(old ?? '—')} → {String(newVal ?? '—')}
+                    </Typography>
+                  ))
+                ) : (
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                    {entry.changes.description} — {entry.changes.amount} ({entry.changes.transaction_type})
+                  </Typography>
+                )}
+              </Box>
+            ))
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setHistoryOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Dialog>
