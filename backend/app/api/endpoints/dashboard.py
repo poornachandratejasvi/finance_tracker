@@ -115,8 +115,14 @@ def get_dashboard_summary(
     category_summary = apply_filters(category_summary, start_date, end_date, bank_id, category, None, min_amount, max_amount)
     category_summary = category_summary.group_by(Transaction.category).all()
 
+    # bank_type='investment' rows exist only so CAS/PPF statement emails can be
+    # auto-downloaded (see the Add Bank form) -- they're explicitly NOT balance-
+    # bearing accounts (that's what the separate InvestmentAccount feature is
+    # for), so they're excluded here the same way credit cards get their own
+    # bucket below, not lumped into savings_total/net worth.
     banks = db.query(Bank).filter(
-        Bank.user_id == current_user.id
+        Bank.user_id == current_user.id,
+        Bank.bank_type != "investment",
     ).all()
 
     # Per-bank period totals (filtered by same date range as main summary)
@@ -365,9 +371,13 @@ def get_net_worth(
         }
         for s in reversed(snaps)
     ]
-    # Live current aggregate
+    # Live current aggregate. bank_type='investment' is excluded -- those rows exist
+    # only to auto-download CAS/PPF statement emails, not to hold a real balance
+    # (the InvestmentAccount feature tracks that separately).
     savings = float(db.query(func.coalesce(func.sum(Bank.current_balance), 0.0)).filter(
-        Bank.user_id == current_user.id, Bank.bank_type != "credit", Bank.current_balance.isnot(None)
+        Bank.user_id == current_user.id,
+        Bank.bank_type.notin_(["credit", "investment"]),
+        Bank.current_balance.isnot(None),
     ).scalar() or 0.0)
     credit = float(db.query(func.coalesce(func.sum(Bank.current_balance), 0.0)).filter(
         Bank.user_id == current_user.id, Bank.bank_type == "credit", Bank.current_balance.isnot(None)

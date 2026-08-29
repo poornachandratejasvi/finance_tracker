@@ -339,7 +339,10 @@ function Dashboard() {
     background: theme.palette.background.paper,
   };
 
-  const visibleBanks = banks.filter((b) => !b.is_archived);
+  // bank_type='investment' rows exist only so CAS/PPF statement emails can be
+  // auto-downloaded (see the Add Bank form) -- they're not real balance-bearing
+  // accounts, so they're excluded from this accounts-at-a-glance list.
+  const visibleBanks = banks.filter((b) => !b.is_archived && b.bank_type !== 'investment');
 
   const gauges = [
     {

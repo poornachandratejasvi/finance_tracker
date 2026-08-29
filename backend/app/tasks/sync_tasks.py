@@ -127,8 +127,11 @@ def _take_balance_snapshots(db, now: datetime) -> None:
             ).first()
             if exists:
                 continue
+            # bank_type='investment' rows exist only to auto-download CAS/PPF
+            # statement emails, not to hold a real balance -- excluded the same
+            # way the dashboard excludes them from net worth.
             savings = float(db.query(func.coalesce(func.sum(Bank.current_balance), 0.0)).filter(
-                Bank.user_id == uid, Bank.bank_type != "credit", Bank.current_balance.isnot(None)
+                Bank.user_id == uid, Bank.bank_type.notin_(["credit", "investment"]), Bank.current_balance.isnot(None)
             ).scalar() or 0.0)
             credit = float(db.query(func.coalesce(func.sum(Bank.current_balance), 0.0)).filter(
                 Bank.user_id == uid, Bank.bank_type == "credit", Bank.current_balance.isnot(None)

@@ -37,7 +37,12 @@ def render_metrics(db: Session, user_id: int) -> bytes:
         "finance_savings_goal_progress_pct", "Percent of savings goal target reached", ["goal"], registry=registry
     )
 
-    banks = db.query(Bank).filter(Bank.user_id == user_id, Bank.is_active == True).all()  # noqa: E712
+    # bank_type='investment' rows exist only to auto-download CAS/PPF statement
+    # emails, not to hold a real balance (InvestmentAccount tracks that
+    # separately) -- excluded here the same way the dashboard excludes them.
+    banks = db.query(Bank).filter(
+        Bank.user_id == user_id, Bank.is_active == True, Bank.bank_type != "investment"  # noqa: E712
+    ).all()
     rate_map = currency_service.get_rate_map(db, user_id)
     total = 0.0
     for b in banks:

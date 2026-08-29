@@ -25,7 +25,12 @@ def get_family_dashboard(
     """Every household member, their banks/balances, and combined totals."""
     member_ids = household_user_ids(db, current_user)
     members = db.query(User).filter(User.id.in_(member_ids)).all()
-    banks = db.query(Bank).filter(Bank.user_id.in_(member_ids), Bank.is_active == True).all()  # noqa: E712
+    # bank_type='investment' rows exist only to auto-download CAS/PPF statement
+    # emails, not to hold a real balance -- excluded from assets/liabilities the
+    # same way the main dashboard excludes them.
+    banks = db.query(Bank).filter(
+        Bank.user_id.in_(member_ids), Bank.is_active == True, Bank.bank_type != "investment"  # noqa: E712
+    ).all()
 
     banks_by_user = {}
     for b in banks:
