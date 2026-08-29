@@ -69,21 +69,71 @@ struct AddTransactionIntent: AppIntent {
         if let account = account, !account.isEmpty {
             body["account"] = account
         }
-        if let date = date {
-            body["transaction_date"] = ISO8601DateFormatter().string(from: date)
-        }
+        let isoDate = ISO8601DateFormatter().string(from: date ?? Date())
+        body["transaction_date"] = isoDate
         if let notes = notes, !notes.isEmpty {
             body["notes"] = notes
         }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw AddTransactionIntentError.requestFailed
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                throw AddTransactionIntentError.requestFailed
+            }
+            return .result(dialog: "Saved \(merchant) — \(amount)")
+        } catch {
+            // Server unreachable (or it rejected the request) -- queue it the same
+            // way the in-app "Add Transaction" screen does when offline, instead of
+            // just failing. The RN app drains this file (mobile/src/offline/
+            // syncEngine.ts: drainNativeIntentQueue) into its own sync queue the
+            // next time it's foregrounded/reconnects, so it syncs automatically
+            // without the user having to retry this Shortcut.
+            PendingIntentQueue.append(
+                amount: amount, description: merchant, type: (type ?? .expense).rawValue,
+                category: category, accountHint: account, transactionDate: isoDate, notes: notes
+            )
+            return .result(dialog: "Saved offline — \(merchant) will sync when Finance Tracker is next opened online.")
         }
+    }
+}
 
-        return .result(dialog: "Saved \(merchant) — \(amount)")
+/// Shared hand-off file for transactions the Shortcuts/Siri action couldn't submit
+/// live (server unreachable). Written here in Swift, read and cleared by the RN
+/// app's JS (mobile/src/offline/syncEngine.ts) -- this AppIntent runs in the same
+/// app process/sandbox as the RN runtime (no separate Extension target), so the
+/// Documents directory is a plain shared filesystem location, not an App Group.
+enum PendingIntentQueue {
+    private static var fileURL: URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("pending_intent_transactions.json")
+    }
+
+    static func append(
+        amount: Double, description: String, type: String, category: String?,
+        accountHint: String?, transactionDate: String, notes: String?
+    ) {
+        guard let fileURL = fileURL else { return }
+        var entries: [[String: Any]] = []
+        if let data = try? Data(contentsOf: fileURL),
+           let existing = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            entries = existing
+        }
+        var entry: [String: Any] = [
+            "client_uuid": UUID().uuidString,
+            "amount": amount,
+            "description": description,
+            "type": type,
+            "transaction_date": transactionDate,
+        ]
+        if let category = category, !category.isEmpty { entry["category"] = category }
+        if let accountHint = accountHint, !accountHint.isEmpty { entry["account_hint"] = accountHint }
+        if let notes = notes, !notes.isEmpty { entry["notes"] = notes }
+        entries.append(entry)
+        if let data = try? JSONSerialization.data(withJSONObject: entries) {
+            try? data.write(to: fileURL, options: .atomic)
+        }
     }
 }
 

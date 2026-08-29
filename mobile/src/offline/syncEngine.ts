@@ -1,4 +1,5 @@
 import * as Crypto from "expo-crypto";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { listTransactions, createTransaction, CreateTransactionPayload } from "../api/transactions";
 import { listBanks } from "../api/banks";
@@ -8,6 +9,7 @@ import { Transaction } from "../types";
 import {
   upsertTransactions, upsertBanks, upsertCategories, upsertLabels,
   getLastTransactionSyncAt, setLastTransactionSyncAt,
+  getCachedBanks,
   insertPendingTransaction, replacePendingTransaction,
   enqueuePendingWrite, getPendingWrites, markPendingWriteDone,
   markPendingWriteRetried, markPendingWriteFailed,
@@ -18,8 +20,13 @@ let isFlushing = false;
 // Queue a transaction created while offline (or whose request failed with no
 // server response at all -- a genuine network failure, not a validation
 // rejection). Never queues something the server already told us is invalid.
-export async function queueOfflineTransaction(payload: CreateTransactionPayload): Promise<Transaction> {
-  const clientUuid = Crypto.randomUUID();
+// `clientUuid` can be supplied by a caller that already minted one (e.g. the
+// native-intent drain below) so re-running the drain after a crash can't
+// double-submit -- the server dedupes on client_uuid either way.
+export async function queueOfflineTransaction(
+  payload: CreateTransactionPayload,
+  clientUuid: string = Crypto.randomUUID()
+): Promise<Transaction> {
   const localId = `local-${clientUuid}`;
   const now = new Date().toISOString();
   const shadow: Transaction = {
@@ -101,10 +108,78 @@ async function pullReferenceLists(): Promise<void> {
   await Promise.all([upsertBanks(banks), upsertCategories(categories), upsertLabels(labels)]);
 }
 
+const NATIVE_INTENT_QUEUE_FILE = `${FileSystem.documentDirectory}pending_intent_transactions.json`;
+
+interface NativeIntentEntry {
+  client_uuid: string;
+  amount: number;
+  description: string;
+  type: string; // Swift sends the enum's raw value: "expense" | "income"
+  category?: string;
+  account_hint?: string;
+  transaction_date: string;
+  notes?: string;
+}
+
+// The iOS "Add Transaction" App Intent (Shortcuts/Siri/Automation) runs in this
+// same app process, but can't reach this queue directly from Swift -- it writes
+// failed submissions to a shared JSON file instead (see
+// mobile/ios-native/AddTransactionIntent.swift: PendingIntentQueue). This
+// promotes anything found there into the normal offline queue so it gets the
+// exact same retry/dedup handling as an in-app offline save, then clears the
+// file so it isn't drained twice.
+async function drainNativeIntentQueue(): Promise<void> {
+  const info = await FileSystem.getInfoAsync(NATIVE_INTENT_QUEUE_FILE);
+  if (!info.exists) return;
+
+  let entries: NativeIntentEntry[] = [];
+  try {
+    entries = JSON.parse(await FileSystem.readAsStringAsync(NATIVE_INTENT_QUEUE_FILE));
+  } catch {
+    // Corrupt/partial file -- drop it rather than looping on it forever.
+    await FileSystem.deleteAsync(NATIVE_INTENT_QUEUE_FILE, { idempotent: true });
+    return;
+  }
+  if (!Array.isArray(entries) || entries.length === 0) {
+    await FileSystem.deleteAsync(NATIVE_INTENT_QUEUE_FILE, { idempotent: true });
+    return;
+  }
+
+  const banks = await getCachedBanks().catch(() => []);
+  const resolveBankId = (hint?: string): number | null => {
+    if (!hint) return banks[0]?.id ?? null;
+    const low = hint.toLowerCase();
+    const match = banks.find((b) => b.name.toLowerCase().includes(low) || low.includes(b.name.toLowerCase()));
+    return match?.id ?? banks[0]?.id ?? null;
+  };
+
+  // No accounts synced to this device yet -- can't resolve any account, so leave
+  // the file untouched entirely rather than losing these entries.
+  if (banks.length === 0) return;
+
+  for (const entry of entries) {
+    const bankId = resolveBankId(entry.account_hint);
+    if (!bankId) continue;
+    const payload: CreateTransactionPayload = {
+      bank_id: bankId,
+      transaction_date: entry.transaction_date,
+      description: entry.description,
+      amount: entry.amount,
+      transaction_type: entry.type === "income" ? "credit" : "debit",
+      category: entry.category,
+      notes: entry.notes,
+    };
+    await queueOfflineTransaction(payload, entry.client_uuid);
+  }
+
+  await FileSystem.deleteAsync(NATIVE_INTENT_QUEUE_FILE, { idempotent: true });
+}
+
 export async function syncNow(): Promise<void> {
   if (isFlushing) return;
   isFlushing = true;
   try {
+    await drainNativeIntentQueue();
     await flushPendingWrites();
     await pullTransactions();
     await pullReferenceLists();
