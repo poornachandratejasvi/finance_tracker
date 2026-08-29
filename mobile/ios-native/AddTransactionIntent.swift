@@ -34,7 +34,7 @@ struct AddTransactionIntent: AppIntent {
     var merchant: String
 
     @Parameter(title: "Type")
-    var type: TransactionTypeOption = .expense
+    var type: TransactionTypeOption?
 
     @Parameter(title: "Category")
     var category: String?
@@ -61,7 +61,7 @@ struct AddTransactionIntent: AppIntent {
         var body: [String: Any] = [
             "amount": amount,
             "description": merchant,
-            "type": type.rawValue,
+            "type": (type ?? .expense).rawValue,
         ]
         if let category = category, !category.isEmpty {
             body["category"] = category
