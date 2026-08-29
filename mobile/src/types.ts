@@ -25,6 +25,10 @@ export interface Bank {
   sms_sender_pattern: string | null;
   interest_rate: number | null;
   minimum_payment: number | null;
+  balance_below_limit_enabled?: boolean | null;
+  balance_below_threshold?: number | null;
+  balance_above_limit_enabled?: boolean | null;
+  balance_above_threshold?: number | null;
 }
 
 export interface Category {

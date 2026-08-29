@@ -37,6 +37,14 @@ export default function BankFormScreen({ route, navigation }: Props) {
   const [isArchived, setIsArchived] = useState(!!existing?.is_archived);
   const [interestRate, setInterestRate] = useState(existing?.interest_rate != null ? String(existing.interest_rate) : "");
   const [minimumPayment, setMinimumPayment] = useState(existing?.minimum_payment != null ? String(existing.minimum_payment) : "");
+  const [belowEnabled, setBelowEnabled] = useState(!!existing?.balance_below_limit_enabled);
+  const [belowThreshold, setBelowThreshold] = useState(
+    existing?.balance_below_threshold != null ? String(existing.balance_below_threshold) : ""
+  );
+  const [aboveEnabled, setAboveEnabled] = useState(!!existing?.balance_above_limit_enabled);
+  const [aboveThreshold, setAboveThreshold] = useState(
+    existing?.balance_above_threshold != null ? String(existing.balance_above_threshold) : ""
+  );
   const [submitting, setSubmitting] = useState(false);
 
   const onSave = async () => {
@@ -56,6 +64,10 @@ export default function BankFormScreen({ route, navigation }: Props) {
         is_archived: isArchived,
         interest_rate: interestRate ? parseFloat(interestRate) : undefined,
         minimum_payment: minimumPayment ? parseFloat(minimumPayment) : undefined,
+        balance_below_limit_enabled: belowEnabled,
+        balance_below_threshold: belowThreshold ? parseFloat(belowThreshold) : undefined,
+        balance_above_limit_enabled: aboveEnabled,
+        balance_above_threshold: aboveThreshold ? parseFloat(aboveThreshold) : undefined,
       };
       if (existing) {
         await updateBank(existing.id, payload);
@@ -192,6 +204,36 @@ export default function BankFormScreen({ route, navigation }: Props) {
         AD-SBIINB) -- not a phone number. Lets an incoming SMS get matched to
         this account automatically.
       </Text>
+
+      <View style={styles.switchRow}>
+        <Text style={styles.label}>Notify if balance goes below a limit</Text>
+        <Switch value={belowEnabled} onValueChange={setBelowEnabled} />
+      </View>
+      {belowEnabled && (
+        <TextInput
+          style={styles.input}
+          value={belowThreshold}
+          onChangeText={setBelowThreshold}
+          keyboardType="decimal-pad"
+          placeholder="Minimum balance, e.g. 5000"
+          placeholderTextColor={colors.textSecondary}
+        />
+      )}
+
+      <View style={styles.switchRow}>
+        <Text style={styles.label}>Notify if balance goes above a limit</Text>
+        <Switch value={aboveEnabled} onValueChange={setAboveEnabled} />
+      </View>
+      {aboveEnabled && (
+        <TextInput
+          style={styles.input}
+          value={aboveThreshold}
+          onChangeText={setAboveThreshold}
+          keyboardType="decimal-pad"
+          placeholder="Maximum balance, e.g. 50000"
+          placeholderTextColor={colors.textSecondary}
+        />
+      )}
 
       {existing && (
         <View style={styles.switchRow}>

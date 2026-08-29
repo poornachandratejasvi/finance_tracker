@@ -121,6 +121,15 @@ class Bank(Base):
     field_mapping = Column(Text)  # JSON mapping of PDF fields to app fields
     pdf_filename_prefix = Column(String(100))  # Filter: only process PDFs whose filename starts with this prefix
     is_active = Column(Boolean, default=True)
+    # Balance threshold notifications -- fires (via the existing Discord/Apprise
+    # notify path) when current_balance crosses below/above the configured
+    # amount. last_balance_alert_state guards against re-notifying every check
+    # cycle while the balance stays past the threshold ('below'|'above'|None).
+    balance_below_limit_enabled = Column(Boolean, default=False)
+    balance_below_threshold = Column(Float)
+    balance_above_limit_enabled = Column(Boolean, default=False)
+    balance_above_threshold = Column(Float)
+    last_balance_alert_state = Column(String(10))
     created_at = Column(DateTime, default=utcnow)
     
     # Relationships

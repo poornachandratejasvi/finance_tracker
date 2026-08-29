@@ -17,7 +17,7 @@ celery_app = Celery(
         "app.tasks.sync_tasks", "app.tasks.backup_tasks", "app.tasks.notification_tasks",
         "app.tasks.gmail_health_tasks", "app.tasks.alert_sync_tasks", "app.tasks.credit_balance_tasks",
         "app.tasks.watcher_tasks", "app.tasks.reward_points_tasks", "app.tasks.subscription_reminder_tasks",
-        "app.tasks.budget_alert_tasks",
+        "app.tasks.budget_alert_tasks", "app.tasks.balance_alert_tasks",
     ],
 )
 
@@ -107,5 +107,11 @@ celery_app.conf.beat_schedule = {
     "budget-alerts-daily": {
         "task": "budgets.check_all_alerts",
         "schedule": 24 * 60 * 60.0,
+    },
+    # Balance is only ever updated by a sync/redetect event, not continuously --
+    # hourly is a cheap safety margin that still notices a breach promptly.
+    "balance-alerts-hourly": {
+        "task": "balance_alerts.check_all",
+        "schedule": 60 * 60.0,
     },
 }

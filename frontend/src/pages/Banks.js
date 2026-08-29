@@ -76,6 +76,10 @@ function Banks() {
     pdf_filename_prefix: '',
     interest_rate: '',
     minimum_payment: '',
+    balance_below_limit_enabled: false,
+    balance_below_threshold: '',
+    balance_above_limit_enabled: false,
+    balance_above_threshold: '',
   });
   
   // Password candidates for the bank being edited
@@ -182,7 +186,7 @@ function Banks() {
       } else {
         delete bankData.current_balance;
       }
-      for (const field of ['interest_rate', 'minimum_payment']) {
+      for (const field of ['interest_rate', 'minimum_payment', 'balance_below_threshold', 'balance_above_threshold']) {
         if (bankData[field] !== '' && bankData[field] !== null && bankData[field] !== undefined) {
           const parsed = parseFloat(bankData[field]);
           bankData[field] = Number.isNaN(parsed) ? null : parsed;
@@ -215,7 +219,7 @@ function Banks() {
       setBankDialog(false);
       setEditMode(false);
       setEditingBankId(null);
-      setNewBank({ name: '', code: '', sender_email: '', sender_emails: '', sms_sender_pattern: '', account_number: '', account_password: '', bank_type: 'savings', csv_email: '', current_balance: '', pdf_filename_prefix: '', interest_rate: '', minimum_payment: '' });
+      setNewBank({ name: '', code: '', sender_email: '', sender_emails: '', sms_sender_pattern: '', account_number: '', account_password: '', bank_type: 'savings', csv_email: '', current_balance: '', pdf_filename_prefix: '', interest_rate: '', minimum_payment: '', balance_below_limit_enabled: false, balance_below_threshold: '', balance_above_limit_enabled: false, balance_above_threshold: '' });
       setPasswordCandidates([]);
       setNewPasswordCandidate('');
       fetchData();
@@ -470,6 +474,10 @@ function Banks() {
       pdf_filename_prefix: bank.pdf_filename_prefix || '',
       interest_rate: bank.interest_rate ?? '',
       minimum_payment: bank.minimum_payment ?? '',
+      balance_below_limit_enabled: !!bank.balance_below_limit_enabled,
+      balance_below_threshold: bank.balance_below_threshold ?? '',
+      balance_above_limit_enabled: !!bank.balance_above_limit_enabled,
+      balance_above_threshold: bank.balance_above_threshold ?? '',
     });
     setExistingPasswordSet(bank.has_password === true);
     setShowPassword(false);
@@ -993,6 +1001,48 @@ function Banks() {
                   fullWidth
                 />
               </Box>
+            )}
+            <Box sx={{ display: 'flex', gap: 2, mb: newBank.balance_below_limit_enabled ? 1 : 2, alignItems: 'center' }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={!!newBank.balance_below_limit_enabled}
+                    onChange={(e) => setNewBank({ ...newBank, balance_below_limit_enabled: e.target.checked })}
+                  />
+                }
+                label="Notify if balance goes below a limit"
+              />
+            </Box>
+            {newBank.balance_below_limit_enabled && (
+              <TextField
+                fullWidth
+                label="Minimum balance"
+                type="number"
+                value={newBank.balance_below_threshold}
+                onChange={(e) => setNewBank({ ...newBank, balance_below_threshold: e.target.value })}
+                sx={{ mb: 2 }}
+              />
+            )}
+            <Box sx={{ display: 'flex', gap: 2, mb: newBank.balance_above_limit_enabled ? 1 : 2, alignItems: 'center' }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={!!newBank.balance_above_limit_enabled}
+                    onChange={(e) => setNewBank({ ...newBank, balance_above_limit_enabled: e.target.checked })}
+                  />
+                }
+                label="Notify if balance goes above a limit"
+              />
+            </Box>
+            {newBank.balance_above_limit_enabled && (
+              <TextField
+                fullWidth
+                label="Maximum balance"
+                type="number"
+                value={newBank.balance_above_threshold}
+                onChange={(e) => setNewBank({ ...newBank, balance_above_threshold: e.target.value })}
+                sx={{ mb: 2 }}
+              />
             )}
             <TextField
               fullWidth

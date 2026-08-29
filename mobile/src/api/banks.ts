@@ -16,6 +16,10 @@ export interface BankPayload {
   sms_sender_pattern?: string;
   interest_rate?: number;
   minimum_payment?: number;
+  balance_below_limit_enabled?: boolean;
+  balance_below_threshold?: number;
+  balance_above_limit_enabled?: boolean;
+  balance_above_threshold?: number;
 }
 
 export async function createBank(payload: BankPayload): Promise<Bank> {

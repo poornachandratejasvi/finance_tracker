@@ -45,6 +45,10 @@ class BankBase(BaseModel):
     pdf_filename_prefix: Optional[str] = None
     interest_rate: Optional[float] = None
     minimum_payment: Optional[float] = None
+    balance_below_limit_enabled: Optional[bool] = None
+    balance_below_threshold: Optional[float] = None
+    balance_above_limit_enabled: Optional[bool] = None
+    balance_above_threshold: Optional[float] = None
 
 
 class BankCreate(BankBase):
@@ -73,6 +77,10 @@ class BankUpdate(BaseModel):
     is_active: Optional[bool] = None
     interest_rate: Optional[float] = None
     minimum_payment: Optional[float] = None
+    balance_below_limit_enabled: Optional[bool] = None
+    balance_below_threshold: Optional[float] = None
+    balance_above_limit_enabled: Optional[bool] = None
+    balance_above_threshold: Optional[float] = None
 
 
 class BankResponse(BankBase):
