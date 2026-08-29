@@ -665,6 +665,13 @@ export default function AutomaticRulesPanel() {
             </Typography>
             <Divider sx={{ mb: 2, mt: 0.5 }} />
 
+            {form.record_type === 'transfer' && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                This is a Transfer Rule — matching transactions are marked as a transfer
+                (category set to "Transfer") regardless of what's chosen below.
+              </Typography>
+            )}
+
             <FormControl fullWidth sx={{ mb: 3 }}>
               <InputLabel>Category</InputLabel>
               <Select

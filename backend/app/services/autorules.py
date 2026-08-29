@@ -43,8 +43,20 @@ def match_rule(description: Optional[str], ttype_value: Optional[str], rules: Li
 
 
 def apply_rule(db: Session, transaction, rule: AutoRule) -> bool:
-    """Apply a matched rule's category + labels to a transaction. Returns True if changed."""
+    """Apply a matched rule's category + labels to a transaction. Returns True if changed.
+
+    record_type='transfer' rules are a distinct action, not just a filter: they
+    mark the matching transaction as a transfer (category="Transfer", the same
+    convention the Add/Edit Transaction forms use for transfer mode) instead of
+    whatever category the rule itself has configured -- a Transfer Rule's
+    category/labels fields are hidden client-side for exactly this reason.
+    """
     changed = False
+    if (rule.record_type or "any").lower() == "transfer":
+        if transaction.category != "Transfer":
+            transaction.category = "Transfer"
+            changed = True
+        return changed
     if rule.category and transaction.category != rule.category:
         transaction.category = rule.category
         changed = True
