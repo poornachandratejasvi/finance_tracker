@@ -744,6 +744,8 @@ export const getAnomalies = async (useAi = false) =>
   (await api.get('/api/ai/anomalies', { params: { use_ai: useAi } })).data;
 export const getAISummary = async (generate = false) =>
   (await api.get('/api/ai/summary', { params: { generate } })).data;
+export const getAIRoast = async (generate = false) =>
+  (await api.get('/api/ai/roast', { params: { generate } })).data;
 // per-model token usage
 export const getAIUsage = async () => (await api.get('/api/ai/usage')).data;
 export const resetAIUsage = async () => (await api.post('/api/ai/usage/reset')).data;

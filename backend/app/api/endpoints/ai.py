@@ -457,6 +457,40 @@ def ai_monthly_summary(
         return {"summary": _ai_error_message(db, uid, e), "ai": False}
 
 
+@router.get("/roast")
+def ai_roast_spending(
+    generate: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Opt-in, blunt/funny commentary on the user's own recent spending -- same
+    cached-by-default pattern as /insights and /summary, just a different system
+    prompt. Purely for entertainment/behavioral-nudge value; never used elsewhere."""
+    uid = current_user.id
+    if not generate:
+        cached = _cache_get(db, uid, "roast")
+        if cached:
+            return {"roast": cached["value"], "ai": True, "cached": True, "generated_at": cached.get("at")}
+        return {"roast": "", "ai": False, "needs_generate": True}
+    text = _spend_summary_text(db, uid, 30)
+    if text[-13:] == "By category:\n":
+        return {"roast": "Not enough data yet to roast you. Log a few transactions first.", "ai": False}
+    system = (
+        "You are a blunt, funny financial 'roast' comedian in the style of the Cleo app -- "
+        "given a user's last-30-days spending breakdown, call out their worst habits with "
+        "sharp, witty, PG-13 humor. Be specific (name categories/amounts), not generic. Keep "
+        "it to 3-5 short punchy sentences, no bullet points, no markdown. Never be cruel about "
+        "things outside their control (income level, medical costs, etc.) -- roast CHOICES "
+        "(takeout, subscriptions, impulse categories), not circumstances."
+    )
+    try:
+        out = ai_service.complete(db, uid, system, text, max_tokens=300)
+        _cache_set(db, uid, "roast", out)
+        return {"roast": out, "ai": True, "cached": False}
+    except Exception as e:
+        return {"roast": _ai_error_message(db, uid, e), "ai": False}
+
+
 class AIQueryRequest(BaseModel):
     question: str
 

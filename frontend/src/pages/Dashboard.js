@@ -6,6 +6,7 @@ import {
 import {
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Add, Refresh, AutoAwesome,
   WarningAmber, Summarize, CreditCard, Savings, AccountBalance, AccountBalanceWallet,
+  Whatshot,
 } from '@mui/icons-material';
 import {
   ResponsiveContainer, PieChart, Pie, Cell, ComposedChart, Bar, Area,
@@ -19,7 +20,7 @@ import { formatCurrency, formatDate, signedAccountBalance, timeAgo } from '../ut
 import { useCategoryMeta } from '../utils/categories';
 import api, {
   getBanks, getTransactions, getAnalyticsComparison, getAnalyticsCashflow,
-  getPredictions, getAIInsights, getAnomalies, getAISummary, getNetWorth,
+  getPredictions, getAIInsights, getAnomalies, getAISummary, getAIRoast, getNetWorth,
 } from '../services/api';
 
 const MONTHS = [
@@ -123,6 +124,10 @@ function Dashboard() {
   const [anomalies, setAnomalies] = useState(null);
   const [aiSummary, setAiSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+
+  // "Roast Me" — opt-in, blunt AI commentary on spending habits.
+  const [roast, setRoast] = useState(null);
+  const [roastLoading, setRoastLoading] = useState(false);
 
   // Net worth trend (daily balance snapshots, period-independent).
   const [netWorth, setNetWorth] = useState(null);
@@ -236,6 +241,18 @@ function Dashboard() {
 
   useEffect(() => { loadSummary(false); }, [loadSummary]);
 
+  // "Roast Me" — opt-in blunt AI commentary on spending. Cached on mount (no
+  // provider call); the card's button (re)generates.
+  const loadRoast = useCallback((generate = false) => {
+    setRoastLoading(true);
+    getAIRoast(generate)
+      .then((d) => setRoast(d || { roast: '', ai: false }))
+      .catch(() => setRoast({ roast: '', ai: false }))
+      .finally(() => setRoastLoading(false));
+  }, []);
+
+  useEffect(() => { loadRoast(false); }, [loadRoast]);
+
   // Base currency for aggregate money (echoed by the comparison endpoint).
   const baseCcy = useMemo(
     () => comparison?.base_currency || { code: 'INR', symbol: '₹' },
@@ -312,6 +329,7 @@ function Dashboard() {
 
   const anomalyList = Array.isArray(anomalies?.anomalies) ? anomalies.anomalies : [];
   const summaryLines = String(aiSummary?.summary || '').split('\n');
+  const roastLines = String(roast?.roast || '').split('\n');
 
   const track = theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
   const tooltipStyle = {
@@ -964,6 +982,72 @@ function Dashboard() {
               <Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                   Configure an AI provider in Settings → AI to get a written summary of this month.
+                </Typography>
+                <Button size="small" variant="outlined" onClick={() => navigate('/settings')}>
+                  Go to Settings
+                </Button>
+              </Box>
+            )}
+          </Paper>
+        </Grid>
+
+        {/* ── Roast Me — opt-in, blunt AI commentary on spending ── */}
+        <Grid item xs={12} md={5}>
+          <Paper sx={{ p: 3, height: '100%' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                <Whatshot fontSize="small" color="error" />
+                <Typography variant="h6" noWrap>Roast Me</Typography>
+              </Box>
+              {roast?.ai && (
+                <IconButton
+                  size="small"
+                  onClick={() => loadRoast(true)}
+                  disabled={roastLoading}
+                  aria-label="Roast me again"
+                  title="Roast me again (uses AI)"
+                >
+                  <Refresh fontSize="small" />
+                </IconButton>
+              )}
+            </Box>
+
+            {roastLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress size={24} />
+              </Box>
+            ) : roast?.ai ? (
+              <Box>
+                {roast?.generated_at && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    Generated {timeAgo(roast.generated_at)}
+                  </Typography>
+                )}
+                {roastLines.map((line, i) => (
+                  <Typography key={i} variant="body2" sx={{ mb: 0.5, whiteSpace: 'pre-wrap' }}>
+                    {line || ' '}
+                  </Typography>
+                ))}
+              </Box>
+            ) : roast?.needs_generate ? (
+              <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  Opt-in, blunt AI commentary on last month's spending habits — purely for fun.
+                </Typography>
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="error"
+                  startIcon={<Whatshot />}
+                  onClick={() => loadRoast(true)}
+                >
+                  Roast me
+                </Button>
+              </Box>
+            ) : (
+              <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                  Configure an AI provider in Settings → AI to unlock this.
                 </Typography>
                 <Button size="small" variant="outlined" onClick={() => navigate('/settings')}>
                   Go to Settings
