@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
+import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -28,11 +29,12 @@ import { RootStackParamList } from "../navigation/RootNavigator";
 
 const PAGE_SIZE = 30;
 
-type RangeKey = "7d" | "30d" | "month" | "all";
+type RangeKey = "7d" | "30d" | "6m" | "1y" | "all";
 const RANGES: { key: RangeKey; label: string }[] = [
   { key: "7d", label: "7 days" },
   { key: "30d", label: "30 days" },
-  { key: "month", label: "This month" },
+  { key: "6m", label: "6 months" },
+  { key: "1y", label: "1 year" },
   { key: "all", label: "All" },
 ];
 
@@ -49,8 +51,15 @@ function rangeToDates(range: RangeKey): { start_date?: string; end_date?: string
     start.setDate(start.getDate() - 30);
     return { start_date: iso(start) };
   }
-  if (range === "month") {
-    return { start_date: iso(new Date(now.getFullYear(), now.getMonth(), 1)) };
+  if (range === "6m") {
+    const start = new Date(now);
+    start.setMonth(start.getMonth() - 6);
+    return { start_date: iso(start) };
+  }
+  if (range === "1y") {
+    const start = new Date(now);
+    start.setFullYear(start.getFullYear() - 1);
+    return { start_date: iso(start) };
   }
   return {};
 }
@@ -213,13 +222,16 @@ export default function TransactionsScreen() {
   return (
     <View style={styles.flex}>
       <View style={styles.searchRow}>
-        <TextInput
-          style={styles.searchInput}
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search transactions"
-          placeholderTextColor={colors.textSecondary}
-        />
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search"
+            placeholderTextColor={colors.textSecondary}
+          />
+        </View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.rangeRow} contentContainerStyle={styles.rangeRowContent}>
         {RANGES.map((r) => {
@@ -358,15 +370,21 @@ const makeStyles = (c: ThemeColors) =>
     flex: { flex: 1, backgroundColor: c.background },
     center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
     searchRow: { paddingHorizontal: 16, paddingTop: 12 },
-    searchInput: {
+    searchBox: {
+      flexDirection: "row",
+      alignItems: "center",
       borderWidth: 1,
       borderColor: c.inputBorder,
       backgroundColor: c.inputBg,
-      color: c.text,
-      borderRadius: 10,
+      borderRadius: 20,
       paddingHorizontal: 14,
       paddingVertical: 9,
+    },
+    searchInput: {
+      flex: 1,
+      color: c.text,
       fontSize: 15,
+      padding: 0,
     },
     // Fixed height + alignItems:'center' are load-bearing here: without them a
     // horizontal ScrollView's row content can stretch its children to fill all

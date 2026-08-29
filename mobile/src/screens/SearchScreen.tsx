@@ -9,17 +9,18 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { globalSearch, SearchResponse, SearchResultItem } from "../api/search";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
 
-const SECTIONS: { key: keyof SearchResponse; label: string; icon: string }[] = [
-  { key: "transactions", label: "Transactions", icon: "📒" },
-  { key: "banks", label: "Accounts", icon: "🏦" },
-  { key: "categories", label: "Categories", icon: "🏷️" },
-  { key: "labels", label: "Labels", icon: "🔖" },
-  { key: "templates", label: "Templates", icon: "📄" },
-  { key: "reward_points", label: "Reward Points", icon: "🎁" },
+const SECTIONS: { key: keyof SearchResponse; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: "transactions", label: "Transactions", icon: "receipt-outline" },
+  { key: "banks", label: "Accounts", icon: "business-outline" },
+  { key: "categories", label: "Categories", icon: "pricetags-outline" },
+  { key: "labels", label: "Labels", icon: "bookmark-outline" },
+  { key: "templates", label: "Templates", icon: "document-text-outline" },
+  { key: "reward_points", label: "Reward Points", icon: "gift-outline" },
 ];
 
 function destinationFor(item: SearchResultItem): { screen: string; params?: any } {
@@ -75,6 +76,7 @@ export default function SearchScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.searchBar}>
+        <Ionicons name="search" size={16} color={colors.textSecondary} />
         <TextInput
           autoFocus
           style={styles.input}
@@ -97,9 +99,10 @@ export default function SearchScreen() {
             if (items.length === 0) return null;
             return (
               <View key={section.key} style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                  {section.icon} {section.label}
-                </Text>
+                <View style={styles.sectionTitleRow}>
+                  <Ionicons name={section.icon} size={14} color={colors.textSecondary} />
+                  <Text style={styles.sectionTitle}>{section.label}</Text>
+                </View>
                 {items.map((item) => (
                   <TouchableOpacity
                     key={`${item.type}-${item.id}`}
@@ -137,7 +140,8 @@ const makeStyles = (c: ThemeColors) =>
     empty: { color: c.textSecondary, textAlign: "center", marginTop: 24 },
     results: { paddingTop: 12, paddingBottom: 48 },
     section: { marginBottom: 16 },
-    sectionTitle: { fontSize: 12, fontWeight: "700", color: c.textSecondary, marginBottom: 6 },
+    sectionTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 },
+    sectionTitle: { fontSize: 12, fontWeight: "700", color: c.textSecondary },
     row: {
       backgroundColor: c.card,
       borderRadius: 10,
