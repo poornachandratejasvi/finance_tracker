@@ -26,25 +26,22 @@ export default function ScanReceiptScreen() {
       const result = await scanReceipt(uri);
       if (!result.success) {
         Alert.alert("Couldn't read receipt", result.message || "Try a clearer photo, or enter it manually.", [
-          { text: "Enter manually", onPress: () => navigation.navigate("Tabs", { screen: "Add" } as never) },
+          { text: "Enter manually", onPress: () => navigation.navigate("Add") },
           { text: "Try again", style: "cancel" },
         ]);
         return;
       }
-      navigation.navigate("Tabs", {
-        screen: "Add",
-        params: {
-          prefill: {
-            amount: result.amount,
-            description: result.description,
-            transaction_date: result.transaction_date,
-            category: result.category,
-            items: result.items,
-            tax: result.tax,
-            tip: result.tip,
-          },
+      navigation.navigate("Add", {
+        prefill: {
+          amount: result.amount,
+          description: result.description,
+          transaction_date: result.transaction_date,
+          category: result.category,
+          items: result.items,
+          tax: result.tax,
+          tip: result.tip,
         },
-      } as never);
+      });
     } catch (err: any) {
       if (!err?.response) {
         Alert.alert("You're offline", "Receipt scanning needs an internet connection (OCR runs on the server).");

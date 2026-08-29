@@ -19,7 +19,7 @@ export function registerQuickActions() {
 }
 
 function routeFor(actionId: string): keyof RootStackParamList | null {
-  if (actionId === "add-transaction") return "Tabs";
+  if (actionId === "add-transaction") return "Add";
   if (actionId === "scan-receipt") return "ScanReceipt";
   if (actionId === "search") return "Search";
   return null;
@@ -34,10 +34,6 @@ export function useQuickActionRouter(
 
     const handle = (action: QuickActions.Action | null | undefined) => {
       if (!action) return;
-      if (action.id === "add-transaction") {
-        navigationRef.navigate("Tabs", { screen: "Add" } as never);
-        return;
-      }
       const route = routeFor(action.id);
       if (route) navigationRef.navigate(route as never);
     };
