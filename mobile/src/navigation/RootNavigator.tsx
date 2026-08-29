@@ -7,6 +7,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { registerQuickActions, useQuickActionRouter } from "../utils/quickActions";
+import { TAB_BAR_HEIGHT, TAB_BAR_BOTTOM_MARGIN } from "./tabBarMetrics";
 import LoginScreen from "../screens/LoginScreen";
 import DashboardScreen from "../screens/DashboardScreen";
 import TransactionsScreen from "../screens/TransactionsScreen";
@@ -40,17 +41,53 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
 function tabIcon(emoji: string) {
-  return () => <Text style={{ fontSize: 20 }}>{emoji}</Text>;
+  return ({ focused }: { focused: boolean }) => (
+    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.75 }}>{emoji}</Text>
+  );
+}
+
+// Label only shows for the focused tab (icon-only otherwise) -- matches the
+// reference app's floating pill tab bar, where only the active tab is labeled.
+function tabLabel(text: string) {
+  return ({ focused, color }: { focused: boolean; color: string }) =>
+    focused ? <Text style={{ color, fontSize: 11, fontWeight: "700", marginTop: 2 }}>{text}</Text> : null;
 }
 
 function AppTabs({ navigation }: any) {
+  const { colors } = useTheme();
   return (
-    <Tab.Navigator screenOptions={{ headerTitleAlign: "center" }}>
+    <Tab.Navigator
+      screenOptions={{
+        headerTitleAlign: "center",
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
+        // Deliberately NOT position:"absolute" -- this stays in normal layout
+        // flow (so it still reserves its own space and can't hide content
+        // behind it on any of the ~30 screens nested under the Banks/Settings
+        // tabs), just visually restyled as a rounded, inset "floating" card to
+        // match the reference app instead of a flush full-width bar.
+        tabBarStyle: {
+          marginHorizontal: 16,
+          marginBottom: TAB_BAR_BOTTOM_MARGIN,
+          height: TAB_BAR_HEIGHT,
+          borderRadius: TAB_BAR_HEIGHT / 2,
+          backgroundColor: colors.card,
+          borderTopWidth: 0,
+          elevation: 8,
+          shadowColor: "#000",
+          shadowOpacity: 0.15,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
+        },
+        tabBarItemStyle: { paddingTop: 6 },
+      }}
+    >
       <Tab.Screen
         name="Dashboard"
         component={DashboardScreen}
         options={{
           tabBarIcon: tabIcon("📊"),
+          tabBarLabel: tabLabel("Dashboard"),
           headerRight: () => (
             <TouchableOpacity
               onPress={() => navigation.navigate("Search")}
@@ -64,13 +101,14 @@ function AppTabs({ navigation }: any) {
       <Tab.Screen
         name="Transactions"
         component={TransactionsScreen}
-        options={{ tabBarIcon: tabIcon("📒") }}
+        options={{ tabBarIcon: tabIcon("📒"), tabBarLabel: tabLabel("Transactions") }}
       />
       <Tab.Screen
         name="Add"
         component={AddTransactionScreen}
         options={{
           tabBarIcon: tabIcon("➕"),
+          tabBarLabel: tabLabel("Add"),
           title: "Add Transaction",
           headerRight: () => (
             <TouchableOpacity
@@ -85,17 +123,17 @@ function AppTabs({ navigation }: any) {
       <Tab.Screen
         name="Analytics"
         component={AnalyticsScreen}
-        options={{ tabBarIcon: tabIcon("📈"), title: "Analytics" }}
+        options={{ tabBarIcon: tabIcon("📈"), tabBarLabel: tabLabel("Analytics"), title: "Analytics" }}
       />
       <Tab.Screen
         name="Banks"
         component={BanksNavigator}
-        options={{ tabBarIcon: tabIcon("🏦"), headerShown: false, title: "Banks" }}
+        options={{ tabBarIcon: tabIcon("🏦"), tabBarLabel: tabLabel("Banks"), headerShown: false, title: "Banks" }}
       />
       <Tab.Screen
         name="Settings"
         component={SettingsNavigator}
-        options={{ tabBarIcon: tabIcon("⚙️"), headerShown: false }}
+        options={{ tabBarIcon: tabIcon("⚙️"), tabBarLabel: tabLabel("Settings"), headerShown: false }}
       />
     </Tab.Navigator>
   );

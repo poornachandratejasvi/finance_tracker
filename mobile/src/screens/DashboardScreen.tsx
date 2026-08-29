@@ -15,6 +15,23 @@ import { DashboardSummary } from "../types";
 import { formatCurrency } from "../utils/format";
 import DashboardWidgets from "./widgets/DashboardWidgets";
 
+// A distinct color per account type -- used for the colored square icon on
+// the horizontal account-card row, matching the reference app's per-account
+// colored icons (this app has no per-bank custom icon/logo upload, so the
+// type-based color is the closest equivalent without new backend work).
+const BANK_TYPE_COLORS: Record<string, string> = {
+  savings: "#1e88e5",
+  checking: "#1e88e5",
+  credit: "#e53935",
+  loan: "#e53935",
+  investment: "#8e24aa",
+  cash: "#43a047",
+  wallet: "#fb8c00",
+};
+function bankTypeColor(type: string | null): string {
+  return BANK_TYPE_COLORS[(type || "").toLowerCase()] || "#546e7a";
+}
+
 export default function DashboardScreen() {
   const { user } = useAuth();
   const { colors } = useTheme();
@@ -83,6 +100,30 @@ export default function DashboardScreen() {
 
       {summary && (
         <>
+          {summary.balances.banks.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.accountRow}
+              contentContainerStyle={styles.accountRowContent}
+            >
+              {summary.balances.banks.map((b) => (
+                <View key={b.bank_id} style={styles.accountCard}>
+                  <View style={[styles.accountIcon, { backgroundColor: bankTypeColor(b.bank_type) }]}>
+                    <Text style={styles.accountIconText}>{(b.bank_name || "?").charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <Text style={styles.accountName} numberOfLines={1}>{b.bank_name}</Text>
+                  <Text
+                    style={[styles.accountBalance, { color: b.current_balance < 0 ? colors.danger : colors.text }]}
+                    numberOfLines={1}
+                  >
+                    {formatCurrency(b.current_balance)}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+
           <View style={styles.card}>
             <Text style={styles.netLabel}>Net this period</Text>
             <Text
@@ -131,17 +172,6 @@ export default function DashboardScreen() {
             </View>
           )}
 
-          {summary.balances.banks.length > 0 && (
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Accounts</Text>
-              {summary.balances.banks.map((b) => (
-                <View key={b.bank_id} style={styles.listRow}>
-                  <Text style={styles.listLabel}>{b.bank_name}</Text>
-                  <Text style={styles.listValue}>{formatCurrency(b.current_balance)}</Text>
-                </View>
-              ))}
-            </View>
-          )}
         </>
       )}
 
@@ -197,4 +227,27 @@ const makeStyles = (c: ThemeColors) =>
     },
     listLabel: { fontSize: 14, color: c.text },
     listValue: { fontSize: 14, fontWeight: "600", color: c.text },
+    // Fixed height + flexGrow/flexShrink:0 on the row, alignItems on its content --
+    // same fix as the transactions range-chip row: without these, a horizontal
+    // ScrollView's children can stretch to fill all available vertical space
+    // instead of sizing to each card's own content.
+    accountRow: { height: 100, marginBottom: 16, marginHorizontal: -16, flexGrow: 0, flexShrink: 0 },
+    accountRowContent: { paddingHorizontal: 16, gap: 10, alignItems: "flex-start" },
+    accountCard: {
+      width: 130,
+      backgroundColor: c.card,
+      borderRadius: 14,
+      padding: 12,
+    },
+    accountIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 10,
+    },
+    accountIconText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+    accountName: { fontSize: 12, color: c.textSecondary, marginBottom: 2 },
+    accountBalance: { fontSize: 15, fontWeight: "700" },
   });
