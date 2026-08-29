@@ -37,6 +37,11 @@ WIDGET_TYPES = (
     # and the only one a user can add more than once (each instance has its own
     # config: which accounts + which operation).
     "custom_formula",
+    # Same cached-by-default AI endpoints already used by the web Dashboard's
+    # fixed "AI Summary"/"Roast Me" cards (ai.py's /summary, /roast) -- exposed
+    # here so they're addable as widgets too, since mobile has no fixed AI
+    # cards at all today.
+    "ai_summary", "ai_roast",
 )
 
 

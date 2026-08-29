@@ -193,6 +193,9 @@ export const createBank = async (data) => {
   return response.data;
 };
 
+export const reorderBanks = async (ids) =>
+  (await api.post('/api/banks/reorder', { ids })).data;
+
 export const updateBank = async (id, data) => {
   const response = await api.put(`/api/banks/${id}`, data);
   return response.data;

@@ -8,12 +8,12 @@ import { getRewardPoints } from "../../api/rewardPoints";
 import { getInvestmentsDashboard } from "../../api/investments";
 import { listTransactions } from "../../api/transactions";
 import { detectRecurringWatchers } from "../../api/automation";
-import { getAnomalies, getPredictions } from "../../api/ai";
+import { getAnomalies, getPredictions, getAISummary, getAIRoast, AIBoardResponse } from "../../api/ai";
 import { getZeroSpendStreaks } from "../../api/gamification";
 import { listBanks } from "../../api/banks";
 import { getWidgetFormulaValue, updateDashboardWidget, FormulaValue } from "../../api/dashboardWidgets";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
-import { formatCurrency, formatDate } from "../../utils/format";
+import { formatCurrency, formatDate, formatDateTime } from "../../utils/format";
 import { Bank, DashboardWidget } from "../../types";
 
 // Every widget content component fetches its own data on mount, independent
@@ -626,5 +626,105 @@ export function CustomFormulaContent({ widget, onWidgetUpdated }: CustomFormulaP
         <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "600" }}>Edit formula</Text>
       </TouchableOpacity>
     </View>
+  );
+}
+
+// AI Summary / Roast Me -- mobile has no fixed AI cards on Dashboard (unlike
+// web), so these are the only way to get them; reuse the exact same
+// cached-by-default endpoints as web's Dashboard.js cards.
+function AIBoardContent({
+  fetcher, title, fieldKey, generateLabel, emptyHint, accentColor,
+}: {
+  fetcher: (generate?: boolean) => Promise<AIBoardResponse>;
+  title: string;
+  fieldKey: "summary" | "roast";
+  generateLabel: string;
+  emptyHint: string;
+  accentColor: string;
+}) {
+  const { colors } = useTheme();
+  const [data, setData] = useState<AIBoardResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = (generate: boolean) => {
+    setLoading(true);
+    fetcher(generate)
+      .then((d) => setData(d || { ai: false }))
+      .catch(() => setData({ ai: false }))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const text = data?.[fieldKey] || "";
+  const lines = text.split("\n").filter(Boolean);
+
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <Text style={{ fontSize: 13, fontWeight: "700", color: colors.text }}>{title}</Text>
+        {data?.ai && (
+          <TouchableOpacity onPress={() => load(true)} disabled={loading}>
+            <Text style={{ color: accentColor, fontSize: 11, fontWeight: "600" }}>Regenerate</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {loading ? (
+        <Loading />
+      ) : data?.ai ? (
+        <View>
+          {data.generated_at && (
+            <Text style={{ fontSize: 10, color: colors.textSecondary, marginBottom: 6 }}>
+              Generated {formatDateTime(data.generated_at)}
+            </Text>
+          )}
+          {lines.map((line, i) => (
+            <Text key={i} style={{ fontSize: 12, color: colors.text, marginBottom: 4 }}>{line}</Text>
+          ))}
+        </View>
+      ) : data?.needs_generate ? (
+        <View>
+          <Text style={{ fontSize: 12, color: colors.textSecondary, marginBottom: 10 }}>{emptyHint}</Text>
+          <TouchableOpacity
+            onPress={() => load(true)}
+            style={{ backgroundColor: accentColor, borderRadius: 8, paddingVertical: 8, alignItems: "center" }}
+          >
+            <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>{generateLabel}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+          Configure an AI provider in Settings → AI to unlock this.
+        </Text>
+      )}
+    </View>
+  );
+}
+
+export function AISummaryContent() {
+  const { colors } = useTheme();
+  return (
+    <AIBoardContent
+      fetcher={getAISummary}
+      title="AI Summary"
+      fieldKey="summary"
+      generateLabel="Generate summary"
+      emptyHint="The monthly summary is generated on demand to save AI usage."
+      accentColor={colors.primary}
+    />
+  );
+}
+
+export function AIRoastContent() {
+  const { colors } = useTheme();
+  return (
+    <AIBoardContent
+      fetcher={getAIRoast}
+      title="Roast Me"
+      fieldKey="roast"
+      generateLabel="Roast me"
+      emptyHint="Opt-in, blunt AI commentary on last month's spending habits -- purely for fun."
+      accentColor={colors.danger}
+    />
   );
 }

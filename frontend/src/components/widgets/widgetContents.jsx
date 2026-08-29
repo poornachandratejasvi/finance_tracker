@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Box, Typography, CircularProgress, LinearProgress, List, ListItem, ListItemText, Tooltip, Chip,
-  Checkbox, Select, MenuItem, Button,
+  Checkbox, Select, MenuItem, Button, IconButton,
 } from '@mui/material';
 import {
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis,
@@ -11,8 +11,10 @@ import {
   getNetWorth, getAnalyticsCashflow, getBudgetStatus, getRewardPoints, getInvestmentsDashboard,
   getTransactions, getDashboardSummary, getAnalyticsHeatmap, getTopMerchants,
   detectRecurringTransactions, getAnomalies, getPredictions, getZeroSpendStreaks,
-  getBanks, getWidgetFormulaValue, updateDashboardWidget,
+  getBanks, getWidgetFormulaValue, updateDashboardWidget, getAISummary, getAIRoast,
 } from '../../services/api';
+import { Summarize, Whatshot, Refresh } from '@mui/icons-material';
+import { timeAgo } from '../../utils/format';
 import { formatCurrency, formatDate, amountColor } from '../../utils/format';
 import { useCategoryMeta } from '../../utils/categories';
 
@@ -574,5 +576,94 @@ export function CustomFormulaContent({ widget, onWidgetUpdated }) {
         Edit formula
       </Button>
     </Box>
+  );
+}
+
+// AI Summary / Roast Me widgets -- compact versions of the fixed cards on
+// Dashboard.js, reusing the exact same cached-by-default endpoints (never
+// calls the AI provider on mount; "Generate"/refresh are explicit opt-in).
+function AIBoardContent({ fetcher, icon, iconColor, title, fieldKey, generateLabel, emptyHint }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = (generate) => {
+    setLoading(true);
+    fetcher(generate)
+      .then((d) => setData(d || { [fieldKey]: '', ai: false }))
+      .catch(() => setData({ [fieldKey]: '', ai: false }))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const lines = (data?.[fieldKey] || '').split('\n').filter((l, i, arr) => l.trim() || i < arr.length - 1);
+
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {icon}
+          <Typography variant="subtitle2" fontWeight={700}>{title}</Typography>
+        </Box>
+        {data?.ai && (
+          <IconButton size="small" onClick={() => load(true)} disabled={loading} title={`Regenerate (uses AI)`}>
+            <Refresh fontSize="small" />
+          </IconButton>
+        )}
+      </Box>
+
+      {loading ? (
+        <Loading />
+      ) : data?.ai ? (
+        <Box sx={{ flex: 1, overflow: 'auto' }}>
+          {data.generated_at && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Generated {timeAgo(data.generated_at)}
+            </Typography>
+          )}
+          {lines.map((line, i) => (
+            <Typography key={i} variant="body2" sx={{ mb: 0.5, whiteSpace: 'pre-wrap' }}>{line || ' '}</Typography>
+          ))}
+        </Box>
+      ) : data?.needs_generate ? (
+        <Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>{emptyHint}</Typography>
+          <Button size="small" variant="contained" color={iconColor} startIcon={icon} onClick={() => load(true)}>
+            {generateLabel}
+          </Button>
+        </Box>
+      ) : (
+        <Typography variant="body2" color="text.secondary">
+          Configure an AI provider in Settings → AI to unlock this.
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+export function AISummaryContent() {
+  return (
+    <AIBoardContent
+      fetcher={getAISummary}
+      icon={<Summarize fontSize="small" color="primary" />}
+      iconColor="primary"
+      title="AI Summary"
+      fieldKey="summary"
+      generateLabel="Generate summary"
+      emptyHint="The monthly summary is generated on demand to save AI usage."
+    />
+  );
+}
+
+export function AIRoastContent() {
+  return (
+    <AIBoardContent
+      fetcher={getAIRoast}
+      icon={<Whatshot fontSize="small" color="error" />}
+      iconColor="error"
+      title="Roast Me"
+      fieldKey="roast"
+      generateLabel="Roast me"
+      emptyHint="Opt-in, blunt AI commentary on last month's spending habits — purely for fun."
+    />
   );
 }

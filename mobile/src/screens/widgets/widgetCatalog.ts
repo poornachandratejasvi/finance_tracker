@@ -5,7 +5,7 @@ import {
   BalanceTrendContent, BankBalancesContent, InvestmentsSummaryContent, RewardPointsSummaryContent,
   RecentTransactionsContent, BudgetProgressContent, SpendingHeatmapContent, TopMerchantsContent,
   RecurringSubscriptionsContent, SpendingAnomaliesContent, CashflowForecastContent,
-  ZeroSpendStreakContent, CustomFormulaContent,
+  ZeroSpendStreakContent, CustomFormulaContent, AISummaryContent, AIRoastContent,
 } from "./widgetContents";
 
 // Single source of truth for every addable widget on mobile -- mirrors
@@ -34,6 +34,8 @@ export const WIDGET_CATALOG: Record<DashboardWidgetType, {
   cashflow_forecast: { label: "Cash Flow Forecast", description: "Expected upcoming income and bills.", size: "medium", Content: CashflowForecastContent },
   zero_spend_streak: { label: "Zero-Spend Streak", description: "Consecutive no-spend days, with badges.", size: "small", Content: ZeroSpendStreakContent },
   custom_formula: { label: "Custom Formula", description: "Sum, difference, average or % across any of your accounts.", size: "medium", Content: CustomFormulaContent },
+  ai_summary: { label: "AI Summary", description: "Written monthly summary, generated on demand.", size: "medium", Content: AISummaryContent },
+  ai_roast: { label: "Roast Me", description: "Opt-in, blunt AI commentary on last month's spending.", size: "medium", Content: AIRoastContent },
 };
 
 export const WIDGET_TYPES = Object.keys(WIDGET_CATALOG) as DashboardWidgetType[];

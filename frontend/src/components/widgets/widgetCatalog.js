@@ -2,13 +2,14 @@ import {
   AccountBalance, TrendingUp, PieChartOutline, ShowChart, Timeline,
   AccountBalanceWallet, Savings, CardGiftcard, Receipt, Speed,
   CalendarMonth, Storefront, Autorenew, WarningAmber, Insights, LocalFireDepartment, Functions,
+  Summarize, Whatshot,
 } from '@mui/icons-material';
 import {
   NetWorthContent, IncomeExpenseContent, SpendingByCategoryContent, CashflowTrendContent,
   BalanceTrendContent, BankBalancesContent, InvestmentsSummaryContent, RewardPointsSummaryContent,
   RecentTransactionsContent, BudgetProgressContent, SpendingHeatmapContent, TopMerchantsContent,
   RecurringSubscriptionsContent, SpendingAnomaliesContent, CashflowForecastContent,
-  ZeroSpendStreakContent, CustomFormulaContent,
+  ZeroSpendStreakContent, CustomFormulaContent, AISummaryContent, AIRoastContent,
 } from './widgetContents.jsx';
 
 // Single source of truth for every addable widget -- must stay in sync with
@@ -36,6 +37,8 @@ export const WIDGET_CATALOG = {
   // AddWidgetDialog) -- each instance has its own config (which accounts +
   // which operation), so "already added" doesn't apply to it.
   custom_formula: { label: 'Custom Formula', description: 'Sum, difference, average or % across any of your accounts.', icon: Functions, size: 'medium', Content: CustomFormulaContent, repeatable: true },
+  ai_summary: { label: 'AI Summary', description: 'Written monthly summary, generated on demand.', icon: Summarize, size: 'medium', Content: AISummaryContent },
+  ai_roast: { label: 'Roast Me', description: "Opt-in, blunt AI commentary on last month's spending.", icon: Whatshot, size: 'medium', Content: AIRoastContent },
 };
 
 export const WIDGET_TYPES = Object.keys(WIDGET_CATALOG);

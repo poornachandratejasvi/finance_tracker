@@ -130,6 +130,10 @@ class Bank(Base):
     balance_above_limit_enabled = Column(Boolean, default=False)
     balance_above_threshold = Column(Float)
     last_balance_alert_state = Column(String(10))
+    # User-controlled ordering for account lists/carousels (Dashboard, Banks
+    # list) -- NULL for any bank created before this existed, sorted after
+    # every explicitly-ordered one (see list_banks' order_by).
+    display_order = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     
     # Relationships

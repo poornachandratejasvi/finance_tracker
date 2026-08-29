@@ -38,6 +38,27 @@ export async function askAI(question: string): Promise<AskAiResponse> {
   return data;
 }
 
+export interface AIBoardResponse {
+  ai: boolean;
+  cached?: boolean;
+  needs_generate?: boolean;
+  generated_at?: string;
+  summary?: string;
+  roast?: string;
+}
+
+// Cached by default (no provider call); pass generate=true to (re)generate --
+// same endpoints web's Dashboard "AI Summary"/"Roast Me" cards already use.
+export async function getAISummary(generate = false): Promise<AIBoardResponse> {
+  const { data } = await api.get<AIBoardResponse>("/api/ai/summary", { params: { generate } });
+  return data;
+}
+
+export async function getAIRoast(generate = false): Promise<AIBoardResponse> {
+  const { data } = await api.get<AIBoardResponse>("/api/ai/roast", { params: { generate } });
+  return data;
+}
+
 export async function getPredictions(daysAhead: number = 45): Promise<PredictionsResponse> {
   const { data } = await api.get<PredictionsResponse>("/api/ai/predictions", { params: { days_ahead: daysAhead } });
   return data;

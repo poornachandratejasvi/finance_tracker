@@ -123,7 +123,7 @@ def get_dashboard_summary(
     banks = db.query(Bank).filter(
         Bank.user_id == current_user.id,
         Bank.bank_type != "investment",
-    ).all()
+    ).order_by(Bank.display_order.nullslast(), Bank.id).all()
 
     # Per-bank period totals (filtered by same date range as main summary)
     period_bank_q = db.query(

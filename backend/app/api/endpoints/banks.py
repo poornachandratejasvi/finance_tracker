@@ -55,7 +55,10 @@ def list_banks(
     if is_active is not None:
         query = query.filter(Bank.is_active == is_active)
 
-    banks = query.offset(skip).limit(limit).all()
+    banks = (
+        query.order_by(Bank.display_order.nullslast(), Bank.id)
+        .offset(skip).limit(limit).all()
+    )
 
     # Attach "last synced" per bank = most recent statement-email pulled for it.
     from sqlalchemy import func, case
@@ -134,6 +137,32 @@ def check_stale_credit_cards_now(
     household_ids = visible_user_ids(db, current_user)
     result = check_stale_credit_cards(db, user_ids=household_ids)
     return result
+
+
+class BankReorderRequest(BaseModel):
+    ids: List[int]
+
+
+@router.post("/reorder")
+def reorder_banks(
+    payload: BankReorderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_write_access),
+):
+    """Bulk-set display_order from a full ordered id list -- same pattern as
+    dashboard widget reordering. Controls the order banks show up in on the
+    Banks list, the Dashboard account carousel, and anywhere else that reads
+    list_banks/dashboard_summary."""
+    banks = {
+        b.id: b for b in db.query(Bank).filter(
+            Bank.user_id.in_(visible_user_ids(db, current_user)), Bank.id.in_(payload.ids)
+        ).all()
+    }
+    for position, bank_id in enumerate(payload.ids):
+        if bank_id in banks:
+            banks[bank_id].display_order = position
+    db.commit()
+    return {"success": True}
 
 
 @router.get("/password-candidates")

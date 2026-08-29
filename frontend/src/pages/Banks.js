@@ -35,11 +35,13 @@ import {
   MoreVert,
   Visibility,
   VisibilityOff,
+  ArrowUpward,
+  ArrowDownward,
 } from '@mui/icons-material';
 import { Avatar, Divider, Tooltip } from '@mui/material';
 import InputAdornment from '@mui/material/InputAdornment';
 import { useLocation } from 'react-router-dom';
-import { getBanks, createBank, updateBank, deleteBank, startSync, emailLatestBankCSV, generateAllCSV, reprocessAllPDFs, getBankAccountPassword, getBankPasswordCandidates, updateBankPasswordCandidates, recomputeBalances, redetectCreditBalances, checkStaleCreditCards } from '../services/api';
+import { getBanks, createBank, updateBank, deleteBank, startSync, emailLatestBankCSV, generateAllCSV, reprocessAllPDFs, getBankAccountPassword, getBankPasswordCandidates, updateBankPasswordCandidates, recomputeBalances, redetectCreditBalances, checkStaleCreditCards, reorderBanks } from '../services/api';
 import api from '../services/api';
 import { formatCurrency, signedAccountBalance, hasAccountBalance, isEstimatedBalance, timeAgo } from '../utils/format';
 
@@ -534,7 +536,28 @@ function Banks() {
     return { color: 'text.disabled', label: '' };
   };
 
-  const renderBankRow = (bank, dimmed = false) => {
+  // Moves a bank up/down within its own section (main vs excluded-from-stats,
+  // respecting the current archived filter) and persists via display_order --
+  // this is also what drives the Dashboard account carousel's order.
+  const moveBank = (bank, direction) => {
+    const sameSection = (b) =>
+      b.exclude_from_stats === bank.exclude_from_stats && (showArchived || !b.is_archived);
+    setBanks((prev) => {
+      const sectionIndices = prev.map((b, i) => (sameSection(b) ? i : -1)).filter((i) => i >= 0);
+      const idx = prev.findIndex((b) => b.id === bank.id);
+      const posInSection = sectionIndices.indexOf(idx);
+      const targetPos = posInSection + direction;
+      if (targetPos < 0 || targetPos >= sectionIndices.length) return prev;
+      const targetIdx = sectionIndices[targetPos];
+      const next = [...prev];
+      [next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
+      reorderBanks(next.filter(sameSection).map((b) => b.id)).catch(() => fetchData());
+      return next;
+    });
+  };
+
+  const renderBankRow = (bank, dimmed = false, sectionBanks = []) => {
+    const sectionIdx = sectionBanks.findIndex((b) => b.id === bank.id);
     const status = bankStatus(bank);
     const showBalance = hasAccountBalance(bank);
     const signed = signedAccountBalance(bank);
@@ -599,6 +622,27 @@ function Banks() {
         )}
 
         <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+            <Tooltip title="Move up">
+              <span>
+                <IconButton size="small" disabled={sectionIdx <= 0} onClick={() => moveBank(bank, -1)} sx={{ p: 0.25 }}>
+                  <ArrowUpward sx={{ fontSize: 16 }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="Move down">
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={sectionIdx < 0 || sectionIdx >= sectionBanks.length - 1}
+                  onClick={() => moveBank(bank, 1)}
+                  sx={{ p: 0.25 }}
+                >
+                  <ArrowDownward sx={{ fontSize: 16 }} />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </Box>
           <Tooltip title="Sync">
             <IconButton size="small" color="primary" onClick={() => openSyncDialog(bank)}>
               <Sync />
@@ -782,7 +826,7 @@ function Banks() {
                   </Typography>
                 </Paper>
               ) : (
-                mainBanks.map((bank) => renderBankRow(bank, bank.is_archived))
+                mainBanks.map((bank) => renderBankRow(bank, bank.is_archived, mainBanks))
               )}
 
               {excludedBanks.length > 0 && (
@@ -794,7 +838,7 @@ function Banks() {
                   >
                     Excluded from statistics
                   </Typography>
-                  {excludedBanks.map((bank) => renderBankRow(bank, true))}
+                  {excludedBanks.map((bank) => renderBankRow(bank, true, excludedBanks))}
                 </Box>
               )}
             </>

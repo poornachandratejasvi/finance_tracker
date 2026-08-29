@@ -6,6 +6,10 @@ export async function listBanks(): Promise<Bank[]> {
   return data;
 }
 
+export async function reorderBanks(ids: number[]): Promise<void> {
+  await api.post("/api/banks/reorder", { ids });
+}
+
 export interface BankPayload {
   name: string;
   bank_type?: string;

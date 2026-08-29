@@ -146,6 +146,7 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "balance_above_limit_enabled", "ALTER TABLE banks ADD COLUMN balance_above_limit_enabled BOOLEAN DEFAULT FALSE")
         _add_column_if_missing(columns, "balance_above_threshold", "ALTER TABLE banks ADD COLUMN balance_above_threshold FLOAT")
         _add_column_if_missing(columns, "last_balance_alert_state", "ALTER TABLE banks ADD COLUMN last_balance_alert_state VARCHAR(10)")
+        _add_column_if_missing(columns, "display_order", "ALTER TABLE banks ADD COLUMN display_order INTEGER")
 
     if "pdf_statements" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("pdf_statements")}

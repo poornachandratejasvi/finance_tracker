@@ -102,7 +102,8 @@ export type DashboardWidgetType =
   | "balance_trend" | "bank_balances" | "investments_summary"
   | "reward_points_summary" | "recent_transactions" | "budget_progress"
   | "spending_heatmap" | "top_merchants" | "recurring_subscriptions"
-  | "spending_anomalies" | "cashflow_forecast" | "zero_spend_streak" | "custom_formula";
+  | "spending_anomalies" | "cashflow_forecast" | "zero_spend_streak" | "custom_formula"
+  | "ai_summary" | "ai_roast";
 
 export interface DashboardWidget {
   id: number;

@@ -11,7 +11,9 @@ import {
   View,
 } from "react-native";
 
-import { listBanks } from "../../api/banks";
+import { Ionicons } from "@expo/vector-icons";
+
+import { listBanks, reorderBanks } from "../../api/banks";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { BanksStackParamList } from "../../navigation/BanksNavigator";
 import { Bank } from "../../types";
@@ -50,6 +52,15 @@ export default function BanksScreen({ navigation }: Props) {
     setRefreshing(false);
   };
 
+  const moveBank = (index: number, direction: 1 | -1) => {
+    const target = index + direction;
+    if (target < 0 || target >= banks.length) return;
+    const next = [...banks];
+    [next[index], next[target]] = [next[target], next[index]];
+    setBanks(next);
+    reorderBanks(next.map((b) => b.id)).catch(() => load());
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -66,24 +77,38 @@ export default function BanksScreen({ navigation }: Props) {
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={<Text style={styles.empty}>No accounts yet.</Text>}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.row}
-            onPress={() => navigation.navigate("BankForm", { bank: item })}
-          >
-            <View style={[styles.dot, { backgroundColor: item.color || colors.primary }]} />
-            <View style={styles.rowMain}>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.meta}>{item.bank_type || "other"}</Text>
+        renderItem={({ item, index }) => (
+          <View style={styles.row}>
+            <View style={styles.reorderCol}>
+              <TouchableOpacity disabled={index === 0} onPress={() => moveBank(index, -1)} style={styles.reorderButton}>
+                <Ionicons name="chevron-up" size={16} color={index === 0 ? colors.border : colors.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={index === banks.length - 1}
+                onPress={() => moveBank(index, 1)}
+                style={styles.reorderButton}
+              >
+                <Ionicons name="chevron-down" size={16} color={index === banks.length - 1 ? colors.border : colors.textSecondary} />
+              </TouchableOpacity>
             </View>
-            {item.bank_type === "investment" ? (
-              <Text style={styles.meta}>Feeds Investments</Text>
-            ) : (
-              <Text style={styles.balance}>
-                {formatCurrency(item.current_balance ?? item.computed_balance ?? 0, item.currency_code)}
-              </Text>
-            )}
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.rowTouchable}
+              onPress={() => navigation.navigate("BankForm", { bank: item })}
+            >
+              <View style={[styles.dot, { backgroundColor: item.color || colors.primary }]} />
+              <View style={styles.rowMain}>
+                <Text style={styles.name}>{item.name}</Text>
+                <Text style={styles.meta}>{item.bank_type || "other"}</Text>
+              </View>
+              {item.bank_type === "investment" ? (
+                <Text style={styles.meta}>Feeds Investments</Text>
+              ) : (
+                <Text style={styles.balance}>
+                  {formatCurrency(item.current_balance ?? item.computed_balance ?? 0, item.currency_code)}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
       />
       <TouchableOpacity
@@ -105,10 +130,12 @@ const makeStyles = (c: ThemeColors) =>
     row: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 12,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: c.border,
     },
+    reorderCol: { marginRight: 8 },
+    reorderButton: { paddingVertical: 2, paddingHorizontal: 4 },
+    rowTouchable: { flex: 1, flexDirection: "row", alignItems: "center", paddingVertical: 12 },
     dot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
     rowMain: { flex: 1 },
     name: { fontSize: 15, fontWeight: "600", color: c.text },
