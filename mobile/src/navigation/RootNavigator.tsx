@@ -14,14 +14,17 @@ import AddTransactionScreen, { ReceiptPrefill } from "../screens/AddTransactionS
 import AnalyticsScreen from "../screens/AnalyticsScreen";
 import SearchScreen from "../screens/SearchScreen";
 import ScanReceiptScreen from "../screens/ScanReceiptScreen";
+import EditTransactionScreen from "../screens/EditTransactionScreen";
 import BanksNavigator from "./BanksNavigator";
 import SettingsNavigator from "./SettingsNavigator";
+import { Transaction } from "../types";
 
 export type RootStackParamList = {
   Login: undefined;
   Tabs: undefined;
   Search: undefined;
   ScanReceipt: undefined;
+  EditTransaction: { transaction: Transaction };
 };
 
 export type TabParamList = {
@@ -143,6 +146,11 @@ export default function RootNavigator() {
               name="ScanReceipt"
               component={ScanReceiptScreen}
               options={{ headerShown: true, title: "Scan Receipt", presentation: "modal" }}
+            />
+            <Stack.Screen
+              name="EditTransaction"
+              component={EditTransactionScreen}
+              options={{ headerShown: true, title: "Edit Transaction", presentation: "modal" }}
             />
           </>
         ) : (

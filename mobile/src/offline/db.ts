@@ -131,6 +131,11 @@ export async function replacePendingTransaction(localId: string, serverTransacti
   await upsertTransactions([serverTransaction]);
 }
 
+export async function deleteCachedTransaction(id: number | string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync("DELETE FROM transactions WHERE id = ?", [String(id)]);
+}
+
 export async function getCachedTransactions(limit = 500): Promise<Transaction[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ json: string }>(
