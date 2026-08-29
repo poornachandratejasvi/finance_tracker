@@ -1,6 +1,7 @@
 import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Ionicons } from "@expo/vector-icons";
 
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../context/AuthContext";
@@ -11,27 +12,27 @@ type Props = NativeStackScreenProps<BanksStackParamList, "BanksHub">;
 interface Row {
   key: keyof BanksStackParamList;
   label: string;
-  icon: string;
+  icon: keyof typeof Ionicons.glyphMap;
   hint: string;
 }
 
 const ROWS: Row[] = [
-  { key: "Banks", label: "Accounts", icon: "🏦", hint: "Manage your linked bank accounts" },
+  { key: "Banks", label: "Accounts", icon: "business-outline", hint: "Manage your linked bank accounts" },
   {
     key: "Statements",
     label: "Bank Statements",
-    icon: "🧾",
+    icon: "receipt-outline",
     hint: "Latest statement per account, balances, next-statement due dates",
   },
-  { key: "Pdfs", label: "Browse Statement PDFs", icon: "📄", hint: "All received PDFs, reprocess, unlock" },
-  { key: "CsvExports", label: "CSV Exports", icon: "📊", hint: "Generate, email, or download CSV statements" },
-  { key: "Imports", label: "Imports", icon: "📥", hint: "Import transactions from a CSV or Excel file" },
-  { key: "RewardPoints", label: "Reward Points", icon: "🎁", hint: "Track points balance, usage, and upcoming expiries" },
-  { key: "Investments", label: "Investments", icon: "📈", hint: "PPF, mutual funds, stocks, NPS, EPF, bonds, gold, vehicle" },
+  { key: "Pdfs", label: "Browse Statement PDFs", icon: "document-text-outline", hint: "All received PDFs, reprocess, unlock" },
+  { key: "CsvExports", label: "CSV Exports", icon: "bar-chart-outline", hint: "Generate, email, or download CSV statements" },
+  { key: "Imports", label: "Imports", icon: "download-outline", hint: "Import transactions from a CSV or Excel file" },
+  { key: "RewardPoints", label: "Reward Points", icon: "gift-outline", hint: "Track points balance, usage, and upcoming expiries" },
+  { key: "Investments", label: "Investments", icon: "trending-up-outline", hint: "PPF, mutual funds, stocks, NPS, EPF, bonds, gold, vehicle" },
 ];
 
 const ADMIN_ROWS: Row[] = [
-  { key: "FamilyDashboard", label: "Family Dashboard", icon: "👨‍👩‍👧", hint: "Every household member's accounts and balances combined" },
+  { key: "FamilyDashboard", label: "Family Dashboard", icon: "people-outline", hint: "Every household member's accounts and balances combined" },
 ];
 
 export default function BanksHubScreen({ navigation }: Props) {
@@ -49,7 +50,9 @@ export default function BanksHubScreen({ navigation }: Props) {
             style={styles.row}
             onPress={() => navigation.navigate(row.key as any)}
           >
-            <Text style={styles.icon}>{row.icon}</Text>
+            <View style={styles.icon}>
+              <Ionicons name={row.icon} size={20} color={colors.primary} />
+            </View>
             <View style={styles.rowMain}>
               <Text style={styles.label}>{row.label}</Text>
               <Text style={styles.hint}>{row.hint}</Text>
@@ -74,7 +77,7 @@ const makeStyles = (c: ThemeColors) =>
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: c.border,
     },
-    icon: { fontSize: 20, width: 34 },
+    icon: { width: 34, alignItems: "flex-start", justifyContent: "center" },
     rowMain: { flex: 1 },
     label: { fontSize: 15, fontWeight: "600", color: c.text },
     hint: { fontSize: 12, color: c.textSecondary, marginTop: 2 },

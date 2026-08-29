@@ -1,6 +1,7 @@
 import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../../context/AuthContext";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
@@ -11,45 +12,45 @@ type Props = NativeStackScreenProps<SettingsStackParamList, "SettingsHub">;
 interface Row {
   key: keyof SettingsStackParamList;
   label: string;
-  icon: string;
+  icon: keyof typeof Ionicons.glyphMap;
   adminOnly?: boolean;
 }
 
 const WALLET_ROWS: Row[] = [
-  { key: "Currencies", label: "Currencies", icon: "💱" },
-  { key: "Categories", label: "Categories", icon: "🏷️" },
-  { key: "Templates", label: "Templates", icon: "📄" },
-  { key: "Labels", label: "Labels", icon: "📌" },
-  { key: "AutoRules", label: "Automatic Rules", icon: "⚙️" },
-  { key: "NotificationRules", label: "Notification Rules", icon: "🔔" },
+  { key: "Currencies", label: "Currencies", icon: "swap-horizontal-outline" },
+  { key: "Categories", label: "Categories", icon: "pricetags-outline" },
+  { key: "Templates", label: "Templates", icon: "document-text-outline" },
+  { key: "Labels", label: "Labels", icon: "bookmark-outline" },
+  { key: "AutoRules", label: "Automatic Rules", icon: "flash-outline" },
+  { key: "NotificationRules", label: "Notification Rules", icon: "notifications-outline" },
 ];
 
 const TOOLS_ROWS: Row[] = [
-  { key: "Budgets", label: "Budgets", icon: "💰" },
-  { key: "Goals", label: "Goals", icon: "🎯" },
-  { key: "Vehicles", label: "Vehicles", icon: "🚗" },
-  { key: "DebtPayoff", label: "Debt Payoff", icon: "💳" },
-  { key: "Jobs", label: "Jobs", icon: "🔄" },
-  { key: "Automation", label: "Automation", icon: "🤖" },
-  { key: "AskAi", label: "Ask AI", icon: "💬" },
-  { key: "RecycleBin", label: "Recycle Bin", icon: "🗑️" },
+  { key: "Budgets", label: "Budgets", icon: "wallet-outline" },
+  { key: "Goals", label: "Goals", icon: "flag-outline" },
+  { key: "Vehicles", label: "Vehicles", icon: "car-outline" },
+  { key: "DebtPayoff", label: "Debt Payoff", icon: "trending-down-outline" },
+  { key: "Jobs", label: "Jobs", icon: "sync-outline" },
+  { key: "Automation", label: "Automation", icon: "hardware-chip-outline" },
+  { key: "AskAi", label: "Ask AI", icon: "chatbubble-ellipses-outline" },
+  { key: "RecycleBin", label: "Recycle Bin", icon: "trash-outline" },
 ];
 
 const GENERAL_ROWS: Row[] = [
-  { key: "Profile", label: "Profile & Preferences", icon: "👤" },
-  { key: "AI", label: "AI", icon: "✨" },
-  { key: "ApiTokens", label: "REST API", icon: "🔑" },
-  { key: "SmsAutoDetect", label: "SMS Auto-Detect", icon: "📱" },
-  { key: "SmsImport", label: "Import from SMS", icon: "📥" },
-  { key: "Users", label: "Users", icon: "👥", adminOnly: true },
-  { key: "ExternalAccounts", label: "External Accounts", icon: "📧" },
-  { key: "Backup", label: "Backup", icon: "☁️" },
-  { key: "Mcp", label: "MCP Server", icon: "🖥️" },
-  { key: "Logs", label: "Application Logs", icon: "📋", adminOnly: true },
-  { key: "Billing", label: "Billing", icon: "💳" },
-  { key: "Privacy", label: "Personal data & privacy", icon: "🔒" },
-  { key: "Help", label: "Help", icon: "❓" },
-  { key: "About", label: "About", icon: "ℹ️" },
+  { key: "Profile", label: "Profile & Preferences", icon: "person-outline" },
+  { key: "AI", label: "AI", icon: "sparkles-outline" },
+  { key: "ApiTokens", label: "REST API", icon: "key-outline" },
+  { key: "SmsAutoDetect", label: "SMS Auto-Detect", icon: "phone-portrait-outline" },
+  { key: "SmsImport", label: "Import from SMS", icon: "download-outline" },
+  { key: "Users", label: "Users", icon: "people-outline", adminOnly: true },
+  { key: "ExternalAccounts", label: "External Accounts", icon: "mail-outline" },
+  { key: "Backup", label: "Backup", icon: "cloud-outline" },
+  { key: "Mcp", label: "MCP Server", icon: "desktop-outline" },
+  { key: "Logs", label: "Application Logs", icon: "list-outline", adminOnly: true },
+  { key: "Billing", label: "Billing", icon: "card-outline" },
+  { key: "Privacy", label: "Personal data & privacy", icon: "shield-checkmark-outline" },
+  { key: "Help", label: "Help", icon: "help-circle-outline" },
+  { key: "About", label: "About", icon: "information-circle-outline" },
 ];
 
 export default function SettingsHubScreen({ navigation }: Props) {
@@ -71,7 +72,9 @@ export default function SettingsHubScreen({ navigation }: Props) {
               style={styles.row}
               onPress={() => navigation.navigate(row.key as any)}
             >
-              <Text style={styles.icon}>{row.icon}</Text>
+              <View style={styles.icon}>
+                <Ionicons name={row.icon} size={19} color={colors.primary} />
+              </View>
               <Text style={styles.label}>{row.label}</Text>
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
@@ -149,7 +152,7 @@ const makeStyles = (c: ThemeColors) =>
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: c.border,
     },
-    icon: { fontSize: 18, width: 30 },
+    icon: { width: 30, alignItems: "flex-start", justifyContent: "center" },
     label: { flex: 1, fontSize: 15, color: c.text },
     chevron: { fontSize: 20, color: c.textSecondary },
     logoutButton: {

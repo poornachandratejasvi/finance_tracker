@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import { DarkTheme, DefaultTheme, NavigationContainer, useNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -40,9 +41,9 @@ export type TabParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
-function tabIcon(emoji: string) {
-  return ({ focused }: { focused: boolean }) => (
-    <Text style={{ fontSize: 20, opacity: focused ? 1 : 0.75 }}>{emoji}</Text>
+function tabIcon(name: keyof typeof Ionicons.glyphMap, focusedName: keyof typeof Ionicons.glyphMap) {
+  return ({ focused, color }: { focused: boolean; color: string }) => (
+    <Ionicons name={focused ? focusedName : name} size={22} color={color} />
   );
 }
 
@@ -55,6 +56,7 @@ function tabLabel(text: string) {
 
 function AppTabs({ navigation }: any) {
   const { colors } = useTheme();
+  const headerIconColor = colors.text;
   return (
     <Tab.Navigator
       screenOptions={{
@@ -86,14 +88,14 @@ function AppTabs({ navigation }: any) {
         name="Dashboard"
         component={DashboardScreen}
         options={{
-          tabBarIcon: tabIcon("📊"),
+          tabBarIcon: tabIcon("grid-outline", "grid"),
           tabBarLabel: tabLabel("Dashboard"),
           headerRight: () => (
             <TouchableOpacity
               onPress={() => navigation.navigate("Search")}
               style={{ paddingHorizontal: 16 }}
             >
-              <Text style={{ fontSize: 18 }}>🔍</Text>
+              <Ionicons name="search" size={20} color={headerIconColor} />
             </TouchableOpacity>
           ),
         }}
@@ -101,13 +103,13 @@ function AppTabs({ navigation }: any) {
       <Tab.Screen
         name="Transactions"
         component={TransactionsScreen}
-        options={{ tabBarIcon: tabIcon("📒"), tabBarLabel: tabLabel("Transactions") }}
+        options={{ tabBarIcon: tabIcon("receipt-outline", "receipt"), tabBarLabel: tabLabel("Transactions") }}
       />
       <Tab.Screen
         name="Add"
         component={AddTransactionScreen}
         options={{
-          tabBarIcon: tabIcon("➕"),
+          tabBarIcon: tabIcon("add-circle-outline", "add-circle"),
           tabBarLabel: tabLabel("Add"),
           title: "Add Transaction",
           headerRight: () => (
@@ -115,7 +117,7 @@ function AppTabs({ navigation }: any) {
               onPress={() => navigation.navigate("ScanReceipt")}
               style={{ paddingHorizontal: 16 }}
             >
-              <Text style={{ fontSize: 18 }}>📷</Text>
+              <Ionicons name="camera-outline" size={20} color={headerIconColor} />
             </TouchableOpacity>
           ),
         }}
@@ -123,17 +125,17 @@ function AppTabs({ navigation }: any) {
       <Tab.Screen
         name="Analytics"
         component={AnalyticsScreen}
-        options={{ tabBarIcon: tabIcon("📈"), tabBarLabel: tabLabel("Analytics"), title: "Analytics" }}
+        options={{ tabBarIcon: tabIcon("bar-chart-outline", "bar-chart"), tabBarLabel: tabLabel("Analytics"), title: "Analytics" }}
       />
       <Tab.Screen
         name="Banks"
         component={BanksNavigator}
-        options={{ tabBarIcon: tabIcon("🏦"), tabBarLabel: tabLabel("Banks"), headerShown: false, title: "Banks" }}
+        options={{ tabBarIcon: tabIcon("business-outline", "business"), tabBarLabel: tabLabel("Banks"), headerShown: false, title: "Banks" }}
       />
       <Tab.Screen
         name="Settings"
         component={SettingsNavigator}
-        options={{ tabBarIcon: tabIcon("⚙️"), tabBarLabel: tabLabel("Settings"), headerShown: false }}
+        options={{ tabBarIcon: tabIcon("settings-outline", "settings"), tabBarLabel: tabLabel("Settings"), headerShown: false }}
       />
     </Tab.Navigator>
   );
