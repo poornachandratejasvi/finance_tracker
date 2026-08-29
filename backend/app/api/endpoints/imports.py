@@ -86,6 +86,35 @@ def _infer_type(amount_raw: str, type_raw: Optional[str]) -> Tuple[str, float]:
     return ("debit" if amount < 0 else "credit"), abs(amount)
 
 
+def _parse_ofx(content: bytes) -> "pd.DataFrame":
+    """Parse an OFX/QFX file into the same canonical columns a CSV would have
+    (Date/Description/Amount/Type), so it flows through the exact same
+    preview -> mapping -> commit pipeline as CSV/Excel with a trivial 1:1 mapping."""
+    import ofxparse
+
+    try:
+        ofx = ofxparse.OfxParser.parse(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Couldn't read OFX/QFX file: {exc}")
+
+    rows = []
+    accounts = ofx.accounts if hasattr(ofx, "accounts") and ofx.accounts else ([ofx.account] if getattr(ofx, "account", None) else [])
+    for acct in accounts:
+        stmt = getattr(acct, "statement", None)
+        if not stmt:
+            continue
+        for t in stmt.transactions:
+            rows.append({
+                "Date": t.date.strftime("%Y-%m-%d") if t.date else "",
+                "Description": (t.payee or t.memo or "").strip(),
+                "Amount": str(t.amount),
+                "Type": "credit" if float(t.amount) >= 0 else "debit",
+            })
+    if not rows:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No transactions found in this OFX/QFX file")
+    return pd.DataFrame(rows)
+
+
 class ImportPreviewResponse(BaseModel):
     columns: List[str]
     rows: List[List[str]]
@@ -99,15 +128,19 @@ async def preview_import(
     current_user: User = Depends(get_current_active_user),
 ):
     filename = (file.filename or "").lower()
-    if not filename.endswith((".csv", ".xlsx")):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only .csv or .xlsx files are supported")
+    if not filename.endswith((".csv", ".xlsx", ".ofx", ".qfx")):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only .csv, .xlsx, .ofx, or .qfx files are supported")
 
     content = await file.read()
     try:
-        if filename.endswith(".csv"):
+        if filename.endswith((".ofx", ".qfx")):
+            df = _parse_ofx(content)
+        elif filename.endswith(".csv"):
             df = pd.read_csv(io.BytesIO(content), dtype=str, keep_default_na=False)
         else:
             df = pd.read_excel(io.BytesIO(content), dtype=str, engine="openpyxl", keep_default_na=False)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Couldn't read file: {exc}")
 

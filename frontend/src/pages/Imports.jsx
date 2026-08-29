@@ -159,13 +159,13 @@ export default function Imports() {
         >
           <Button variant="contained" component="label" startIcon={<UploadFileIcon />}>
             Choose file
-            <input type="file" hidden accept=".csv,.xlsx" onChange={(e) => handleFile(e.target.files?.[0])} />
+            <input type="file" hidden accept=".csv,.xlsx,.ofx,.qfx" onChange={(e) => handleFile(e.target.files?.[0])} />
           </Button>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
             or drag and drop it here
           </Typography>
           <Typography variant="caption" color="text.secondary" display="block">
-            .csv or .xlsx, up to 2000 rows
+            .csv, .xlsx, .ofx, or .qfx, up to 2000 rows
           </Typography>
           {fileName && (
             <Typography variant="body2" sx={{ mt: 1 }}>
