@@ -9,11 +9,21 @@ export function currencySymbol(code?: string | null): string {
   return CURRENCY_SYMBOLS[(code || "INR").toUpperCase()] || (code || "");
 }
 
+// Set once at app startup from Settings -> Profile -> Preferences -> "Hide
+// decimals within amounts" (see AuthContext.tsx). A module-level flag rather
+// than threading the preference through every formatCurrency call site,
+// since it's called from dozens of components as a plain function.
+let hideDecimals = false;
+export function setHideDecimals(v: boolean): void {
+  hideDecimals = !!v;
+}
+
 export function formatCurrency(amount: number, code?: string | null): string {
   const symbol = currencySymbol(code);
+  const decimals = hideDecimals ? 0 : 2;
   const formatted = Math.abs(amount).toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   });
   return `${amount < 0 ? "-" : ""}${symbol}${formatted}`;
 }

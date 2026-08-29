@@ -1,9 +1,20 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { fetchCurrentUser, logout as apiLogout } from "../api/auth";
+import { getPreferences } from "../api/users";
 import { loginRequest, restoreSession, cacheUser, getCachedUser } from "../api/client";
 import { User } from "../types";
 import { requestAndroidPermissions } from "../utils/androidPermissions";
+import { setHideDecimals } from "../utils/format";
+
+// Best-effort -- applies "Hide decimals within amounts" app-wide once at
+// startup/login; a failure here (offline first launch) just leaves the
+// default (show decimals), never blocks auth.
+function loadDisplayPrefs(): void {
+  getPreferences()
+    .then((p) => setHideDecimals(!!p?.hide_decimals))
+    .catch(() => {});
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -29,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(me);
           await cacheUser(me);
           await requestAndroidPermissions();
+          loadDisplayPrefs();
         } catch (err: any) {
           if (!err?.response) {
             // No server response at all -- offline/unreachable, not a rejected
@@ -54,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(me);
     await cacheUser(me);
     await requestAndroidPermissions();
+    loadDisplayPrefs();
   };
 
   const logout = async () => {

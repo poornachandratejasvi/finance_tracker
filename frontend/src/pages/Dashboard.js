@@ -21,6 +21,7 @@ import { useCategoryMeta } from '../utils/categories';
 import api, {
   getBanks, getTransactions, getAnalyticsComparison, getAnalyticsCashflow,
   getPredictions, getAIInsights, getAnomalies, getAISummary, getAIRoast, getNetWorth,
+  getPreferences,
 } from '../services/api';
 
 const MONTHS = [
@@ -105,6 +106,20 @@ function Dashboard() {
 
   const now = new Date();
   const [monthDate, setMonthDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
+
+  // Settings -> General -> "Default interval on Dashboard". 'this_year' has no
+  // clean equivalent on this month-granular view, so it's left at the current
+  // month (same as the default) rather than faking a yearly view.
+  useEffect(() => {
+    getPreferences()
+      .then((p) => {
+        if (p?.default_interval === 'last_month') {
+          const d = new Date();
+          setMonthDate(new Date(d.getFullYear(), d.getMonth() - 1, 1));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const [banks, setBanks] = useState([]);
   const [summary, setSummary] = useState(null);

@@ -12,7 +12,14 @@ export const currencySymbol = (code) => {
 
 // Format money. Accepts { compact, decimals, currency (ISO code), symbol }.
 // Negatives render as "-₹1,234.00" (sign before the symbol) to match the design.
-export const formatCurrency = (value, { compact = false, decimals = 2, currency, symbol } = {}) => {
+// Set once at app startup from Settings -> General -> "Hide decimals within
+// amounts" (see Layout.js). A module-level flag rather than threading the
+// preference through every formatCurrency call site, since it's called from
+// dozens of components as a plain function, not a hook.
+let _hideDecimals = false;
+export const setHideDecimals = (v) => { _hideDecimals = !!v; };
+
+export const formatCurrency = (value, { compact = false, decimals, currency, symbol } = {}) => {
   const sym = symbol || currencySymbol(currency || 'INR');
   const n = Number(value || 0);
   const a = Math.abs(n);
@@ -23,7 +30,8 @@ export const formatCurrency = (value, { compact = false, decimals = 2, currency,
     if (a >= 1e3) return `${sign}${sym}${(a / 1e3).toFixed(1)}K`;
     return `${sign}${sym}${a.toFixed(0)}`;
   }
-  return `${sign}${sym}${a.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+  const d = decimals != null ? decimals : (_hideDecimals ? 0 : 2);
+  return `${sign}${sym}${a.toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d })}`;
 };
 
 // Whether an account has any balance to display (stored or transaction-derived).

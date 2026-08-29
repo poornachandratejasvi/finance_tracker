@@ -53,6 +53,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { setHideDecimals } from '../utils/format';
 import {
   getCurrentUser,
   updateMe,
@@ -199,6 +200,7 @@ function GeneralPanel({ setSuccess, setError }) {
   const persistPref = async (patch) => {
     const next = { ...prefs, ...patch };
     setPrefs(next);
+    if ('hide_decimals' in patch) setHideDecimals(!!patch.hide_decimals);
     try {
       await updatePreferences(patch);
     } catch (err) {

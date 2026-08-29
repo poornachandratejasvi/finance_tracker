@@ -16,6 +16,7 @@ import { changePassword, getPreferences, updatePreferences, updateProfile } from
 import { useAuth } from "../../context/AuthContext";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { UserPreferences } from "../../types";
+import { setHideDecimals } from "../../utils/format";
 
 const INTERVALS = ["this_month", "last_month", "this_year", "all_time"];
 
@@ -100,6 +101,7 @@ export default function ProfileScreen() {
     if (!prefs) return;
     const next = { ...prefs, ...patch };
     setPrefs(next);
+    if ("hide_decimals" in patch) setHideDecimals(!!patch.hide_decimals);
     setSavingPrefs(true);
     try {
       await updatePreferences(patch);

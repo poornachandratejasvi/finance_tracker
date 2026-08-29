@@ -10,6 +10,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useActivity } from '../contexts/ActivityContext';
+import { getPreferences } from '../services/api';
+import { setHideDecimals } from '../utils/format';
 import AccountCircle from '@mui/icons-material/AccountCircle';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
@@ -116,6 +118,14 @@ const Layout = ({ children }) => {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [activityAnchor, setActivityAnchor] = React.useState(null);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+
+  // Load "Hide decimals within amounts" once at app shell mount so it applies
+  // everywhere formatCurrency is used, not just after visiting Settings.
+  React.useEffect(() => {
+    getPreferences()
+      .then((p) => setHideDecimals(!!p?.hide_decimals))
+      .catch(() => {});
+  }, []);
 
   const handleMenu = (event) => setAnchorEl(event.currentTarget);
   const handleClose = () => setAnchorEl(null);
