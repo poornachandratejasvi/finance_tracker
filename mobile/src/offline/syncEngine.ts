@@ -2,7 +2,7 @@ import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 
 import { listTransactions, createTransaction, CreateTransactionPayload } from "../api/transactions";
-import { listBanks } from "../api/banks";
+import { listBanks, getExternalBank } from "../api/banks";
 import { listCategories } from "../api/categories";
 import { listLabels } from "../api/labels";
 import { Transaction } from "../types";
@@ -146,20 +146,54 @@ async function drainNativeIntentQueue(): Promise<void> {
   }
 
   const banks = await getCachedBanks().catch(() => []);
-  const resolveBankId = (hint?: string): number | null => {
-    if (!hint) return banks[0]?.id ?? null;
-    const low = hint.toLowerCase();
-    const match = banks.find((b) => b.name.toLowerCase().includes(low) || low.includes(b.name.toLowerCase()));
-    return match?.id ?? banks[0]?.id ?? null;
-  };
 
   // No accounts synced to this device yet -- can't resolve any account, so leave
   // the file untouched entirely rather than losing these entries.
   if (banks.length === 0) return;
 
+  // Only fetched if actually needed (an account_hint that matches nothing), and
+  // only once per drain pass, not per entry.
+  let externalBankId: number | null = null;
+  const getExternalBankId = async (): Promise<number | null> => {
+    if (externalBankId !== null) return externalBankId;
+    try {
+      externalBankId = (await getExternalBank()).id;
+    } catch {
+      externalBankId = null;
+    }
+    return externalBankId;
+  };
+
+  const unresolved: NativeIntentEntry[] = [];
+
   for (const entry of entries) {
-    const bankId = resolveBankId(entry.account_hint);
-    if (!bankId) continue;
+    const hint = (entry.account_hint || "").trim();
+    let bankId: number | null;
+    let note = entry.notes;
+    if (!hint) {
+      // No account specified at all -- same "just pick the first one" default
+      // the in-app Add Transaction screen uses, not an unmatched-account case.
+      bankId = banks[0]?.id ?? null;
+    } else {
+      const low = hint.toLowerCase();
+      const match = banks.find((b) => b.name.toLowerCase().includes(low) || low.includes(b.name.toLowerCase()));
+      if (match) {
+        bankId = match.id;
+      } else {
+        // Never silently misattribute an unrecognized account to some unrelated
+        // real account -- file it under "External" for review instead, same
+        // fallback /api/ingest/transaction uses for the exact same situation.
+        bankId = await getExternalBankId();
+        const flag = `Account "${hint}" didn't match any bank — filed under External for review.`;
+        note = note ? `${note}\n${flag}` : flag;
+      }
+    }
+    if (!bankId) {
+      // Couldn't even resolve/create External (offline right now) -- keep this
+      // entry queued for the next drain instead of losing it.
+      unresolved.push(entry);
+      continue;
+    }
     const payload: CreateTransactionPayload = {
       bank_id: bankId,
       transaction_date: entry.transaction_date,
@@ -167,12 +201,16 @@ async function drainNativeIntentQueue(): Promise<void> {
       amount: entry.amount,
       transaction_type: entry.type === "income" ? "credit" : "debit",
       category: entry.category,
-      notes: entry.notes,
+      notes: note,
     };
     await queueOfflineTransaction(payload, entry.client_uuid);
   }
 
-  await FileSystem.deleteAsync(NATIVE_INTENT_QUEUE_FILE, { idempotent: true });
+  if (unresolved.length > 0) {
+    await FileSystem.writeAsStringAsync(NATIVE_INTENT_QUEUE_FILE, JSON.stringify(unresolved));
+  } else {
+    await FileSystem.deleteAsync(NATIVE_INTENT_QUEUE_FILE, { idempotent: true });
+  }
 }
 
 export async function syncNow(): Promise<void> {

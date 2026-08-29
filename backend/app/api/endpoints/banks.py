@@ -161,6 +161,24 @@ def list_password_candidates(
     }
 
 
+@router.get("/external")
+def get_external_bank(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Return (creating if needed) this user's catch-all 'External' bank -- the
+    same one /api/ingest/transaction and /api/ingest/sms fall back to when an
+    incoming transaction's account name doesn't match anything. JWT-authed
+    clients (the mobile app's native-intent offline queue) use this instead of
+    guessing an existing bank when an account hint doesn't resolve, so an
+    unrecognized account's transaction lands somewhere reviewable instead of
+    being silently misattributed to an unrelated real account."""
+    from app.api.endpoints.ingest import _get_external_bank
+
+    bank = _get_external_bank(db, current_user)
+    return {"id": bank.id, "name": bank.name}
+
+
 @router.get("/statement-dashboard")
 def get_statement_dashboard(
     db: Session = Depends(get_db),

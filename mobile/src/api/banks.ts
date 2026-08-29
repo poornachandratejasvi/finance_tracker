@@ -31,3 +31,11 @@ export async function updateBank(bankId: number, payload: Partial<BankPayload>):
 export async function deleteBank(bankId: number): Promise<void> {
   await api.delete(`/api/banks/${bankId}`);
 }
+
+// This user's catch-all "External" bank (created on first use) -- the safe
+// fallback for a transaction whose account name doesn't match any real bank,
+// instead of guessing an existing one.
+export async function getExternalBank(): Promise<{ id: number; name: string }> {
+  const { data } = await api.get<{ id: number; name: string }>("/api/banks/external");
+  return data;
+}
