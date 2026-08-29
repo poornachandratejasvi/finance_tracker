@@ -28,8 +28,10 @@ export default function ApiAccess() {
   // iOS Shortcut setup kit + downloadable shortcut file
   const [scBaseUrl, setScBaseUrl] = useState(API_BASE);
   const [scIncludeType, setScIncludeType] = useState(true);
-  const [scIncludeCategory, setScIncludeCategory] = useState(false);
+  const [scIncludeCategory, setScIncludeCategory] = useState(true);
   const [scIncludeAccount, setScIncludeAccount] = useState(true);
+  const [scIncludeDate, setScIncludeDate] = useState(false);
+  const [scIncludeNotes, setScIncludeNotes] = useState(false);
   const [scBusy, setScBusy] = useState(false);
   const [kit, setKit] = useState(null);     // {token, url} shown after "Create setup kit"
   const [kitBusy, setKitBusy] = useState(false);
@@ -99,6 +101,8 @@ export default function ApiAccess() {
         include_type: scIncludeType,
         include_category: scIncludeCategory,
         include_account: scIncludeAccount,
+        include_date: scIncludeDate,
+        include_notes: scIncludeNotes,
         token_name: 'iOS Shortcut',
       });
       setMsg(`Downloaded "${name}" (URL + fresh token baked in). Sign it on a Mac with \`shortcuts sign\` before importing on iOS 15+, or use the Setup Kit above on a stock iPhone.`);
@@ -348,6 +352,14 @@ export default function ApiAccess() {
           <FormControlLabel
             control={<Checkbox size="small" checked={scIncludeAccount} onChange={(e) => setScIncludeAccount(e.target.checked)} />}
             label="Ask Account"
+          />
+          <FormControlLabel
+            control={<Checkbox size="small" checked={scIncludeDate} onChange={(e) => setScIncludeDate(e.target.checked)} />}
+            label="Ask Date"
+          />
+          <FormControlLabel
+            control={<Checkbox size="small" checked={scIncludeNotes} onChange={(e) => setScIncludeNotes(e.target.checked)} />}
+            label="Ask Notes"
           />
         </Box>
       </Paper>

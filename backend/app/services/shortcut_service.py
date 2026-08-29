@@ -95,16 +95,22 @@ def _set_variable_action(name: str, value_token: dict) -> dict:
     }
 
 
-def _choose_from_menu(prompt: str, items: List[str], output_name: str) -> List[dict]:
-    """A 'Choose from Menu' action picking one of `items`, each branch simply
-    setting `output_name` to that item's own literal text -- so the menu's
-    result is usable afterward as a plain named variable via _named_var_token.
+def _choose_from_menu(
+    prompt: str, items: List[str], output_name: str, values: Optional[List[str]] = None,
+) -> List[dict]:
+    """A 'Choose from Menu' action picking one of `items` (the displayed labels),
+    each branch setting `output_name` to the corresponding entry in `values`
+    (defaults to the label itself) -- so the menu's result is usable afterward
+    as a plain named variable via _named_var_token. A label/value split lets a
+    menu offer a label like "Auto-detect" that stores an empty string, so the
+    backend's own `category or auto-categorize` fallback still fires.
 
     Schema note (unverified against a real device -- flagged explicitly in the
     calling docstring): Choose-from-Menu is a control-flow action like If/Repeat,
     built from a Start marker (WFControlFlowMode=0) sharing one GroupingIdentifier
     with a case marker (WFControlFlowMode=1) per branch and a single End marker
     (WFControlFlowMode=2)."""
+    values = values if values is not None else list(items)
     group = _new_uuid()
     actions: List[dict] = [{
         "WFWorkflowActionIdentifier": "is.workflow.actions.choosefrommenu",
@@ -116,7 +122,7 @@ def _choose_from_menu(prompt: str, items: List[str], output_name: str) -> List[d
             "WFMenuItems": list(items),
         },
     }]
-    for item in items:
+    for item, value in zip(items, values):
         actions.append({
             "WFWorkflowActionIdentifier": "is.workflow.actions.choosefrommenu",
             "WFWorkflowActionParameters": {
@@ -126,7 +132,7 @@ def _choose_from_menu(prompt: str, items: List[str], output_name: str) -> List[d
                 "WFMenuItemTitle": item,
             },
         })
-        actions.append(_set_variable_action(output_name, _text_token(item)))
+        actions.append(_set_variable_action(output_name, _text_token(value)))
     actions.append({
         "WFWorkflowActionIdentifier": "is.workflow.actions.choosefrommenu",
         "WFWorkflowActionParameters": {"GroupingIdentifier": group, "UUID": _new_uuid(), "WFControlFlowMode": 2},
@@ -150,9 +156,12 @@ def build_add_transaction_shortcut(
     base_url: str,
     token: str,
     include_type: bool = True,
-    include_category: bool = False,
+    include_category: bool = True,
     include_account: bool = True,
+    include_date: bool = False,
+    include_notes: bool = False,
     account_names: Optional[List[str]] = None,
+    category_names: Optional[List[str]] = None,
     notify_title: str = "Finance Tracker",
 ) -> bytes:
     """Build the .shortcut plist bytes for an 'Add Transaction' shortcut.
@@ -185,9 +194,18 @@ def build_add_transaction_shortcut(
         json_items.append(_dict_item("type", _named_var_token("Type")))
 
     if include_category:
-        ask_cat, cat_uuid = _ask("Category (leave blank to auto-categorize)", "Text", "Category", default="")
-        actions.append(ask_cat)
-        json_items.append(_dict_item("category", _var_token(cat_uuid, "Category")))
+        if category_names:
+            # "Auto-detect" stores an empty string (not the label "Auto-detect"),
+            # so the backend's `category or categorize_transaction(description)`
+            # fallback still fires when the user doesn't pick a specific one.
+            labels = ["Auto-detect"] + list(category_names)
+            values = [""] + list(category_names)
+            actions += _choose_from_menu("Category?", labels, "Category", values=values)
+            json_items.append(_dict_item("category", _named_var_token("Category")))
+        else:
+            ask_cat, cat_uuid = _ask("Category (leave blank to auto-categorize)", "Text", "Category", default="")
+            actions.append(ask_cat)
+            json_items.append(_dict_item("category", _var_token(cat_uuid, "Category")))
 
     if include_account:
         if account_names:
@@ -205,6 +223,21 @@ def build_add_transaction_shortcut(
             )
             actions.append(ask_account)
             json_items.append(_dict_item("account", _var_token(account_uuid, "Account")))
+
+    if include_date:
+        # Shortcuts renders the chosen Date using its default textual format when
+        # it lands in a dictionary value; the backend's transaction_date parsing
+        # already falls back to dateutil.parser for exactly this kind of loosely
+        # formatted string, and silently defaults to "now" if parsing fails, so
+        # there's no hard failure mode here even if the format is unexpected.
+        ask_date, date_uuid = _ask("Date (leave default for now)", "Date", "Date")
+        actions.append(ask_date)
+        json_items.append(_dict_item("transaction_date", _var_token(date_uuid, "Date")))
+
+    if include_notes:
+        ask_notes, notes_uuid = _ask("Notes (optional)", "Text", "Notes", default="")
+        actions.append(ask_notes)
+        json_items.append(_dict_item("notes", _var_token(notes_uuid, "Notes")))
 
     # Get Contents of URL — POST JSON with the API-key header.
     actions.append({

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.api_auth import get_user_from_api_key, generate_api_token
 from app.api.endpoints.auth import get_current_active_user
-from app.models.models import User, Bank, Transaction, IngestMapping, ApiToken
+from app.models.models import User, Bank, Category, Transaction, IngestMapping, ApiToken
 from app.services.transaction_service import TransactionService
 from app.services import shortcut_service
 from app.services import ai_sms_extraction
@@ -327,8 +327,10 @@ class ShortcutRequest(BaseModel):
     token: Optional[str] = None                # embed an existing token; else a fresh one is created
     token_name: Optional[str] = "iOS Shortcut"
     include_type: bool = True                   # ask Expense/Income
-    include_category: bool = False              # ask Category (blank = auto)
+    include_category: bool = True               # ask Category (a real picker of your categories + Auto-detect)
     include_account: bool = True                # ask which account/bank it belongs to
+    include_date: bool = False                  # ask the transaction date (defaults to now if skipped)
+    include_notes: bool = False                 # ask free-text notes
 
 
 @router.post("/shortcut")
@@ -361,13 +363,17 @@ def generate_ios_shortcut(
         token = full_token
 
     account_names = [b.name for b in db.query(Bank).filter(Bank.user_id == current_user.id).all()]
+    category_names = [c.name for c in db.query(Category).filter(Category.user_id == current_user.id).all()]
     data = shortcut_service.build_add_transaction_shortcut(
         base_url=base,
         token=token,
         include_type=payload.include_type,
         include_category=payload.include_category,
         include_account=payload.include_account,
+        include_date=payload.include_date,
+        include_notes=payload.include_notes,
         account_names=account_names,
+        category_names=category_names,
     )
     return Response(
         content=data,
