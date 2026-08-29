@@ -30,6 +30,7 @@ export interface CreateTransactionPayload {
   transaction_type: TransactionType;
   category?: string;
   notes?: string;
+  from_account?: string;
   client_uuid?: string;
 }
 
@@ -45,6 +46,7 @@ export interface UpdateTransactionPayload {
   category?: string;
   notes?: string;
   transaction_date?: string;
+  from_account?: string;
 }
 
 export async function updateTransaction(id: number, payload: UpdateTransactionPayload): Promise<Transaction> {

@@ -67,11 +67,13 @@ export default function AddTransactionScreen() {
 
   const [bankId, setBankId] = useState<number | null>(null);
   const [category, setCategory] = useState<string | null>(null);
-  const [type, setType] = useState<TransactionType>("debit");
+  const [mode, setMode] = useState<"expense" | "income" | "transfer">("expense");
+  const type: TransactionType = mode === "income" ? "credit" : "debit";
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(todayIsoDate());
   const [notes, setNotes] = useState("");
+  const [fromAccount, setFromAccount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [quickText, setQuickText] = useState("");
   const [quickParsing, setQuickParsing] = useState(false);
@@ -85,7 +87,7 @@ export default function AddTransactionScreen() {
       const draft = await quickAddParse(text);
       setAmount(String(draft.amount));
       setDescription(draft.description);
-      setType(draft.transaction_type);
+      setMode(draft.transaction_type === "credit" ? "income" : "expense");
       if (draft.category) setCategory(draft.category);
       if (draft.transaction_date) setDate(draft.transaction_date);
       if (draft.bank_id) setBankId(draft.bank_id);
@@ -111,7 +113,7 @@ export default function AddTransactionScreen() {
     if (prefill.category) setCategory(prefill.category);
     const receiptNotes = formatReceiptNotes(prefill.items, prefill.tax, prefill.tip);
     if (receiptNotes) setNotes(receiptNotes);
-    setType("debit");
+    setMode("expense");
     navigation.setParams({ prefill: undefined } as never);
   }, [route.params?.prefill]);
 
@@ -142,6 +144,7 @@ export default function AddTransactionScreen() {
     setCategory(null);
     setNotes("");
     setDate(todayIsoDate());
+    setFromAccount("");
   };
 
   const onSubmit = async () => {
@@ -167,6 +170,7 @@ export default function AddTransactionScreen() {
       transaction_type: type,
       category: category || undefined,
       notes: notes.trim() || undefined,
+      from_account: mode === "transfer" ? fromAccount.trim() || undefined : undefined,
     };
 
     setSubmitting(true);
@@ -234,8 +238,16 @@ export default function AddTransactionScreen() {
         </View>
 
         <View style={styles.segmentRow}>
-          <Segment label="Expense" active={type === "debit"} onPress={() => setType("debit")} />
-          <Segment label="Income" active={type === "credit"} onPress={() => setType("credit")} />
+          <Segment label="Expense" active={mode === "expense"} onPress={() => setMode("expense")} />
+          <Segment label="Income" active={mode === "income"} onPress={() => setMode("income")} />
+          <Segment
+            label="Transfer"
+            active={mode === "transfer"}
+            onPress={() => {
+              setMode("transfer");
+              if (!category) setCategory("Transfer");
+            }}
+          />
         </View>
 
         <Text style={styles.label}>Amount</Text>
@@ -266,6 +278,19 @@ export default function AddTransactionScreen() {
             selected={bankId}
             onSelect={(k) => setBankId(k as number)}
           />
+        )}
+
+        {mode === "transfer" && (
+          <>
+            <Text style={styles.label}>From Account (optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={fromAccount}
+              onChangeText={setFromAccount}
+              placeholder="e.g. Savings Account"
+              placeholderTextColor={colors.textSecondary}
+            />
+          </>
         )}
 
         <Text style={styles.label}>Category (optional — auto-detected if left blank)</Text>

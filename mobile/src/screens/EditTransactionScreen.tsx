@@ -30,12 +30,16 @@ export default function EditTransactionScreen() {
   const { transaction } = route.params;
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [type, setType] = useState<TransactionType>(transaction.transaction_type);
+  const [mode, setMode] = useState<"expense" | "income" | "transfer">(
+    transaction.category === "Transfer" ? "transfer" : transaction.transaction_type === "credit" ? "income" : "expense"
+  );
+  const type: TransactionType = mode === "income" ? "credit" : "debit";
   const [amount, setAmount] = useState(String(Math.abs(transaction.amount)));
   const [description, setDescription] = useState(transaction.description);
   const [category, setCategory] = useState<string | null>(transaction.category);
   const [date, setDate] = useState(transaction.transaction_date.slice(0, 10));
   const [notes, setNotes] = useState(transaction.notes || "");
+  const [fromAccount, setFromAccount] = useState(transaction.from_account || "");
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -75,6 +79,7 @@ export default function EditTransactionScreen() {
         category: category || undefined,
         notes: notes.trim() || undefined,
         transaction_date: `${date}T12:00:00`,
+        from_account: mode === "transfer" ? fromAccount.trim() || undefined : undefined,
       });
       upsertTransactions([updated]).catch(() => {});
       navigation.goBack();
@@ -117,8 +122,16 @@ export default function EditTransactionScreen() {
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.segmentRow}>
-          <Segment label="Expense" active={type === "debit"} onPress={() => setType("debit")} />
-          <Segment label="Income" active={type === "credit"} onPress={() => setType("credit")} />
+          <Segment label="Expense" active={mode === "expense"} onPress={() => setMode("expense")} />
+          <Segment label="Income" active={mode === "income"} onPress={() => setMode("income")} />
+          <Segment
+            label="Transfer"
+            active={mode === "transfer"}
+            onPress={() => {
+              setMode("transfer");
+              if (!category) setCategory("Transfer");
+            }}
+          />
         </View>
 
         <Text style={styles.label}>Amount</Text>
@@ -141,6 +154,19 @@ export default function EditTransactionScreen() {
 
         <Text style={styles.label}>Account</Text>
         <Text style={styles.hint}>{transaction.bank_name || "External"} (can't be changed here)</Text>
+
+        {mode === "transfer" && (
+          <>
+            <Text style={styles.label}>From Account (optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={fromAccount}
+              onChangeText={setFromAccount}
+              placeholder="e.g. Savings Account"
+              placeholderTextColor={colors.textSecondary}
+            />
+          </>
+        )}
 
         <Text style={styles.label}>Category</Text>
         <ChipRow
