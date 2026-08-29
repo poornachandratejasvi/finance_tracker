@@ -16,7 +16,8 @@ celery_app = Celery(
     include=[
         "app.tasks.sync_tasks", "app.tasks.backup_tasks", "app.tasks.notification_tasks",
         "app.tasks.gmail_health_tasks", "app.tasks.alert_sync_tasks", "app.tasks.credit_balance_tasks",
-        "app.tasks.watcher_tasks", "app.tasks.reward_points_tasks",
+        "app.tasks.watcher_tasks", "app.tasks.reward_points_tasks", "app.tasks.subscription_reminder_tasks",
+        "app.tasks.budget_alert_tasks",
     ],
 )
 
@@ -92,6 +93,19 @@ celery_app.conf.beat_schedule = {
     # plenty (same cadence as the other credit-card checks above).
     "reward-points-expiry-check": {
         "task": "reward_points.check_expiring",
+        "schedule": 24 * 60 * 60.0,
+    },
+    # Subscription/bill renewal reminders -- a predicted due date only ever moves
+    # by a day or so between runs, so once a day is enough lead time without
+    # spamming; idempotency is per predicted due date (see recurring_detection.py).
+    "subscription-renewal-reminders": {
+        "task": "subscriptions.check_upcoming_renewals",
+        "schedule": 24 * 60 * 60.0,
+    },
+    # Covers ingestion paths (manual/SMS/PDF-import/Shortcuts) that never trigger
+    # the Gmail-sync-tail budget check in sync.py -- idempotent per user per month.
+    "budget-alerts-daily": {
+        "task": "budgets.check_all_alerts",
         "schedule": 24 * 60 * 60.0,
     },
 }

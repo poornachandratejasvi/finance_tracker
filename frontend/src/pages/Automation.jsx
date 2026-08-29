@@ -828,16 +828,19 @@ export default function Automation() {
             <Typography variant="h6" gutterBottom>Other Notification Services</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Powered by <a href="https://github.com/caronc/apprise" target="_blank" rel="noreferrer">Apprise</a> —
-              add one service URL per line (Telegram, Slack, email, ntfy, Pushover, and 100+ others). Every
-              notification below (budget alerts, rule matches, sync events, reward-point expiry) goes to these
-              plus the Discord webhook above.
+              add one service URL per line (Telegram, Slack, email, ntfy, Pushover, and 100+ others). This also
+              covers plain custom webhooks: use <code>json://host/path</code> (or <code>jsons://</code> for https)
+              to POST a JSON payload to an n8n webhook trigger or Home Assistant automation, so you can flash
+              lights, send a phone push, or run any automation you want off these events. Every notification
+              below (budget alerts, upcoming bill/subscription renewals, rule matches, sync events, reward-point
+              expiry) goes to these plus the Discord webhook above.
             </Typography>
             <Grid container spacing={2} alignItems="flex-start">
               <Grid item xs={12} md={8}>
                 <TextField fullWidth multiline minRows={3} label="Apprise service URLs (one per line)"
                   value={notifyUrlsText} onChange={(e) => setNotifyUrlsText(e.target.value)}
-                  placeholder={'tgram://bottoken/ChatID\nmailto://user:pass@gmail.com\nntfy://topic'}
-                  helperText={<>See the <a href="https://github.com/caronc/apprise#popular-notification-services" target="_blank" rel="noreferrer">full service list</a> for URL formats.</>} />
+                  placeholder={'tgram://bottoken/ChatID\nmailto://user:pass@gmail.com\nntfy://topic\njsons://n8n.home.lan/webhook/finance-tracker'}
+                  helperText={<>See the <a href="https://github.com/caronc/apprise#popular-notification-services" target="_blank" rel="noreferrer">full service list</a> for URL formats, or <a href="https://github.com/caronc/apprise/wiki/Notify_json" target="_blank" rel="noreferrer">Custom JSON</a> for a generic webhook (n8n, Home Assistant, ...).</>} />
               </Grid>
               <Grid item xs={12} md={4}>
                 <Box display="flex" gap={1}>

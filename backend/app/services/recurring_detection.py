@@ -8,9 +8,13 @@ a "signature": its alphabetic tokens, longest-first, with common banking noise
 words stripped. Two transactions from the same recurring source usually share
 most of their significant words even when reference numbers differ.
 """
+import json
+import logging
 import re
 from collections import defaultdict
 from statistics import median
+
+logger = logging.getLogger(__name__)
 
 _NOISE_TOKENS = {
     "UPI", "NEFT", "IMPS", "RTGS", "TRANSFER", "PAYMENT", "PAID", "PAY",
@@ -98,7 +102,76 @@ def detect_recurring(db, user_id: int, min_occurrences: int = 3, lookback_days: 
             "occurrences": len(items),
             "first_date": items[0].transaction_date,
             "last_date": items[-1].transaction_date,
+            "median_gap_days": round(median(gaps), 1),
         })
 
     results.sort(key=lambda r: -r["occurrences"])
     return results
+
+
+def _reminder_key(uid: int) -> str:
+    return f"recurring_reminders_sent:{uid}"
+
+
+def check_upcoming_renewals(db, user_id: int, days_ahead: int = 2) -> int:
+    """Notify (via the same Discord/Apprise fan-out as budget alerts) about any
+    detected recurring DEBIT (subscription/bill) whose predicted next charge falls
+    within `days_ahead` days. Idempotent per predicted due date -- once notified
+    for a given pattern + due date, it won't fire again until the next cycle's due
+    date changes. Returns the number of reminders sent."""
+    from app.models.models import AppSetting
+    from app.core.time_utils import utcnow
+    from datetime import timedelta
+    from app.services.discord_notifier import discord_notifier
+
+    if not discord_notifier.enabled:
+        return 0
+
+    row = db.query(AppSetting).filter(AppSetting.key == _reminder_key(user_id)).first()
+    sent_map = {}
+    if row and row.value:
+        try:
+            sent_map = json.loads(row.value)
+        except (ValueError, TypeError):
+            sent_map = {}
+
+    now = utcnow()
+    horizon = now + timedelta(days=days_ahead)
+    sent = 0
+
+    try:
+        patterns = detect_recurring(db, user_id)
+    except Exception:
+        logger.warning("Recurring-renewal reminder scan failed for user %s", user_id, exc_info=True)
+        return 0
+
+    for p in patterns:
+        if p["transaction_type"] != "debit":
+            continue
+        next_due = p["last_date"] + timedelta(days=p["median_gap_days"])
+        if not (now <= next_due <= horizon):
+            continue
+        pattern_key = f"{p['bank_id']}:{p['signature']}:{round(p['amount'], 2)}"
+        due_str = next_due.strftime("%Y-%m-%d")
+        if sent_map.get(pattern_key) == due_str:
+            continue  # already reminded for this exact due date
+        try:
+            discord_notifier.send_notification(
+                title="📅 Upcoming Bill/Subscription",
+                description=f"**{p['sample_description']}** — ₹{p['amount']:,.0f} expected around {due_str} "
+                            f"({p['frequency']}).",
+                color=0x4E79A7,
+            )
+            sent_map[pattern_key] = due_str
+            sent += 1
+        except Exception:
+            logger.warning("Failed to send renewal reminder for user %s / %s", user_id, pattern_key, exc_info=True)
+
+    if sent:
+        payload = json.dumps(sent_map)
+        if row:
+            row.value = payload
+        else:
+            db.add(AppSetting(key=_reminder_key(user_id), value=payload))
+        db.commit()
+    return sent
