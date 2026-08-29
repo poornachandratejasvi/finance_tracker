@@ -4,15 +4,16 @@ into a goal). This is pure bookkeeping -- no real money moves anywhere,
 consistent with the rest of this app never touching actual bank rails."""
 import math
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.core.database import get_db
 from app.core.time_utils import utcnow
 from app.api.endpoints.auth import get_current_active_user, require_write_access
-from app.models.models import User, SavingsGoal, Transaction, TransactionType
+from app.models.models import User, SavingsGoal, Transaction, TransactionType, Bank
 
 router = APIRouter()
 
@@ -177,3 +178,72 @@ def sweep_roundups(goal_id: int, db: Session = Depends(get_db), current_user: Us
     db.commit()
     db.refresh(g)
     return {"swept_amount": total, "transaction_count": len(txns), "goal": _to_dict(g)}
+
+
+def _safe_to_save(db: Session, user_id: int) -> dict:
+    """'Safe to save' = liquid (savings-type account) balance minus a buffer equal
+    to the trailing 3-month average monthly debit spend -- a simple, transparent
+    forecast (no per-merchant recurring-pattern modeling) of what's needed to
+    cover the upcoming month's bills, so only genuine surplus gets swept."""
+    liquid_balance = float(
+        db.query(func.coalesce(func.sum(Bank.current_balance), 0.0))
+        .filter(Bank.user_id == user_id, Bank.bank_type == "savings", Bank.is_active == True)  # noqa: E712
+        .scalar() or 0.0
+    )
+    since = utcnow() - timedelta(days=90)
+    total_debit_90d = float(
+        db.query(func.coalesce(func.sum(Transaction.amount), 0.0))
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.DEBIT,
+            Transaction.transaction_date >= since,
+        ).scalar() or 0.0
+    )
+    avg_monthly_spend = round(total_debit_90d / 3, 2)
+    safe_to_save = round(max(0.0, liquid_balance - avg_monthly_spend), 2)
+    return {
+        "liquid_balance": round(liquid_balance, 2),
+        "avg_monthly_spend": avg_monthly_spend,
+        "safe_to_save": safe_to_save,
+    }
+
+
+@router.get("/predictive-sweep-preview")
+def predictive_sweep_preview(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """How much could safely be swept into savings right now -- read-only."""
+    return _safe_to_save(db, current_user.id)
+
+
+class PredictiveSweepRequest(BaseModel):
+    amount: Optional[float] = None  # defaults to the full computed safe_to_save if omitted
+
+
+@router.post("/{goal_id}/predictive-sweep")
+def predictive_sweep(
+    goal_id: int, payload: PredictiveSweepRequest = PredictiveSweepRequest(),
+    db: Session = Depends(get_db), current_user: User = Depends(require_write_access),
+):
+    """Sweep the computed (or a user-chosen, capped) surplus into a goal's
+    current_amount -- pure bookkeeping, same as round-up sweeps; no real money
+    moves. Limited to once per calendar month per goal (last_predictive_sweep_period)
+    since the underlying balances/forecast don't themselves change when you sweep,
+    so a second click would otherwise double-count the same surplus."""
+    g = db.query(SavingsGoal).filter(SavingsGoal.id == goal_id, SavingsGoal.user_id == current_user.id).first()
+    if not g:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    period = utcnow().strftime("%Y-%m")
+    if g.last_predictive_sweep_period == period:
+        raise HTTPException(status_code=400, detail="Already swept into this goal this month.")
+
+    computed = _safe_to_save(db, current_user.id)
+    amount = computed["safe_to_save"] if payload.amount is None else max(0.0, min(payload.amount, computed["safe_to_save"]))
+    if amount <= 0:
+        return {"swept_amount": 0.0, "goal": _to_dict(g), **computed}
+
+    g.current_amount = round((g.current_amount or 0.0) + amount, 2)
+    g.last_predictive_sweep_period = period
+    g.updated_at = utcnow()
+    db.commit()
+    db.refresh(g)
+    return {"swept_amount": round(amount, 2), "goal": _to_dict(g), **computed}
