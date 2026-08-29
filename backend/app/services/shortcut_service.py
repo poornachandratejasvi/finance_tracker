@@ -160,6 +160,7 @@ def build_add_transaction_shortcut(
     include_account: bool = True,
     include_date: bool = False,
     include_notes: bool = False,
+    include_from_account: bool = False,
     account_names: Optional[List[str]] = None,
     category_names: Optional[List[str]] = None,
     notify_title: str = "Finance Tracker",
@@ -188,24 +189,50 @@ def build_add_transaction_shortcut(
     ]
 
     if include_type:
-        # A real picker (not free text) -- only two possible values, so a menu
-        # can't go stale the way a bank-name menu could.
-        actions += _choose_from_menu("Type?", ["Expense", "Income"], "Type")
+        # A real picker (not free text). "Transfer" maps to the same underlying
+        # transaction_type ("debit") the app itself uses for a transfer record --
+        # what actually marks it as a transfer is the category being "Transfer"
+        # (see the Category picker below, which always lists "Transfer" as an
+        # option so picking both takes one extra tap, same shape as the rest of
+        # this Shortcut). A conditional If/Otherwise to auto-set the category
+        # and skip that prompt entirely was considered and deliberately avoided:
+        # this file can't be round-tripped against a real device before shipping
+        # (see the module docstring), and stacking a second unverified
+        # control-flow schema on top of Choose-from-Menu is not worth the risk
+        # for what's only ever a single extra tap.
+        actions += _choose_from_menu(
+            "Type?", ["Expense", "Income", "Transfer"], "Type", values=["debit", "credit", "debit"],
+        )
         json_items.append(_dict_item("type", _named_var_token("Type")))
 
     if include_category:
-        if category_names:
+        # "Transfer" always appears (even if it isn't one of the user's actual
+        # categories) so a Transfer-type record has a one-tap way to land on the
+        # category the app itself uses to recognize a transfer -- see the Type
+        # picker above.
+        names = list(category_names) if category_names else []
+        if "Transfer" not in names:
+            names = ["Transfer"] + names
+        if names:
             # "Auto-detect" stores an empty string (not the label "Auto-detect"),
             # so the backend's `category or categorize_transaction(description)`
             # fallback still fires when the user doesn't pick a specific one.
-            labels = ["Auto-detect"] + list(category_names)
-            values = [""] + list(category_names)
+            labels = ["Auto-detect"] + names
+            values = [""] + names
             actions += _choose_from_menu("Category?", labels, "Category", values=values)
             json_items.append(_dict_item("category", _named_var_token("Category")))
         else:
             ask_cat, cat_uuid = _ask("Category (leave blank to auto-categorize)", "Text", "Category", default="")
             actions.append(ask_cat)
             json_items.append(_dict_item("category", _var_token(cat_uuid, "Category")))
+
+    if include_from_account:
+        # Mirrors the app's "From Account" field on a transfer record (see
+        # EditTransactionScreen/TransactionDialog) -- optional free text, safe
+        # to leave blank for a non-transfer record.
+        ask_from, from_uuid = _ask("From Account (optional, for transfers)", "Text", "FromAccount", default="")
+        actions.append(ask_from)
+        json_items.append(_dict_item("from_account", _var_token(from_uuid, "FromAccount")))
 
     if include_account:
         if account_names:

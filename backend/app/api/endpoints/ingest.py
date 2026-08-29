@@ -331,6 +331,7 @@ class ShortcutRequest(BaseModel):
     include_account: bool = True                # ask which account/bank it belongs to
     include_date: bool = False                  # ask the transaction date (defaults to now if skipped)
     include_notes: bool = False                 # ask free-text notes
+    include_from_account: bool = False          # ask a free-text "from account" (for transfers)
 
 
 @router.post("/shortcut")
@@ -372,6 +373,7 @@ def generate_ios_shortcut(
         include_account=payload.include_account,
         include_date=payload.include_date,
         include_notes=payload.include_notes,
+        include_from_account=payload.include_from_account,
         account_names=account_names,
         category_names=category_names,
     )

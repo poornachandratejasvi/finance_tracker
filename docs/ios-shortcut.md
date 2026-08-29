@@ -31,6 +31,12 @@ This works on **every iPhone** with no Mac and no extra settings.
 > ("Allow Untrusted Shortcuts" governs *source trust*, not signing). Import it only after
 > **signing on a Mac** (see section 3a) or on iOS 12–14. On a normal iPhone, use the Setup
 > Kit above instead.
+>
+> The **Type** picker offers **Expense / Income / Transfer**. Picking Transfer still needs
+> you to also pick **"Transfer"** from the Category picker right after (there's no automatic
+> link between the two prompts) — that's what the app itself uses to recognize a transfer
+> record. Tick **"Ask From Account"** if you want to record where the money came from, same
+> as the app's own From Account field on a transfer.
 
 ---
 

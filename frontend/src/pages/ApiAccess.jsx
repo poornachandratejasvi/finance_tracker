@@ -32,6 +32,7 @@ export default function ApiAccess() {
   const [scIncludeAccount, setScIncludeAccount] = useState(true);
   const [scIncludeDate, setScIncludeDate] = useState(false);
   const [scIncludeNotes, setScIncludeNotes] = useState(false);
+  const [scIncludeFromAccount, setScIncludeFromAccount] = useState(false);
   const [scBusy, setScBusy] = useState(false);
   const [kit, setKit] = useState(null);     // {token, url} shown after "Create setup kit"
   const [kitBusy, setKitBusy] = useState(false);
@@ -103,6 +104,7 @@ export default function ApiAccess() {
         include_account: scIncludeAccount,
         include_date: scIncludeDate,
         include_notes: scIncludeNotes,
+        include_from_account: scIncludeFromAccount,
         token_name: 'iOS Shortcut',
       });
       setMsg(`Downloaded "${name}" (URL + fresh token baked in). Sign it on a Mac with \`shortcuts sign\` before importing on iOS 15+, or use the Setup Kit above on a stock iPhone.`);
@@ -343,7 +345,7 @@ export default function ApiAccess() {
           </Button>
           <FormControlLabel
             control={<Checkbox size="small" checked={scIncludeType} onChange={(e) => setScIncludeType(e.target.checked)} />}
-            label="Ask Expense / Income"
+            label="Ask Expense / Income / Transfer"
           />
           <FormControlLabel
             control={<Checkbox size="small" checked={scIncludeCategory} onChange={(e) => setScIncludeCategory(e.target.checked)} />}
@@ -360,6 +362,10 @@ export default function ApiAccess() {
           <FormControlLabel
             control={<Checkbox size="small" checked={scIncludeNotes} onChange={(e) => setScIncludeNotes(e.target.checked)} />}
             label="Ask Notes"
+          />
+          <FormControlLabel
+            control={<Checkbox size="small" checked={scIncludeFromAccount} onChange={(e) => setScIncludeFromAccount(e.target.checked)} />}
+            label="Ask From Account (for transfers)"
           />
         </Box>
       </Paper>
