@@ -208,8 +208,15 @@ function Transactions() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   // Any filter change resets to the first page. Search is applied after debounce.
+  // Defensively normalizes the array-valued filter fields -- if a child control
+  // ever passes one of these as null/undefined instead of [], fetchData's
+  // `.length` reads would throw and the whole page would show as failed to load.
   const handleFiltersChange = (next) => {
-    setFilters({ ...INITIAL_FILTERS, ...next });
+    const merged = { ...INITIAL_FILTERS, ...next };
+    for (const key of ['accountIds', 'categoryNames', 'labelIds', 'recordTypes', 'paymentTypes']) {
+      if (!Array.isArray(merged[key])) merged[key] = [];
+    }
+    setFilters(merged);
     setPage(0);
   };
 
