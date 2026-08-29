@@ -37,6 +37,12 @@
           "photosPermission": "Finance Tracker needs photo library access to attach a receipt image.",
           "cameraPermission": "Finance Tracker needs camera access to take a photo of a receipt."
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Finance Tracker uses Face ID to lock the app so your financial data stays private."
+        }
       ]
     ]
   }
