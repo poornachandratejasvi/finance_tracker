@@ -49,6 +49,10 @@ export default function TransactionDialog({
   onClose,
   transaction = null,
   defaultBankId,
+  // Pre-fill values for a new (non-edit) transaction, e.g. from the AI quick-add
+  // parse — {amount, description, transaction_type, category, transaction_date, bank_id}.
+  // Ignored when `transaction` (edit mode) is set.
+  initialDraft = null,
   banks = [],
   categories = [],
   labels = [],
@@ -121,17 +125,18 @@ export default function TransactionDialog({
       setPaymentType(cf.payment_type || '');
       setPaymentStatus(cf.payment_status || '');
     } else {
-      const bid = defaultBankId || (banks[0] && banks[0].id) || '';
-      setMode('expense');
+      const d = initialDraft || {};
+      const bid = d.bank_id || defaultBankId || (banks[0] && banks[0].id) || '';
+      setMode(d.transaction_type === 'credit' ? 'income' : 'expense');
       setBankId(bid);
-      setAmount('');
+      setAmount(d.amount != null ? String(d.amount) : '');
       setCurrencyCode(bankCurrency(bid) || 'INR');
-      setCategory('');
+      setCategory(d.category || '');
       setSelectedLabelIds([]);
       setOriginalLabelIds([]);
-      setDateTime(toLocalInput(new Date().toISOString()));
+      setDateTime(toLocalInput(d.transaction_date || new Date().toISOString()));
       setNote('');
-      setDesc('');
+      setDesc(d.description || '');
       setPayer('');
       setPaymentType('');
       setPaymentStatus('');
@@ -145,7 +150,7 @@ export default function TransactionDialog({
     setNotice('');
     setSaving(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, transaction]);
+  }, [open, transaction, initialDraft]);
 
   const typeColor = mode === 'income' ? 'success.main' : mode === 'transfer' ? 'text.secondary' : 'error.main';
 

@@ -16,6 +16,7 @@ import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
 import { listBanks } from "../api/banks";
 import { listCategories } from "../api/categories";
 import { createTransaction } from "../api/transactions";
+import { quickAddParse } from "../api/ai";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { Bank, Category, TransactionType } from "../types";
 import { todayIsoDate } from "../utils/format";
@@ -72,7 +73,30 @@ export default function AddTransactionScreen() {
   const [date, setDate] = useState(todayIsoDate());
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [quickText, setQuickText] = useState("");
+  const [quickParsing, setQuickParsing] = useState(false);
   const { isOnline } = useOffline();
+
+  const onQuickAdd = async () => {
+    const text = quickText.trim();
+    if (!text) return;
+    setQuickParsing(true);
+    try {
+      const draft = await quickAddParse(text);
+      setAmount(String(draft.amount));
+      setDescription(draft.description);
+      setType(draft.transaction_type);
+      if (draft.category) setCategory(draft.category);
+      if (draft.transaction_date) setDate(draft.transaction_date);
+      if (draft.bank_id) setBankId(draft.bank_id);
+      setQuickText("");
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      Alert.alert("Couldn't parse that", typeof detail === "string" ? detail : "Try rephrasing with an amount, e.g. 'Spent 450 on lunch'.");
+    } finally {
+      setQuickParsing(false);
+    }
+  };
 
   // A receipt scan hands its extracted draft here via route params (rather than
   // creating a transaction directly) so the user always reviews/edits an OCR/AI
@@ -189,6 +213,26 @@ export default function AddTransactionScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Text style={styles.label}>Quick Add with AI</Text>
+        <View style={styles.quickAddRow}>
+          <TextInput
+            style={[styles.input, styles.quickAddInput]}
+            value={quickText}
+            onChangeText={setQuickText}
+            placeholder="e.g. Spent 450 on coffee at Starbucks yesterday"
+            placeholderTextColor={colors.textSecondary}
+            editable={!quickParsing}
+            onSubmitEditing={onQuickAdd}
+          />
+          <TouchableOpacity
+            style={[styles.quickAddButton, (quickParsing || !quickText.trim()) && styles.buttonDisabled]}
+            onPress={onQuickAdd}
+            disabled={quickParsing || !quickText.trim()}
+          >
+            {quickParsing ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.buttonText}>Parse</Text>}
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.segmentRow}>
           <Segment label="Expense" active={type === "debit"} onPress={() => setType("debit")} />
           <Segment label="Income" active={type === "credit"} onPress={() => setType("credit")} />
@@ -333,7 +377,17 @@ const makeStyles = (c: ThemeColors) =>
       fontSize: 16,
     },
     multiline: { minHeight: 70, textAlignVertical: "top" },
-    segmentRow: { flexDirection: "row", gap: 8, marginTop: 4 },
+    quickAddRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+    quickAddInput: { flex: 1 },
+    quickAddButton: {
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    segmentRow: { flexDirection: "row", gap: 8, marginTop: 16 },
     segment: {
       flex: 1,
       paddingVertical: 10,

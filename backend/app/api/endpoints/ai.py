@@ -179,6 +179,87 @@ def ai_categorize_transactions(data: AICategorizeRequest, db: Session = Depends(
     return {"updated": updated, "considered": len(txns), "unique": len(rep_items)}
 
 
+class AIQuickAddRequest(BaseModel):
+    text: str
+
+
+@router.post("/quick-add")
+def ai_quick_add_parse(data: AIQuickAddRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """Parse a free-text sentence like 'Spent 450 on coffee and lunch at Starbucks
+    yesterday' into a draft transaction {amount, description, transaction_type,
+    category, transaction_date, bank_id}. Returns a DRAFT only -- the caller still
+    posts to POST /transactions (the normal create path) so the user can review/
+    edit before it's saved, same as every other AI-assisted entry point in this
+    app (SMS/receipt/PDF extraction)."""
+    text = (data.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+
+    cats = [c.name for c in db.query(Category).filter(Category.user_id == current_user.id).all()]
+    banks = db.query(Bank).filter(Bank.user_id == current_user.id, Bank.is_active == True).all()  # noqa: E712
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+
+    system = (
+        "You extract a single transaction from a short free-text note a user typed or "
+        "dictated (e.g. 'spent 450 on coffee at Starbucks yesterday', 'got 20000 salary "
+        "today', 'paid 1200 electricity bill from HDFC on the 3rd'). "
+        f"Today's date is {today} — resolve relative dates ('yesterday', 'last Friday', "
+        "'the 3rd') against it. "
+        f"Categories available: {json.dumps(cats) if cats else '[]'} (pick the closest match, "
+        "or \"Others\" if nothing fits — never invent a new category name). "
+        "Respond ONLY with one JSON object: "
+        '{"amount": <positive number>, "description": "<merchant/purpose, short>", '
+        '"type": "debit" or "credit", "category": "<one of the categories above, or null>", '
+        '"date": "YYYY-MM-DD", "account_hint": "<bank/account name mentioned, or null>"}. '
+        "No prose, no markdown fences."
+    )
+
+    try:
+        raw = ai_service.complete(db, current_user.id, system, f"NOTE: {text}", max_tokens=300)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=_ai_error_message(db, current_user.id, e))
+
+    parsed = ai_service._extract_json(raw)
+    if not isinstance(parsed, dict) or parsed.get("amount") is None:
+        raise HTTPException(status_code=422, detail="Couldn't parse a transaction out of that text — try rephrasing with an amount, e.g. 'Spent 450 on lunch'.")
+
+    try:
+        amount = abs(float(parsed["amount"]))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Couldn't parse a valid amount from that text.")
+
+    ttype = str(parsed.get("type") or "debit").strip().lower()
+    if ttype not in ("debit", "credit"):
+        ttype = "debit"
+
+    tdate = None
+    try:
+        tdate = datetime.strptime(str(parsed.get("date")), "%Y-%m-%d")
+    except (TypeError, ValueError):
+        tdate = datetime.utcnow()
+
+    category = parsed.get("category") or None
+    if category and cats and category not in cats:
+        category = None  # AI invented a name outside the allowed list -- leave for the user to pick
+
+    bank_id = None
+    hint = (parsed.get("account_hint") or "").strip().lower()
+    if hint:
+        for b in banks:
+            if hint in b.name.lower() or b.name.lower() in hint:
+                bank_id = b.id
+                break
+
+    return {
+        "amount": round(amount, 2),
+        "description": str(parsed.get("description") or text)[:200],
+        "transaction_type": ttype,
+        "category": category,
+        "transaction_date": tdate.strftime("%Y-%m-%d"),
+        "bank_id": bank_id,
+    }
+
+
 _NUM_RE = re.compile(r"\d+")
 
 

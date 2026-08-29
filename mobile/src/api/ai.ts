@@ -48,3 +48,20 @@ export async function getAnomalies(useAi: boolean = false): Promise<AnomaliesRes
   const { data } = await api.get<AnomaliesResponse>("/api/ai/anomalies", { params: { use_ai: useAi } });
   return data;
 }
+
+export interface QuickAddDraft {
+  amount: number;
+  description: string;
+  transaction_type: "debit" | "credit";
+  category: string | null;
+  transaction_date: string; // YYYY-MM-DD
+  bank_id: number | null;
+}
+
+// Parses a free-text sentence (e.g. "Spent 450 on coffee at Starbucks yesterday")
+// into a draft transaction for the user to review before saving -- never creates
+// anything itself, same pattern as the receipt-scan prefill.
+export async function quickAddParse(text: string): Promise<QuickAddDraft> {
+  const { data } = await api.post<QuickAddDraft>("/api/ai/quick-add", { text });
+  return data;
+}

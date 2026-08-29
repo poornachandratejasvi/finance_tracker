@@ -7,7 +7,7 @@ import {
   Alert, CircularProgress, Tooltip, Checkbox, FormControlLabel,
 } from '@mui/material';
 import {
-  Edit, Delete, Refresh, Add, Comment, FileDownload, ContentCopy, DeleteSweep, CheckCircleOutline,
+  Edit, Delete, Refresh, Add, Comment, FileDownload, ContentCopy, DeleteSweep, CheckCircleOutline, AutoAwesome,
 } from '@mui/icons-material';
 import api, {
   getTransactions, deleteTransaction,
@@ -116,6 +116,12 @@ function Transactions() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTransaction, setDialogTransaction] = useState(null); // null = add mode
+  const [dialogDraft, setDialogDraft] = useState(null); // AI quick-add pre-fill, add mode only
+
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddText, setQuickAddText] = useState('');
+  const [quickAddLoading, setQuickAddLoading] = useState(false);
+  const [quickAddError, setQuickAddError] = useState('');
 
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [duplicateGroups, setDuplicateGroups] = useState([]);
@@ -235,12 +241,33 @@ function Transactions() {
   // Open the Wallet-style dialog in add mode (transaction = null) or edit mode.
   const handleOpenAdd = () => {
     setDialogTransaction(null);
+    setDialogDraft(null);
     setDialogOpen(true);
   };
 
   const handleEdit = (trans) => {
     setDialogTransaction(trans);
+    setDialogDraft(null);
     setDialogOpen(true);
+  };
+
+  const handleQuickAddParse = async () => {
+    const text = quickAddText.trim();
+    if (!text) return;
+    setQuickAddLoading(true);
+    setQuickAddError('');
+    try {
+      const { data } = await api.post('/api/ai/quick-add', { text });
+      setQuickAddOpen(false);
+      setQuickAddText('');
+      setDialogTransaction(null);
+      setDialogDraft(data);
+      setDialogOpen(true);
+    } catch (err) {
+      setQuickAddError(err?.response?.data?.detail || 'Could not parse that — try rephrasing with an amount.');
+    } finally {
+      setQuickAddLoading(false);
+    }
   };
 
   // Refresh categories/labels so newly created ones appear in filters and chips.
@@ -477,6 +504,9 @@ function Transactions() {
         <Typography variant="h4">Records</Typography>
         <Box display="flex" gap={1} flexWrap="wrap">
           <Button variant="contained" startIcon={<Add />} onClick={handleOpenAdd}>Add</Button>
+          <Button variant="outlined" startIcon={<AutoAwesome />} onClick={() => { setQuickAddText(''); setQuickAddError(''); setQuickAddOpen(true); }}>
+            Quick Add
+          </Button>
           <Button variant="outlined" startIcon={<Refresh />} onClick={fetchData}>Refresh</Button>
           <Button variant="outlined" color="error" startIcon={<DeleteSweep />} onClick={handleRemoveDuplicates}>Remove Duplicates</Button>
         </Box>
@@ -659,6 +689,7 @@ function Transactions() {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         transaction={dialogTransaction}
+        initialDraft={dialogDraft}
         defaultBankId={filters.accountIds.length === 1 ? filters.accountIds[0] : undefined}
         banks={banks}
         categories={categories}
@@ -667,6 +698,38 @@ function Transactions() {
         onSaved={handleDialogSaved}
         onReloadCategories={reloadReferenceData}
       />
+
+      <Dialog open={quickAddOpen} onClose={() => setQuickAddOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Quick Add with AI</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Type a plain-English sentence, e.g. "Spent 450 on coffee at Starbucks yesterday" —
+            AI will fill in the amount, category, and date for you to review before saving.
+          </Typography>
+          {quickAddError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setQuickAddError('')}>{quickAddError}</Alert>}
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={2}
+            placeholder="Spent 450 on coffee at Starbucks yesterday"
+            value={quickAddText}
+            onChange={(e) => setQuickAddText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleQuickAddParse(); } }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setQuickAddOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            startIcon={quickAddLoading ? <CircularProgress size={16} color="inherit" /> : <AutoAwesome />}
+            disabled={quickAddLoading || !quickAddText.trim()}
+            onClick={handleQuickAddParse}
+          >
+            Parse
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Manage labels */}
       <Dialog open={labelDialog.open} onClose={() => setLabelDialog({ open: false, transaction: null })} maxWidth="sm" fullWidth>
