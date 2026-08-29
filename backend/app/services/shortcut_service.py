@@ -67,6 +67,73 @@ def _ask(prompt: str, input_type: str, output_name: str, default: Optional[str] 
     return ({"WFWorkflowActionIdentifier": "is.workflow.actions.ask", "WFWorkflowActionParameters": params}, u)
 
 
+def _named_var_token(name: str) -> dict:
+    """A value that is exactly one magic variable referencing a NAMED variable
+    (set via a prior 'Set Variable' action), as opposed to _var_token's
+    reference to one specific action's own output. Same attachment shape,
+    different attachment "Type" discriminator + key names -- Apple's format
+    reuses this pattern (an object-replacement char + attachmentsByRange
+    entry) for every kind of magic variable, distinguished only by the
+    attachment dict's own "Type" field ("ActionOutput", "Variable",
+    "ExtensionInput", etc.)."""
+    return {
+        "Value": {
+            "string": _OBJ,
+            "attachmentsByRange": {"{0, 1}": {"Type": "Variable", "VariableName": name}},
+        },
+        "WFSerializationType": "WFTextTokenString",
+    }
+
+
+def _set_variable_action(name: str, value_token: dict) -> dict:
+    """A 'Set Variable' action -- WFInput is the value to store (any text
+    token, including a literal string or another magic variable), WFVariableName
+    is the name later referenced via _named_var_token."""
+    return {
+        "WFWorkflowActionIdentifier": "is.workflow.actions.setvariable",
+        "WFWorkflowActionParameters": {"WFVariableName": name, "WFInput": value_token, "UUID": _new_uuid()},
+    }
+
+
+def _choose_from_menu(prompt: str, items: List[str], output_name: str) -> List[dict]:
+    """A 'Choose from Menu' action picking one of `items`, each branch simply
+    setting `output_name` to that item's own literal text -- so the menu's
+    result is usable afterward as a plain named variable via _named_var_token.
+
+    Schema note (unverified against a real device -- flagged explicitly in the
+    calling docstring): Choose-from-Menu is a control-flow action like If/Repeat,
+    built from a Start marker (WFControlFlowMode=0) sharing one GroupingIdentifier
+    with a case marker (WFControlFlowMode=1) per branch and a single End marker
+    (WFControlFlowMode=2)."""
+    group = _new_uuid()
+    actions: List[dict] = [{
+        "WFWorkflowActionIdentifier": "is.workflow.actions.choosefrommenu",
+        "WFWorkflowActionParameters": {
+            "GroupingIdentifier": group,
+            "UUID": _new_uuid(),
+            "WFControlFlowMode": 0,
+            "WFMenuPrompt": prompt,
+            "WFMenuItems": list(items),
+        },
+    }]
+    for item in items:
+        actions.append({
+            "WFWorkflowActionIdentifier": "is.workflow.actions.choosefrommenu",
+            "WFWorkflowActionParameters": {
+                "GroupingIdentifier": group,
+                "UUID": _new_uuid(),
+                "WFControlFlowMode": 1,
+                "WFMenuItemTitle": item,
+            },
+        })
+        actions.append(_set_variable_action(output_name, _text_token(item)))
+    actions.append({
+        "WFWorkflowActionIdentifier": "is.workflow.actions.choosefrommenu",
+        "WFWorkflowActionParameters": {"GroupingIdentifier": group, "UUID": _new_uuid(), "WFControlFlowMode": 2},
+    })
+    return actions
+
+
 def _shortcut_input_token() -> dict:
     """A value that is exactly the shortcut's own input (what an Automation passed
     it -- e.g. the body of the message that triggered a "When I receive a message"
@@ -88,7 +155,15 @@ def build_add_transaction_shortcut(
     account_names: Optional[List[str]] = None,
     notify_title: str = "Finance Tracker",
 ) -> bytes:
-    """Build the .shortcut plist bytes for an 'Add Transaction' shortcut."""
+    """Build the .shortcut plist bytes for an 'Add Transaction' shortcut.
+
+    Type and Account now use a real 'Choose from Menu' picker (see
+    _choose_from_menu) instead of free-text entry. That control-flow schema
+    (GroupingIdentifier + WFControlFlowMode start/case/end markers) is
+    written from documented format knowledge but has not been round-tripped
+    against a real device -- if it fails to import or misbehaves, fall back
+    to the manual Setup Kit instructions (which build the equivalent menu
+    through the Shortcuts app's own UI, so there's no schema risk there)."""
     base = (base_url or "").rstrip("/")
     url = f"{base}/api/ingest/transaction"
 
@@ -104,9 +179,10 @@ def build_add_transaction_shortcut(
     ]
 
     if include_type:
-        ask_type, type_uuid = _ask("Type (expense or income)", "Text", "Type", default="expense")
-        actions.append(ask_type)
-        json_items.append(_dict_item("type", _var_token(type_uuid, "Type")))
+        # A real picker (not free text) -- only two possible values, so a menu
+        # can't go stale the way a bank-name menu could.
+        actions += _choose_from_menu("Type?", ["Expense", "Income"], "Type")
+        json_items.append(_dict_item("type", _named_var_token("Type")))
 
     if include_category:
         ask_cat, cat_uuid = _ask("Category (leave blank to auto-categorize)", "Text", "Category", default="")
@@ -114,16 +190,21 @@ def build_add_transaction_shortcut(
         json_items.append(_dict_item("category", _var_token(cat_uuid, "Category")))
 
     if include_account:
-        # Free-text (not "Choose from Menu") because /api/ingest/transaction already
-        # fuzzy-matches this against the caller's real bank names (exact, then
-        # contains, then code) -- a fixed menu baked in at shortcut-creation time
-        # would go stale the moment a bank is renamed or added.
-        names_hint = ", ".join(account_names or []) or "no banks configured yet"
-        ask_account, account_uuid = _ask(
-            f"Account (e.g. one of: {names_hint} — leave blank for default)", "Text", "Account", default="",
-        )
-        actions.append(ask_account)
-        json_items.append(_dict_item("account", _var_token(account_uuid, "Account")))
+        if account_names:
+            # A real picker of the caller's actual banks at the time this shortcut
+            # was generated. This does go stale if a bank is renamed/added later
+            # (unlike the fixed Expense/Income menu above) -- re-download the
+            # shortcut after changing banks to refresh the list. If no banks are
+            # configured yet, falls back to free text below instead of building a
+            # menu with zero items.
+            actions += _choose_from_menu("Which account?", list(account_names), "Account")
+            json_items.append(_dict_item("account", _named_var_token("Account")))
+        else:
+            ask_account, account_uuid = _ask(
+                "Account (no banks configured yet — leave blank for default)", "Text", "Account", default="",
+            )
+            actions.append(ask_account)
+            json_items.append(_dict_item("account", _var_token(account_uuid, "Account")))
 
     # Get Contents of URL — POST JSON with the API-key header.
     actions.append({
