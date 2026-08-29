@@ -27,6 +27,7 @@ const INITIAL_FILTERS = {
   categoryNames: [],
   labelIds: [],
   recordTypes: [],
+  paymentTypes: [],
   amountMin: null,
   amountMax: null,
   confirmationStatus: 'all',
