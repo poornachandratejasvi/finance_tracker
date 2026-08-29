@@ -184,7 +184,16 @@ function Transactions() {
       setTransactions(res.items || []);
       setTotal(res.total || 0);
     } catch (err) {
-      setError('Failed to load transactions');
+      // Surface the real cause instead of a generic message -- a timeout, a
+      // network drop, and a genuine server error all look identical otherwise,
+      // making an intermittent failure impossible to diagnose from the UI alone.
+      const detail = err?.response?.data?.detail;
+      const reason = typeof detail === 'string'
+        ? detail
+        : err?.response
+          ? `Server returned ${err.response.status}`
+          : err?.message || 'Network error — check your connection and try Refresh.';
+      setError(`Failed to load transactions: ${reason}`);
       console.error(err);
     } finally {
       setLoading(false);

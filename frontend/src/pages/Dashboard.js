@@ -555,7 +555,10 @@ function Dashboard() {
                     </ResponsiveContainer>
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <Box sx={{ maxHeight: 240, overflowY: 'auto' }}>
+                    {/* No maxHeight/scroll clipping here -- a fixed-height scroll box
+                        cut the last row off mid-line whenever more categories existed
+                        than fit in 240px. Let it grow to fit every category in full. */}
+                    <Box>
                       {donutData.map((d, i) => (
                         <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
                           <CategoryIcon name={d.name} size={24} />
