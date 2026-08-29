@@ -448,7 +448,11 @@ const ModernDashboard = () => {
     if (!balance) return null;
     const series = balance.series || [];
     const up = (balance.net_change || 0) >= 0;
-    const accountTotal = banks.reduce((s, bk) => s + signedAccountBalance(bk), 0);
+    // bank_type='investment' rows exist only so CAS/PPF statement emails can be
+    // auto-downloaded (see the Add Bank form) -- they're not real balance-bearing
+    // accounts, so they're excluded here, same as the main Dashboard's Accounts widget.
+    const visibleBanks = banks.filter((bk) => bk.bank_type !== 'investment');
+    const accountTotal = visibleBanks.reduce((s, bk) => s + signedAccountBalance(bk), 0);
     return (
       <Box>
         <Stack direction="row" spacing={4} alignItems="baseline" flexWrap="wrap" sx={{ mb: 2 }}>
@@ -484,7 +488,7 @@ const ModernDashboard = () => {
         <Divider sx={{ my: 2 }} />
         <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Accounts</Typography>
         <Box>
-          {banks.map((bk) => {
+          {visibleBanks.map((bk) => {
             const signed = signedAccountBalance(bk);
             return (
               <Box key={bk.id} display="flex" alignItems="center" justifyContent="space-between" sx={{ py: 0.75, borderBottom: `1px solid ${theme.palette.divider}` }}>
@@ -500,10 +504,10 @@ const ModernDashboard = () => {
               </Box>
             );
           })}
-          {banks.length === 0 && (
+          {visibleBanks.length === 0 && (
             <Typography variant="body2" color="text.secondary">No accounts to display.</Typography>
           )}
-          {banks.length > 0 && (
+          {visibleBanks.length > 0 && (
             <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ pt: 1 }}>
               <Typography variant="subtitle2" fontWeight={700}>Total</Typography>
               <Typography variant="subtitle2" fontWeight={700} sx={{ color: accountTotal < 0 ? 'error.main' : 'text.primary' }}>

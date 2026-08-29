@@ -509,7 +509,7 @@ function Dashboard() {
       <Grid container spacing={3}>
         {/* ── Expenses structure donut ── */}
         <Grid item xs={12} md={7}>
-          <Paper sx={{ p: 3, height: '100%' }}>
+          <Paper sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 1 }}>
               <Typography variant="h6">Expenses Structure</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -532,41 +532,43 @@ function Dashboard() {
             {donutData.length === 0 ? (
               <Typography color="text.secondary" sx={{ py: 4 }}>No expenses this period.</Typography>
             ) : (
-              <Grid container spacing={2} alignItems="center">
-                <Grid item xs={12} sm={6}>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <PieChart>
-                      <Pie
-                        data={donutData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={55}
-                        outerRadius={95}
-                        paddingAngle={2}
-                        stroke="none"
-                      >
-                        {donutData.map((d, i) => <Cell key={i} fill={d.color} />)}
-                      </Pie>
-                      <ReTooltip formatter={(v) => money(v)} contentStyle={tooltipStyle} />
-                    </PieChart>
-                  </ResponsiveContainer>
+              <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center' }}>
+                <Grid container spacing={2} alignItems="center" sx={{ width: '100%' }}>
+                  <Grid item xs={12} sm={6}>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <PieChart>
+                        <Pie
+                          data={donutData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={55}
+                          outerRadius={95}
+                          paddingAngle={2}
+                          stroke="none"
+                        >
+                          {donutData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                        </Pie>
+                        <ReTooltip formatter={(v) => money(v)} contentStyle={tooltipStyle} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Box sx={{ maxHeight: 240, overflowY: 'auto' }}>
+                      {donutData.map((d, i) => (
+                        <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
+                          <CategoryIcon name={d.name} size={24} />
+                          <Typography variant="body2" sx={{ flexGrow: 1 }} noWrap>{d.name}</Typography>
+                          <Typography variant="body2" fontWeight={600} sx={{ whiteSpace: 'nowrap' }}>
+                            {money(d.value)}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  </Grid>
                 </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Box sx={{ maxHeight: 240, overflowY: 'auto' }}>
-                    {donutData.map((d, i) => (
-                      <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
-                        <CategoryIcon name={d.name} size={24} />
-                        <Typography variant="body2" sx={{ flexGrow: 1 }} noWrap>{d.name}</Typography>
-                        <Typography variant="body2" fontWeight={600} sx={{ whiteSpace: 'nowrap' }}>
-                          {money(d.value)}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                </Grid>
-              </Grid>
+              </Box>
             )}
           </Paper>
         </Grid>
