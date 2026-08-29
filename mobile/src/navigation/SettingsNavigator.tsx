@@ -38,6 +38,7 @@ import DebtPayoffScreen from "../screens/settings/DebtPayoffScreen";
 import JobsScreen from "../screens/settings/JobsScreen";
 import AutomationScreen from "../screens/settings/AutomationScreen";
 import AskAiScreen from "../screens/settings/AskAiScreen";
+import RecycleBinScreen from "../screens/settings/RecycleBinScreen";
 import { Category, Label, AutoRule, NotificationRule, Currency, Template, AdminUser, Goal, Vehicle } from "../types";
 
 export type SettingsStackParamList = {
@@ -78,6 +79,7 @@ export type SettingsStackParamList = {
   Jobs: undefined;
   Automation: undefined;
   AskAi: undefined;
+  RecycleBin: undefined;
 };
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>();
@@ -134,6 +136,7 @@ export default function SettingsNavigator() {
       <Stack.Screen name="Jobs" component={JobsScreen} options={{ title: "Jobs" }} />
       <Stack.Screen name="Automation" component={AutomationScreen} options={{ title: "Automation" }} />
       <Stack.Screen name="AskAi" component={AskAiScreen} options={{ title: "Ask AI" }} />
+      <Stack.Screen name="RecycleBin" component={RecycleBinScreen} options={{ title: "Recycle Bin" }} />
     </Stack.Navigator>
   );
 }

@@ -61,3 +61,23 @@ export async function deleteTransaction(id: number): Promise<void> {
 export async function confirmTransaction(id: number): Promise<void> {
   await api.post("/api/transactions/bulk-confirm", { transaction_ids: [id] });
 }
+
+export interface RecycleBinItem extends Transaction {
+  deleted_at: string;
+  purge_at: string;
+}
+
+export async function listRecycleBin(): Promise<RecycleBinItem[]> {
+  const { data } = await api.get<RecycleBinItem[]>("/api/transactions/recycle-bin");
+  return data;
+}
+
+export async function restoreTransactions(ids: (number | string)[]): Promise<{ restored: number }> {
+  const { data } = await api.post("/api/transactions/recycle-bin/restore", { transaction_ids: ids });
+  return data;
+}
+
+export async function purgeTransactions(ids: (number | string)[]): Promise<{ purged: number }> {
+  const { data } = await api.post("/api/transactions/recycle-bin/purge", { transaction_ids: ids });
+  return data;
+}

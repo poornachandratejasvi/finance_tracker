@@ -179,6 +179,8 @@ def _ensure_columns() -> None:
         # Round-up savings: marks a debit transaction as already counted into a
         # goal's round-up total, so re-running the sweep never double-counts it.
         _add_column_if_missing(columns, "roundup_swept", "ALTER TABLE transactions ADD COLUMN roundup_swept BOOLEAN DEFAULT FALSE")
+        # Recycle bin: NULL = not deleted; set on delete, cleared on restore, hard-purged after 30 days.
+        _add_column_if_missing(columns, "deleted_at", "ALTER TABLE transactions ADD COLUMN deleted_at TIMESTAMP")
 
     if "savings_goals" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("savings_goals")}

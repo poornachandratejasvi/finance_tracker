@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.core.database import get_db
 from app.core.time_utils import utcnow
@@ -538,6 +538,86 @@ def get_audit_log(
     ]
 
 
+@router.get("/recycle-bin")
+def list_recycle_bin(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """List soft-deleted transactions still within their 30-day grace period."""
+    items = (
+        db.query(Transaction)
+        .execution_options(include_deleted=True)
+        .filter(
+            Transaction.user_id.in_(visible_user_ids(db, current_user)),
+            Transaction.deleted_at.isnot(None),
+        )
+        .order_by(desc(Transaction.deleted_at))
+        .all()
+    )
+    result = []
+    for t in items:
+        trans_dict = TransactionResponse.from_orm(t).dict()
+        trans_dict['bank_name'] = t.bank.name if t.bank else None
+        trans_dict['bank_type'] = t.bank.bank_type if t.bank else None
+        trans_dict['labels'] = [tl.label.name for tl in t.transaction_labels]
+        trans_dict['deleted_at'] = t.deleted_at
+        trans_dict['purge_at'] = t.deleted_at + timedelta(days=30)
+        result.append(trans_dict)
+    return result
+
+
+@router.post("/recycle-bin/restore")
+def restore_transactions(
+    payload: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_write_access),
+):
+    """Restore soft-deleted transactions out of the Recycle Bin."""
+    ids = payload.transaction_ids or []
+    if not ids:
+        return {"restored": 0}
+    matched = (
+        db.query(Transaction)
+        .execution_options(include_deleted=True)
+        .filter(
+            Transaction.user_id.in_(visible_user_ids(db, current_user)),
+            Transaction.id.in_(ids),
+            Transaction.deleted_at.isnot(None),
+        )
+        .all()
+    )
+    for t in matched:
+        t.deleted_at = None
+    db.commit()
+    return {"restored": len(matched)}
+
+
+@router.post("/recycle-bin/purge")
+def purge_transactions(
+    payload: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_write_access),
+):
+    """Permanently delete transactions already sitting in the Recycle Bin."""
+    ids = payload.transaction_ids or []
+    if not ids:
+        return {"purged": 0}
+    matched = (
+        db.query(Transaction)
+        .execution_options(include_deleted=True)
+        .filter(
+            Transaction.user_id.in_(visible_user_ids(db, current_user)),
+            Transaction.id.in_(ids),
+            Transaction.deleted_at.isnot(None),
+        )
+        .all()
+    )
+    for t in matched:
+        db.delete(t)
+    db.commit()
+    return {"purged": len(matched)}
+
+
 @router.get("/{transaction_id}", response_model=TransactionResponse)
 def get_transaction(
     transaction_id: int,
@@ -599,22 +679,22 @@ def delete_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access)
 ):
-    """Delete transaction"""
+    """Soft-delete a transaction into the Recycle Bin (see /recycle-bin)."""
     transaction = db.query(Transaction).filter(
         and_(
             Transaction.id == transaction_id,
             Transaction.user_id.in_(visible_user_ids(db, current_user))
         )
     ).first()
-    
+
     if not transaction:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Transaction not found"
         )
-    
+
     audit_service.record_delete(db, transaction)
-    db.delete(transaction)
+    transaction.deleted_at = utcnow()
     db.commit()
 
     return None
@@ -626,7 +706,7 @@ def bulk_delete_transactions(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_write_access)
 ):
-    """Delete many transactions at once (scoped to the current user)."""
+    """Soft-delete many transactions at once into the Recycle Bin (scoped to the current user)."""
     ids = payload.transaction_ids or []
     if not ids:
         return {"deleted": 0}
@@ -635,9 +715,10 @@ def bulk_delete_transactions(
         .filter(Transaction.user_id.in_(visible_user_ids(db, current_user)), Transaction.id.in_(ids))
         .all()
     )
+    now = utcnow()
     for t in matched:
         audit_service.record_delete(db, t)
-        db.delete(t)
+        t.deleted_at = now
     db.commit()
     return {"deleted": len(matched)}
 

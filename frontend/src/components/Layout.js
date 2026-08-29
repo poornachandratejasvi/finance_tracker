@@ -41,6 +41,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import GroupsIcon from '@mui/icons-material/Groups';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import PaymentsIcon from '@mui/icons-material/Payments';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import GlobalSearch from './GlobalSearch.jsx';
 
 const DRAWER_WIDTH = 236;
@@ -72,6 +73,7 @@ const NAV_GROUPS = [
     { label: 'Automation', path: '/automation', icon: <SmartToyIcon /> },
     { label: 'Field Mapping', path: '/field-mapping', icon: <TuneIcon /> },
     { label: 'API Access', path: '/api-access', icon: <KeyIcon /> },
+    { label: 'Recycle Bin', path: '/recycle-bin', icon: <DeleteSweepIcon /> },
     { label: 'Settings', path: '/settings', icon: <SettingsIcon /> },
   ] },
 ];

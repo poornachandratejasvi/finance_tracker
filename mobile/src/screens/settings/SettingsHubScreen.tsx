@@ -32,6 +32,7 @@ const TOOLS_ROWS: Row[] = [
   { key: "Jobs", label: "Jobs", icon: "🔄" },
   { key: "Automation", label: "Automation", icon: "🤖" },
   { key: "AskAi", label: "Ask AI", icon: "💬" },
+  { key: "RecycleBin", label: "Recycle Bin", icon: "🗑️" },
 ];
 
 const GENERAL_ROWS: Row[] = [

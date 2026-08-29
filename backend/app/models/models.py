@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Float, Index, Enum as SQLEnum
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Float, Index, Enum as SQLEnum, event
+from sqlalchemy.orm import relationship, Session as OrmSession, with_loader_criteria
 import enum
 from app.core.database import Base
 from app.core.crypto import EncryptedText
@@ -245,6 +245,13 @@ class Transaction(Base):
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
+    # Soft-delete: set instead of removing the row, so a deleted transaction can sit in a
+    # Recycle Bin and be restored. NULL == not deleted. A daily task hard-deletes anything
+    # older than 30 days (see app.tasks.recycle_bin_tasks). Every ordinary query is
+    # automatically filtered to exclude these rows (see the do_orm_execute listener below)
+    # -- only the recycle-bin endpoints opt back in via execution_options(include_deleted=True).
+    deleted_at = Column(DateTime, nullable=True, index=True)
+
     # Relationships
     user = relationship("User", back_populates="transactions")
     bank = relationship("Bank", back_populates="transactions")
@@ -256,6 +263,25 @@ class Transaction(Base):
         Index("ix_transactions_user_date", "user_id", "transaction_date"),
         Index("ix_transactions_user_bank", "user_id", "bank_id"),
     )
+
+
+@event.listens_for(OrmSession, "do_orm_execute")
+def _exclude_soft_deleted_transactions(execute_state):
+    """Global soft-delete filter (SQLAlchemy's documented recipe): every ORM
+    select/update/delete against Transaction is transparently scoped to
+    deleted_at IS NULL, without touching the ~50 call sites that query it.
+    Pass execution_options(include_deleted=True) on a query to see deleted rows
+    (used only by the recycle-bin endpoints)."""
+    if execute_state.execution_options.get("include_deleted", False):
+        return
+    if execute_state.is_select or execute_state.is_update or execute_state.is_delete:
+        execute_state.statement = execute_state.statement.options(
+            with_loader_criteria(
+                Transaction,
+                lambda cls: cls.deleted_at.is_(None),
+                include_aliases=True,
+            )
+        )
 
 
 class Label(Base):

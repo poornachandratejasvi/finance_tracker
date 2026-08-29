@@ -168,6 +168,15 @@ export const bulkDeleteTransactions = async (ids) =>
 export const bulkConfirmTransactions = async (ids) =>
   (await api.post('/api/transactions/bulk-confirm', { transaction_ids: ids })).data;
 
+export const getRecycleBin = async () =>
+  (await api.get('/api/transactions/recycle-bin')).data;
+
+export const restoreTransactions = async (ids) =>
+  (await api.post('/api/transactions/recycle-bin/restore', { transaction_ids: ids })).data;
+
+export const purgeTransactions = async (ids) =>
+  (await api.post('/api/transactions/recycle-bin/purge', { transaction_ids: ids })).data;
+
 export const getDuplicates = async () => {
   const response = await api.get('/api/transactions/duplicates');
   return response.data;

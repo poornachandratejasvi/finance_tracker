@@ -14,6 +14,7 @@ import Dashboard from './pages/Dashboard.js';
 import Transactions from './pages/Transactions';
 import Banks from './pages/Banks';
 import Settings from './pages/Settings';
+import RecycleBin from './pages/RecycleBin';
 import PDFManagement from './pages/PDFManagement';
 import FieldMapping from './pages/FieldMapping.jsx';
 import CsvExports from './pages/CsvExports.jsx';
@@ -47,6 +48,7 @@ function App() {
                 <Route path="/banks" element={<ProtectedRoute><Layout><Banks /></Layout></ProtectedRoute>} />
                 <Route path="/bank-statements" element={<ProtectedRoute><Layout><BankStatements /></Layout></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
+                <Route path="/recycle-bin" element={<ProtectedRoute><Layout><RecycleBin /></Layout></ProtectedRoute>} />
                 <Route path="/pdfs" element={<ProtectedRoute><Layout><PDFManagement /></Layout></ProtectedRoute>} />
                 <Route path="/analytics" element={<ProtectedRoute><Layout><ModernDashboard /></Layout></ProtectedRoute>} />
                 <Route path="/field-mapping" element={<ProtectedRoute><Layout><FieldMapping /></Layout></ProtectedRoute>} />
