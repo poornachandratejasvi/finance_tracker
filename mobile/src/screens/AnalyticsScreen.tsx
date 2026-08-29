@@ -9,9 +9,13 @@ import {
   View,
 } from "react-native";
 
+import { Ionicons } from "@expo/vector-icons";
+
 import { fetchBalanceTrend, fetchCashflow, fetchComparison } from "../api/analytics";
+import { fetchDashboardSummary } from "../api/dashboard";
+import { getPredictions } from "../api/ai";
 import { useTheme, ThemeColors } from "../context/ThemeContext";
-import { AnalyticsComparison, BalanceTrendResponse, CashflowResponse } from "../types";
+import { AnalyticsComparison, BalanceTrendResponse, CashflowResponse, DashboardSummary } from "../types";
 import { formatCurrency } from "../utils/format";
 
 const CHART_HEIGHT = 110;
@@ -37,6 +41,8 @@ export default function AnalyticsScreen() {
   const [cashflow, setCashflow] = useState<CashflowResponse | null>(null);
   const [balanceTrend, setBalanceTrend] = useState<BalanceTrendResponse | null>(null);
   const [comparison, setComparison] = useState<AnalyticsComparison | null>(null);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [outlook, setOutlook] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,14 +57,18 @@ export default function AnalyticsScreen() {
       const lastMonthStart = isoDate(monthStart(-1));
       const lastMonthEnd = isoDate(monthStart(0));
 
-      const [cf, bt, cmp] = await Promise.all([
+      const [cf, bt, cmp, sm, pred] = await Promise.all([
         fetchCashflow(rangeStart, rangeEnd, "month"),
         fetchBalanceTrend(rangeStart, rangeEnd, "month"),
         fetchComparison(thisMonthStart, thisMonthEnd, lastMonthStart, lastMonthEnd),
+        fetchDashboardSummary(),
+        getPredictions(30).catch(() => null),
       ]);
       setCashflow(cf);
       setBalanceTrend(bt);
       setComparison(cmp);
+      setSummary(sm);
+      setOutlook(pred ? pred.expected_expense - pred.expected_income : null);
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Couldn't load analytics.");
     }
@@ -97,13 +107,55 @@ export default function AnalyticsScreen() {
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 6);
 
+  const incomeA = comparison?.period_a.income_total ?? 0;
+  const incomeB = comparison?.period_b.income_total ?? 0;
+  const incomeChangePct = incomeB > 0 ? Math.round(((incomeA - incomeB) / incomeB) * 100) : null;
+  const cashflowNet = cashflow?.totals.net ?? 0;
+
+  const metrics: Array<{ key: string; label: string; value: string; icon: keyof typeof Ionicons.glyphMap; color: string; badge?: string }> = [
+    { key: "balance", label: "Balance", value: formatCurrency(balanceTrend?.ending_balance ?? 0), icon: "analytics-outline", color: "#1565c0" },
+    { key: "spending", label: "Spending", value: formatCurrency(cashflow?.totals.expense ?? 0), icon: "pie-chart-outline", color: "#c62828" },
+    { key: "cashflow", label: "Cash Flow", value: formatCurrency(cashflowNet), icon: "swap-vertical-outline", color: cashflowNet >= 0 ? "#2e7d32" : "#c62828" },
+    { key: "outlook", label: "Outlook (30d)", value: outlook != null ? formatCurrency(outlook) : "—", icon: "time-outline", color: "#757575" },
+    { key: "credit", label: "Credit", value: formatCurrency(summary?.balances.credit_total ?? 0), icon: "card-outline", color: "#c62828" },
+    {
+      key: "income",
+      label: "Income vs last period",
+      value: formatCurrency(incomeA),
+      icon: "trending-up-outline",
+      color: "#2e7d32",
+      badge: incomeChangePct != null ? `${incomeChangePct >= 0 ? "+" : ""}${incomeChangePct}%` : undefined,
+    },
+  ];
+
   return (
     <ScrollView
       contentContainerStyle={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      <Text style={styles.title}>Last 6 months</Text>
+      <Text style={styles.title}>Statistics</Text>
       {error && <Text style={styles.error}>{error}</Text>}
+
+      <View style={styles.metricGrid}>
+        {metrics.map((m) => (
+          <View key={m.key} style={styles.metricCard}>
+            <View style={styles.metricTop}>
+              <Text style={styles.metricLabel} numberOfLines={1}>{m.label}</Text>
+              <View style={[styles.metricIcon, { backgroundColor: m.color }]}>
+                <Ionicons name={m.icon} size={14} color="#fff" />
+              </View>
+            </View>
+            <Text style={styles.metricValue} numberOfLines={1}>{m.value}</Text>
+            {m.badge && (
+              <Text style={[styles.metricBadge, { color: m.badge.startsWith("-") ? colors.danger : colors.primary }]}>
+                {m.badge} vs previous
+              </Text>
+            )}
+          </View>
+        ))}
+      </View>
+
+      <Text style={styles.title}>Last 6 months</Text>
 
       {cashflow && (
         <View style={styles.card}>
@@ -223,4 +275,11 @@ const makeStyles = (c: ThemeColors) =>
     },
     listLabel: { fontSize: 14, color: c.text },
     listValue: { fontSize: 14, fontWeight: "600", color: c.text },
+    metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 },
+    metricCard: { width: "47%", backgroundColor: c.card, borderRadius: 12, padding: 12 },
+    metricTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
+    metricLabel: { fontSize: 11, color: c.textSecondary, textTransform: "uppercase", fontWeight: "600", flexShrink: 1 },
+    metricIcon: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center" },
+    metricValue: { fontSize: 17, fontWeight: "700", color: c.text },
+    metricBadge: { fontSize: 11, fontWeight: "600", marginTop: 4 },
   });
