@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -23,7 +24,13 @@ import { todayIsoDate } from "../utils/format";
 import { getCachedBanks, getCachedCategories, upsertTransactions } from "../offline/db";
 import { queueOfflineTransaction } from "../offline/syncEngine";
 import { useOffline } from "../offline/OfflineProvider";
-import { TabParamList } from "../navigation/RootNavigator";
+import { RootStackParamList } from "../navigation/RootNavigator";
+import TypeSegmentedControl, { TxnMode } from "../components/TypeSegmentedControl";
+import { FormGroup, FormSectionHeader } from "../components/FormGroup";
+import { PickerRow } from "../components/PickerRow";
+import NumericKeypad from "../components/NumericKeypad";
+import SelectModal from "../components/SelectModal";
+import TextPromptModal from "../components/TextPromptModal";
 
 export interface ReceiptPrefill {
   amount?: number;
@@ -54,7 +61,7 @@ function formatReceiptNotes(items?: { name: string; amount: number }[], tax?: nu
   return parts.join("\n");
 }
 
-type AddRouteProp = RouteProp<TabParamList, "Add">;
+type AddRouteProp = RouteProp<RootStackParamList, "Add">;
 
 export default function AddTransactionScreen() {
   const { colors } = useTheme();
@@ -67,7 +74,7 @@ export default function AddTransactionScreen() {
 
   const [bankId, setBankId] = useState<number | null>(null);
   const [category, setCategory] = useState<string | null>(null);
-  const [mode, setMode] = useState<"expense" | "income" | "transfer">("expense");
+  const [mode, setMode] = useState<TxnMode>("expense");
   const type: TransactionType = mode === "income" ? "credit" : "debit";
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
@@ -78,6 +85,14 @@ export default function AddTransactionScreen() {
   const [quickText, setQuickText] = useState("");
   const [quickParsing, setQuickParsing] = useState(false);
   const { isOnline } = useOffline();
+
+  const [showKeypad, setShowKeypad] = useState(true);
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [dateModalOpen, setDateModalOpen] = useState(false);
+  const [dateDraft, setDateDraft] = useState(date);
+  const [fromAccountModalOpen, setFromAccountModalOpen] = useState(false);
+  const [fromAccountDraft, setFromAccountDraft] = useState("");
 
   const onQuickAdd = async () => {
     const text = quickText.trim();
@@ -145,6 +160,7 @@ export default function AddTransactionScreen() {
     setNotes("");
     setDate(todayIsoDate());
     setFromAccount("");
+    setShowKeypad(true);
   };
 
   const onSubmit = async () => {
@@ -203,6 +219,12 @@ export default function AddTransactionScreen() {
     }
   };
 
+  const onDigit = (d: string) => setAmount((prev) => (prev === "0" ? d : prev + d));
+  const onDecimal = () => setAmount((prev) => (prev.includes(".") ? prev : `${prev || "0"}.`));
+  const onBackspace = () => setAmount((prev) => prev.slice(0, -1));
+
+  const selectedBank = banks.find((b) => b.id === bankId);
+
   if (loadingOptions) {
     return (
       <View style={styles.center}>
@@ -212,10 +234,7 @@ export default function AddTransactionScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.label}>Quick Add with AI</Text>
         <View style={styles.quickAddRow}>
@@ -226,6 +245,7 @@ export default function AddTransactionScreen() {
             placeholder="e.g. Spent 450 on coffee at Starbucks yesterday"
             placeholderTextColor={colors.textSecondary}
             editable={!quickParsing}
+            onFocus={() => setShowKeypad(false)}
             onSubmitEditing={onQuickAdd}
           />
           <TouchableOpacity
@@ -237,85 +257,96 @@ export default function AddTransactionScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.segmentRow}>
-          <Segment label="Expense" active={mode === "expense"} onPress={() => setMode("expense")} />
-          <Segment label="Income" active={mode === "income"} onPress={() => setMode("income")} />
-          <Segment
-            label="Transfer"
-            active={mode === "transfer"}
-            onPress={() => {
-              setMode("transfer");
-              if (!category) setCategory("Transfer");
+        <View style={{ marginTop: 18 }}>
+          <TypeSegmentedControl
+            mode={mode}
+            onChange={(m) => {
+              setMode(m);
+              if (m === "transfer" && !category) setCategory("Transfer");
             }}
           />
         </View>
 
-        <Text style={styles.label}>Amount</Text>
-        <TextInput
-          style={styles.input}
-          value={amount}
-          onChangeText={setAmount}
-          placeholder="0.00"
-          placeholderTextColor={colors.textSecondary}
-          keyboardType="decimal-pad"
-        />
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.amountCard}
+          onPress={() => {
+            Keyboard.dismiss();
+            setShowKeypad(true);
+          }}
+        >
+          <Text style={styles.currencyTag}>INR</Text>
+          <Text style={[styles.amountText, { color: mode === "income" ? colors.primary : colors.danger }]}>
+            {mode === "income" ? "+" : "-"}
+            {amount || "0"}
+          </Text>
+        </TouchableOpacity>
 
-        <Text style={styles.label}>Description</Text>
         <TextInput
-          style={styles.input}
+          style={styles.descriptionInput}
           value={description}
           onChangeText={setDescription}
-          placeholder="e.g. Swiggy dinner"
+          placeholder="Description (e.g. Swiggy dinner)"
           placeholderTextColor={colors.textSecondary}
+          onFocus={() => setShowKeypad(false)}
         />
 
-        <Text style={styles.label}>Account</Text>
-        {banks.length === 0 ? (
-          <Text style={styles.hint}>No accounts found on the server yet.</Text>
-        ) : (
-          <ChipRow
-            options={banks.map((b) => ({ key: b.id, label: b.name }))}
-            selected={bankId}
-            onSelect={(k) => setBankId(k as number)}
+        <FormSectionHeader title="General" />
+        <FormGroup>
+          <PickerRow
+            icon="card-outline"
+            label="Account"
+            value={selectedBank?.name}
+            required
+            onPress={() => {
+              Keyboard.dismiss();
+              setAccountModalOpen(true);
+            }}
           />
-        )}
-
-        {mode === "transfer" && (
-          <>
-            <Text style={styles.label}>From Account (optional)</Text>
-            <TextInput
-              style={styles.input}
-              value={fromAccount}
-              onChangeText={setFromAccount}
-              placeholder="e.g. Savings Account"
-              placeholderTextColor={colors.textSecondary}
+          <PickerRow
+            icon="pricetag-outline"
+            label="Category"
+            value={category}
+            placeholder="Auto-detect"
+            onPress={() => {
+              Keyboard.dismiss();
+              setCategoryModalOpen(true);
+            }}
+          />
+          <PickerRow
+            icon="calendar-outline"
+            label="Date & Time"
+            value={date}
+            onPress={() => {
+              Keyboard.dismiss();
+              setDateDraft(date);
+              setDateModalOpen(true);
+            }}
+          />
+          {mode === "transfer" && (
+            <PickerRow
+              icon="swap-horizontal-outline"
+              label="From Account"
+              value={fromAccount || null}
+              placeholder="Optional"
+              onPress={() => {
+                Keyboard.dismiss();
+                setFromAccountDraft(fromAccount);
+                setFromAccountModalOpen(true);
+              }}
             />
-          </>
-        )}
+          )}
+        </FormGroup>
 
-        <Text style={styles.label}>Category (optional — auto-detected if left blank)</Text>
-        <ChipRow
-          options={categories.map((c) => ({ key: c.name, label: c.name }))}
-          selected={category}
-          onSelect={(k) => setCategory(category === k ? null : (k as string))}
-        />
-
-        <Text style={styles.label}>Date</Text>
-        <TextInput
-          style={styles.input}
-          value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={colors.textSecondary}
-          autoCapitalize="none"
-        />
-
-        <Text style={styles.label}>Notes (optional)</Text>
+        <FormSectionHeader title="More detail" />
         <TextInput
           style={[styles.input, styles.multiline]}
           value={notes}
           onChangeText={setNotes}
+          placeholder="Notes (optional)"
+          placeholderTextColor={colors.textSecondary}
           multiline
+          onFocus={() => setShowKeypad(false)}
         />
 
         <TouchableOpacity
@@ -323,64 +354,49 @@ export default function AddTransactionScreen() {
           onPress={onSubmit}
           disabled={submitting}
         >
-          {submitting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Save Transaction</Text>
-          )}
+          {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save Transaction</Text>}
         </TouchableOpacity>
       </ScrollView>
+
+      {showKeypad && <NumericKeypad onDigit={onDigit} onDecimal={onDecimal} onBackspace={onBackspace} onClear={() => setAmount("")} />}
+
+      <SelectModal
+        visible={accountModalOpen}
+        title="Account"
+        options={banks.map((b) => ({ key: b.id, label: b.name }))}
+        selectedKey={bankId}
+        onSelect={(k) => setBankId(k as number)}
+        onClose={() => setAccountModalOpen(false)}
+      />
+      <SelectModal
+        visible={categoryModalOpen}
+        title="Category"
+        options={categories.map((c) => ({ key: c.name, label: c.name, color: c.color || undefined }))}
+        selectedKey={category}
+        onSelect={(k) => setCategory(k as string | null)}
+        onClose={() => setCategoryModalOpen(false)}
+        allowClear
+      />
+      <TextPromptModal
+        visible={dateModalOpen}
+        title="Date"
+        value={dateDraft}
+        onChangeValue={setDateDraft}
+        onSave={() => setDate(dateDraft.trim() || todayIsoDate())}
+        onClose={() => setDateModalOpen(false)}
+        placeholder="YYYY-MM-DD"
+        autoCapitalize="none"
+      />
+      <TextPromptModal
+        visible={fromAccountModalOpen}
+        title="From Account"
+        value={fromAccountDraft}
+        onChangeValue={setFromAccountDraft}
+        onSave={() => setFromAccount(fromAccountDraft.trim())}
+        onClose={() => setFromAccountModalOpen(false)}
+        placeholder="e.g. Savings Account"
+      />
     </KeyboardAvoidingView>
-  );
-}
-
-function Segment({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  const { colors } = useTheme();
-  const styles = makeStyles(colors);
-  return (
-    <TouchableOpacity
-      style={[styles.segment, active && styles.segmentActive]}
-      onPress={onPress}
-    >
-      <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function ChipRow({
-  options,
-  selected,
-  onSelect,
-}: {
-  options: Array<{ key: string | number; label: string }>;
-  selected: string | number | null;
-  onSelect: (key: string | number) => void;
-}) {
-  const { colors } = useTheme();
-  const styles = makeStyles(colors);
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-      {options.map((o) => {
-        const active = selected === o.key;
-        return (
-          <TouchableOpacity
-            key={String(o.key)}
-            style={[styles.chip, active && styles.chipActive]}
-            onPress={() => onSelect(o.key)}
-          >
-            <Text style={[styles.chipText, active && styles.chipTextActive]}>{o.label}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
   );
 }
 
@@ -388,8 +404,8 @@ const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     flex: { flex: 1, backgroundColor: c.background },
     center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
-    container: { padding: 16, paddingBottom: 48 },
-    label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 16, marginBottom: 6 },
+    container: { padding: 16, paddingBottom: 24 },
+    label: { fontSize: 13, fontWeight: "600", color: c.text, marginBottom: 6 },
     hint: { fontSize: 12, color: c.textSecondary },
     input: {
       borderWidth: 1,
@@ -401,7 +417,7 @@ const makeStyles = (c: ThemeColors) =>
       paddingVertical: 10,
       fontSize: 16,
     },
-    multiline: { minHeight: 70, textAlignVertical: "top" },
+    multiline: { minHeight: 70, textAlignVertical: "top", marginTop: 4 },
     quickAddRow: { flexDirection: "row", gap: 8, alignItems: "center" },
     quickAddInput: { flex: 1 },
     quickAddButton: {
@@ -412,30 +428,32 @@ const makeStyles = (c: ThemeColors) =>
       alignItems: "center",
       justifyContent: "center",
     },
-    segmentRow: { flexDirection: "row", gap: 8, marginTop: 16 },
-    segment: {
-      flex: 1,
-      paddingVertical: 10,
+    amountCard: { alignItems: "center", paddingVertical: 20 },
+    currencyTag: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.textSecondary,
+      backgroundColor: c.chipBg,
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: 12,
+      marginBottom: 8,
+      overflow: "hidden",
+    },
+    amountText: { fontSize: 44, fontWeight: "700" },
+    descriptionInput: {
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.text,
       borderRadius: 8,
-      alignItems: "center",
-      backgroundColor: c.chipBg,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 15,
+      marginBottom: 4,
     },
-    segmentActive: { backgroundColor: c.primary },
-    segmentText: { fontWeight: "600", color: c.text },
-    segmentTextActive: { color: "#fff" },
-    chipRow: { flexDirection: "row" },
-    chip: {
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 20,
-      backgroundColor: c.chipBg,
-      marginRight: 8,
-    },
-    chipActive: { backgroundColor: c.primary },
-    chipText: { color: c.text, fontSize: 13 },
-    chipTextActive: { color: "#fff", fontWeight: "600" },
     button: {
-      marginTop: 28,
+      marginTop: 24,
       backgroundColor: c.primary,
       borderRadius: 8,
       paddingVertical: 14,

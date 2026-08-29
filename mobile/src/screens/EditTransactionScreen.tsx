@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -22,6 +23,12 @@ import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { Category, Label, TransactionType } from "../types";
 import { getCachedCategories, deleteCachedTransaction, upsertTransactions } from "../offline/db";
 import { RootStackParamList } from "../navigation/RootNavigator";
+import TypeSegmentedControl, { TxnMode } from "../components/TypeSegmentedControl";
+import { FormGroup, FormSectionHeader } from "../components/FormGroup";
+import { PickerRow } from "../components/PickerRow";
+import NumericKeypad from "../components/NumericKeypad";
+import SelectModal from "../components/SelectModal";
+import TextPromptModal from "../components/TextPromptModal";
 
 type EditRouteProp = RouteProp<RootStackParamList, "EditTransaction">;
 
@@ -33,7 +40,7 @@ export default function EditTransactionScreen() {
   const { transaction } = route.params;
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [mode, setMode] = useState<"expense" | "income" | "transfer">(
+  const [mode, setMode] = useState<TxnMode>(
     transaction.category === "Transfer" ? "transfer" : transaction.transaction_type === "credit" ? "income" : "expense"
   );
   const type: TransactionType = mode === "income" ? "credit" : "debit";
@@ -54,6 +61,13 @@ export default function EditTransactionScreen() {
   const [ruleKeywordInput, setRuleKeywordInput] = useState("");
   const [ruleKeywords, setRuleKeywords] = useState<string[]>([]);
   const [ruleSaving, setRuleSaving] = useState(false);
+
+  const [showKeypad, setShowKeypad] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [dateModalOpen, setDateModalOpen] = useState(false);
+  const [dateDraft, setDateDraft] = useState(date);
+  const [fromAccountModalOpen, setFromAccountModalOpen] = useState(false);
+  const [fromAccountDraft, setFromAccountDraft] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -203,66 +217,86 @@ export default function EditTransactionScreen() {
     ]);
   };
 
+  const onDigit = (d: string) => setAmount((prev) => (prev === "0" ? d : prev + d));
+  const onDecimal = () => setAmount((prev) => (prev.includes(".") ? prev : `${prev || "0"}.`));
+  const onBackspace = () => setAmount((prev) => prev.slice(0, -1));
+
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <View style={styles.segmentRow}>
-          <Segment label="Expense" active={mode === "expense"} onPress={() => setMode("expense")} />
-          <Segment label="Income" active={mode === "income"} onPress={() => setMode("income")} />
-          <Segment
-            label="Transfer"
-            active={mode === "transfer"}
-            onPress={() => {
-              setMode("transfer");
-              if (!category) setCategory("Transfer");
-            }}
-          />
-        </View>
-
-        <Text style={styles.label}>Amount</Text>
-        <TextInput
-          style={styles.input}
-          value={amount}
-          onChangeText={setAmount}
-          placeholder="0.00"
-          placeholderTextColor={colors.textSecondary}
-          keyboardType="decimal-pad"
+        <TypeSegmentedControl
+          mode={mode}
+          onChange={(m) => {
+            setMode(m);
+            if (m === "transfer" && !category) setCategory("Transfer");
+          }}
         />
 
-        <Text style={styles.label}>Description</Text>
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.amountCard}
+          onPress={() => {
+            Keyboard.dismiss();
+            setShowKeypad(true);
+          }}
+        >
+          <Text style={styles.currencyTag}>Amount</Text>
+          <Text style={[styles.amountText, { color: mode === "income" ? colors.primary : colors.danger }]}>
+            {mode === "income" ? "+" : "-"}
+            {amount || "0"}
+          </Text>
+        </TouchableOpacity>
+
         <TextInput
-          style={styles.input}
+          style={styles.descriptionInput}
           value={description}
           onChangeText={setDescription}
+          placeholder="Description"
           placeholderTextColor={colors.textSecondary}
+          onFocus={() => setShowKeypad(false)}
         />
 
-        <Text style={styles.label}>Account</Text>
-        <Text style={styles.hint}>{transaction.bank_name || "External"} (can't be changed here)</Text>
-
-        {mode === "transfer" && (
-          <>
-            <Text style={styles.label}>From Account (optional)</Text>
-            <TextInput
-              style={styles.input}
-              value={fromAccount}
-              onChangeText={setFromAccount}
-              placeholder="e.g. Savings Account"
-              placeholderTextColor={colors.textSecondary}
+        <FormSectionHeader title="General" />
+        <FormGroup>
+          <PickerRow icon="card-outline" label="Account" value={transaction.bank_name || "External"} />
+          <PickerRow
+            icon="pricetag-outline"
+            label="Category"
+            value={category}
+            placeholder="Auto-detect"
+            onPress={() => {
+              Keyboard.dismiss();
+              setCategoryModalOpen(true);
+            }}
+          />
+          <PickerRow
+            icon="calendar-outline"
+            label="Date & Time"
+            value={date}
+            onPress={() => {
+              Keyboard.dismiss();
+              setDateDraft(date);
+              setDateModalOpen(true);
+            }}
+          />
+          {mode === "transfer" && (
+            <PickerRow
+              icon="swap-horizontal-outline"
+              label="From Account"
+              value={fromAccount || null}
+              placeholder="Optional"
+              onPress={() => {
+                Keyboard.dismiss();
+                setFromAccountDraft(fromAccount);
+                setFromAccountModalOpen(true);
+              }}
             />
-          </>
-        )}
-
-        <Text style={styles.label}>Category</Text>
-        <ChipRow
-          options={categories.map((c) => ({ key: c.name, label: c.name }))}
-          selected={category}
-          onSelect={(k) => setCategory(category === k ? null : (k as string))}
-        />
+          )}
+        </FormGroup>
 
         {labels.length > 0 && (
           <>
-            <Text style={styles.label}>Labels</Text>
+            <FormSectionHeader title="Labels" />
             <View style={styles.labelWrap}>
               {labels.map((l) => {
                 const active = selectedLabelIds.includes(l.id);
@@ -280,22 +314,15 @@ export default function EditTransactionScreen() {
           </>
         )}
 
-        <Text style={styles.label}>Date</Text>
-        <TextInput
-          style={styles.input}
-          value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={colors.textSecondary}
-          autoCapitalize="none"
-        />
-
-        <Text style={styles.label}>Notes</Text>
+        <FormSectionHeader title="More detail" />
         <TextInput
           style={[styles.input, styles.multiline]}
           value={notes}
           onChangeText={setNotes}
+          placeholder="Notes (optional)"
+          placeholderTextColor={colors.textSecondary}
           multiline
+          onFocus={() => setShowKeypad(false)}
         />
 
         <TouchableOpacity style={styles.ruleButton} onPress={openRuleDialog}>
@@ -310,6 +337,37 @@ export default function EditTransactionScreen() {
           {deleting ? <ActivityIndicator color={colors.danger} /> : <Text style={styles.deleteButtonText}>Delete Transaction</Text>}
         </TouchableOpacity>
       </ScrollView>
+
+      {showKeypad && <NumericKeypad onDigit={onDigit} onDecimal={onDecimal} onBackspace={onBackspace} onClear={() => setAmount("")} />}
+
+      <SelectModal
+        visible={categoryModalOpen}
+        title="Category"
+        options={categories.map((c) => ({ key: c.name, label: c.name, color: c.color || undefined }))}
+        selectedKey={category}
+        onSelect={(k) => setCategory(k as string | null)}
+        onClose={() => setCategoryModalOpen(false)}
+        allowClear
+      />
+      <TextPromptModal
+        visible={dateModalOpen}
+        title="Date"
+        value={dateDraft}
+        onChangeValue={setDateDraft}
+        onSave={() => setDate(dateDraft.trim() || date)}
+        onClose={() => setDateModalOpen(false)}
+        placeholder="YYYY-MM-DD"
+        autoCapitalize="none"
+      />
+      <TextPromptModal
+        visible={fromAccountModalOpen}
+        title="From Account"
+        value={fromAccountDraft}
+        onChangeValue={setFromAccountDraft}
+        onSave={() => setFromAccount(fromAccountDraft.trim())}
+        onClose={() => setFromAccountModalOpen(false)}
+        placeholder="e.g. Savings Account"
+      />
 
       <Modal visible={ruleOpen} animationType="slide" transparent onRequestClose={() => setRuleOpen(false)}>
         <View style={styles.modalBackdrop}>
@@ -362,45 +420,10 @@ export default function EditTransactionScreen() {
   );
 }
 
-function Segment({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  const { colors } = useTheme();
-  const styles = makeStyles(colors);
-  return (
-    <TouchableOpacity style={[styles.segment, active && styles.segmentActive]} onPress={onPress}>
-      <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function ChipRow({
-  options,
-  selected,
-  onSelect,
-}: {
-  options: Array<{ key: string | number; label: string }>;
-  selected: string | number | null;
-  onSelect: (key: string | number) => void;
-}) {
-  const { colors } = useTheme();
-  const styles = makeStyles(colors);
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-      {options.map((o) => {
-        const active = selected === o.key;
-        return (
-          <TouchableOpacity key={String(o.key)} style={[styles.chip, active && styles.chipActive]} onPress={() => onSelect(o.key)}>
-            <Text style={[styles.chipText, active && styles.chipTextActive]}>{o.label}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
-  );
-}
-
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     flex: { flex: 1, backgroundColor: c.background },
-    container: { padding: 16, paddingBottom: 48 },
+    container: { padding: 16, paddingBottom: 24 },
     label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 16, marginBottom: 6 },
     hint: { fontSize: 13, color: c.textSecondary, paddingVertical: 8 },
     input: {
@@ -414,14 +437,31 @@ const makeStyles = (c: ThemeColors) =>
       fontSize: 16,
     },
     multiline: { minHeight: 70, textAlignVertical: "top" },
-    segmentRow: { flexDirection: "row", gap: 8, marginTop: 4 },
-    segment: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: "center", backgroundColor: c.chipBg },
-    segmentActive: { backgroundColor: c.primary },
-    segmentText: { fontWeight: "600", color: c.text },
-    segmentTextActive: { color: "#fff" },
-    chipRow: { flexDirection: "row" },
-    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.chipBg, marginRight: 8 },
-    chipActive: { backgroundColor: c.primary },
+    amountCard: { alignItems: "center", paddingVertical: 20 },
+    currencyTag: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: c.textSecondary,
+      backgroundColor: c.chipBg,
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: 12,
+      marginBottom: 8,
+      overflow: "hidden",
+    },
+    amountText: { fontSize: 44, fontWeight: "700" },
+    descriptionInput: {
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+      color: c.text,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 15,
+      marginBottom: 4,
+    },
+    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.chipBg, marginRight: 8, marginBottom: 8 },
     chipText: { color: c.text, fontSize: 13 },
     chipTextActive: { color: "#fff", fontWeight: "600" },
     button: { marginTop: 28, backgroundColor: c.primary, borderRadius: 8, paddingVertical: 14, alignItems: "center" },
