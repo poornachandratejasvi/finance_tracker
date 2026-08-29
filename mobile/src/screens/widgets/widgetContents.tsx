@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, View, Text, StyleSheet } from "react-native";
+import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
 
 import { fetchDashboardSummary, fetchNetWorth } from "../../api/dashboard";
 import { fetchCashflow, fetchBalanceTrend, fetchHeatmap, fetchTopMerchants } from "../../api/analytics";
@@ -10,8 +10,11 @@ import { listTransactions } from "../../api/transactions";
 import { detectRecurringWatchers } from "../../api/automation";
 import { getAnomalies, getPredictions } from "../../api/ai";
 import { getZeroSpendStreaks } from "../../api/gamification";
+import { listBanks } from "../../api/banks";
+import { getWidgetFormulaValue, updateDashboardWidget, FormulaValue } from "../../api/dashboardWidgets";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { formatCurrency, formatDate } from "../../utils/format";
+import { Bank, DashboardWidget } from "../../types";
 
 // Every widget content component fetches its own data on mount, independent
 // of the others, against an EXISTING endpoint (dashboard/summary,
@@ -493,6 +496,135 @@ export function ZeroSpendStreakContent() {
           {data.next_badge.days_needed} more day{data.next_badge.days_needed === 1 ? "" : "s"} for "{data.next_badge.label}"
         </Text>
       )}
+    </View>
+  );
+}
+
+const OPERATION_LABELS: Record<string, string> = {
+  sum: "Sum",
+  difference: "Difference",
+  average: "Average",
+  percentage: "Percentage",
+};
+const OPERATION_JOINERS: Record<string, string> = { sum: " + ", difference: " − ", average: ", ", percentage: " ÷ " };
+
+export interface CustomFormulaProps {
+  widget?: DashboardWidget;
+  onWidgetUpdated?: (w: DashboardWidget) => void;
+}
+
+// The one widget whose value isn't a read of an existing endpoint: pick 2+ of
+// your own accounts and an operation, get a single derived number back (see
+// backend/app/services/custom_widget_service.py). Mirrors the web version --
+// takes the full widget (id + config) as a prop since it's stateful about its
+// own config, unlike every other widget here.
+export function CustomFormulaContent({ widget, onWidgetUpdated }: CustomFormulaProps) {
+  const { colors } = useTheme();
+  const config = (widget?.config || {}) as { bank_ids?: number[]; operation?: string };
+  const configured = !!(config.bank_ids && config.bank_ids.length);
+  const [banks, setBanks] = useState<Bank[] | null>(null);
+  const [editing, setEditing] = useState(!configured);
+  const [selectedIds, setSelectedIds] = useState<number[]>(config.bank_ids || []);
+  const [operation, setOperation] = useState(config.operation || "sum");
+  const [value, setValue] = useState<FormulaValue | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { listBanks().then(setBanks).catch(() => setBanks([])); }, []);
+
+  useEffect(() => {
+    if (!configured || !widget) return;
+    getWidgetFormulaValue(widget.id).then(setValue).catch(() => setValue({ result: null, operation: "sum", currency_code: null, breakdown: [] }));
+  }, [widget?.id, widget?.config, configured]);
+
+  const toggleBank = (id: number) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const save = async () => {
+    if (!widget) return;
+    setSaving(true);
+    try {
+      const updated = await updateDashboardWidget(widget.id, { config: { bank_ids: selectedIds, operation } });
+      onWidgetUpdated?.(updated);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing || !banks) {
+    return (
+      <View>
+        {!banks ? (
+          <Loading />
+        ) : (
+          <>
+            <Text style={{ color: colors.textSecondary, fontSize: 11, marginBottom: 4 }}>Pick 2+ accounts and an operation.</Text>
+            <ScrollView style={{ maxHeight: 120 }} nestedScrollEnabled>
+              {banks.map((b) => {
+                const active = selectedIds.includes(b.id);
+                return (
+                  <TouchableOpacity
+                    key={b.id}
+                    style={{ flexDirection: "row", alignItems: "center", paddingVertical: 6 }}
+                    onPress={() => toggleBank(b.id)}
+                  >
+                    <View
+                      style={{
+                        width: 18, height: 18, borderRadius: 4, marginRight: 8,
+                        borderWidth: 1.5, borderColor: active ? colors.primary : colors.border,
+                        backgroundColor: active ? colors.primary : "transparent",
+                      }}
+                    />
+                    <Text style={{ color: colors.text, fontSize: 13, flex: 1 }} numberOfLines={1}>{b.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginVertical: 8 }}>
+              {Object.entries(OPERATION_LABELS).map(([key, label]) => (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => setOperation(key)}
+                  style={{
+                    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14,
+                    backgroundColor: operation === key ? colors.primary : colors.chipBg,
+                  }}
+                >
+                  <Text style={{ color: operation === key ? "#fff" : colors.text, fontSize: 11, fontWeight: "600" }}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              onPress={save}
+              disabled={selectedIds.length < 1 || saving}
+              style={{
+                backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 10,
+                alignItems: "center", opacity: selectedIds.length < 1 || saving ? 0.6 : 1,
+              }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 13 }}>{saving ? "Saving…" : "Save"}</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    );
+  }
+
+  if (!value) return <Loading />;
+  if (value.result == null) return <Empty colors={colors} text="Pick accounts with a balance to see a result." />;
+
+  return (
+    <View>
+      <Text style={{ fontSize: 26, fontWeight: "800", color: colors.text }}>
+        {value.operation === "percentage" ? `${value.result.toFixed(1)}%` : formatCurrency(value.result)}
+      </Text>
+      <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2, marginBottom: 8 }} numberOfLines={1}>
+        {value.breakdown.map((b) => b.bank_name).join(OPERATION_JOINERS[value.operation] || ", ")}
+      </Text>
+      <TouchableOpacity onPress={() => setEditing(true)}>
+        <Text style={{ color: colors.primary, fontSize: 12, fontWeight: "600" }}>Edit formula</Text>
+      </TouchableOpacity>
     </View>
   );
 }

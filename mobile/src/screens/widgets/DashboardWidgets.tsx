@@ -35,6 +35,10 @@ export default function DashboardWidgets() {
     setWidgets((prev) => (prev || []).filter((w) => w.id !== id));
   };
 
+  const handleWidgetUpdated = (updated: DashboardWidget) => {
+    setWidgets((prev) => (prev || []).map((w) => (w.id === updated.id ? updated : w)));
+  };
+
   const move = (index: number, direction: 1 | -1) => {
     if (!widgets) return;
     const target = index + direction;
@@ -90,7 +94,7 @@ export default function DashboardWidgets() {
                   </View>
                 )}
               </View>
-              <Content />
+              <Content widget={w} onWidgetUpdated={handleWidgetUpdated} />
             </View>
           );
         })

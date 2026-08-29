@@ -14,7 +14,7 @@ export default function AddWidgetDialog({ open, onClose, onAdd, existingTypes = 
         <List disablePadding>
           {Object.entries(WIDGET_CATALOG).map(([type, meta]) => {
             const Icon = meta.icon;
-            const alreadyAdded = existingTypes.includes(type);
+            const alreadyAdded = !meta.repeatable && existingTypes.includes(type);
             return (
               <ListItemButton key={type} onClick={() => onAdd(type)} sx={{ opacity: alreadyAdded ? 0.6 : 1 }}>
                 <ListItemIcon><Icon /></ListItemIcon>

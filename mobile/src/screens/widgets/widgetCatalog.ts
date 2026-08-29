@@ -5,7 +5,7 @@ import {
   BalanceTrendContent, BankBalancesContent, InvestmentsSummaryContent, RewardPointsSummaryContent,
   RecentTransactionsContent, BudgetProgressContent, SpendingHeatmapContent, TopMerchantsContent,
   RecurringSubscriptionsContent, SpendingAnomaliesContent, CashflowForecastContent,
-  ZeroSpendStreakContent,
+  ZeroSpendStreakContent, CustomFormulaContent,
 } from "./widgetContents";
 
 // Single source of truth for every addable widget on mobile -- mirrors
@@ -15,7 +15,7 @@ export const WIDGET_CATALOG: Record<DashboardWidgetType, {
   label: string;
   description: string;
   size: "small" | "medium" | "large";
-  Content: ComponentType;
+  Content: ComponentType<any>;
 }> = {
   net_worth: { label: "Net Worth", description: "Total savings minus credit owed.", size: "medium", Content: NetWorthContent },
   income_expense: { label: "Income vs Expense", description: "This period's totals at a glance.", size: "small", Content: IncomeExpenseContent },
@@ -33,6 +33,7 @@ export const WIDGET_CATALOG: Record<DashboardWidgetType, {
   spending_anomalies: { label: "Spending Anomalies", description: "Unusually large transactions, flagged automatically.", size: "medium", Content: SpendingAnomaliesContent },
   cashflow_forecast: { label: "Cash Flow Forecast", description: "Expected upcoming income and bills.", size: "medium", Content: CashflowForecastContent },
   zero_spend_streak: { label: "Zero-Spend Streak", description: "Consecutive no-spend days, with badges.", size: "small", Content: ZeroSpendStreakContent },
+  custom_formula: { label: "Custom Formula", description: "Sum, difference, average or % across any of your accounts.", size: "medium", Content: CustomFormulaContent },
 };
 
 export const WIDGET_TYPES = Object.keys(WIDGET_CATALOG) as DashboardWidgetType[];

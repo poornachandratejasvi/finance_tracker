@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.models.models import User, DashboardWidget
+from app.services.custom_widget_service import compute_custom_formula
 
 router = APIRouter()
 
@@ -31,6 +32,11 @@ WIDGET_TYPES = (
     # ai/predictions) -- no new aggregation logic, same as every widget above.
     "spending_heatmap", "top_merchants", "recurring_subscriptions",
     "spending_anomalies", "cashflow_forecast", "zero_spend_streak",
+    # A user-defined metric over their own accounts (see custom_widget_service) --
+    # the one widget type whose data isn't just a read of an existing endpoint,
+    # and the only one a user can add more than once (each instance has its own
+    # config: which accounts + which operation).
+    "custom_formula",
 )
 
 
@@ -109,6 +115,28 @@ def add_widget(
     db.commit()
     db.refresh(widget)
     return _to_dict(widget)
+
+
+@router.get("/{widget_id}/formula-value")
+def get_formula_value(
+    widget_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Compute a custom_formula widget's current value from its stored config
+    (which accounts + which operation) -- see custom_widget_service."""
+    widget = db.query(DashboardWidget).filter(
+        DashboardWidget.id == widget_id, DashboardWidget.user_id == current_user.id
+    ).first()
+    if not widget:
+        raise HTTPException(status_code=404, detail="Widget not found")
+    if widget.widget_type != "custom_formula":
+        raise HTTPException(status_code=422, detail="Not a custom_formula widget")
+    try:
+        config = json.loads(widget.config) if widget.config else {}
+    except (ValueError, TypeError):
+        config = {}
+    return compute_custom_formula(db, current_user, config)
 
 
 @router.put("/{widget_id}")

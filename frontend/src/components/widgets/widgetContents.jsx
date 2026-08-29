@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, CircularProgress, LinearProgress, List, ListItem, ListItemText, Tooltip, Chip } from '@mui/material';
+import {
+  Box, Typography, CircularProgress, LinearProgress, List, ListItem, ListItemText, Tooltip, Chip,
+  Checkbox, Select, MenuItem, Button,
+} from '@mui/material';
 import {
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis,
   Tooltip as ReTooltip, CartesianGrid,
@@ -8,6 +11,7 @@ import {
   getNetWorth, getAnalyticsCashflow, getBudgetStatus, getRewardPoints, getInvestmentsDashboard,
   getTransactions, getDashboardSummary, getAnalyticsHeatmap, getTopMerchants,
   detectRecurringTransactions, getAnomalies, getPredictions, getZeroSpendStreaks,
+  getBanks, getWidgetFormulaValue, updateDashboardWidget,
 } from '../../services/api';
 import { formatCurrency, formatDate, amountColor } from '../../utils/format';
 import { useCategoryMeta } from '../../utils/categories';
@@ -464,6 +468,111 @@ export function ZeroSpendStreakContent() {
           {data.next_badge.days_needed} more day{data.next_badge.days_needed === 1 ? '' : 's'} for "{data.next_badge.label}"
         </Typography>
       )}
+    </Box>
+  );
+}
+
+const OPERATION_LABELS = {
+  sum: 'Sum (A + B + ...)',
+  difference: 'Difference (first minus the rest)',
+  average: 'Average',
+  percentage: 'Percentage (first ÷ second × 100)',
+};
+const OPERATION_JOINERS = { sum: ' + ', difference: ' − ', average: ', ', percentage: ' ÷ ' };
+
+// The one widget whose value isn't a read of an existing endpoint: the user
+// picks 2+ of their own accounts and an operation, we compute a single
+// derived number from Bank.current_balance server-side (see
+// custom_widget_service.py). Unlike every other widget here, this one is
+// stateful about its own config (bank_ids + operation), so it takes the full
+// `widget` object (id + config) as a prop, plus a callback to update the
+// parent's copy after a save.
+export function CustomFormulaContent({ widget, onWidgetUpdated }) {
+  const configured = !!(widget?.config?.bank_ids?.length);
+  const [banks, setBanks] = useState(null);
+  const [editing, setEditing] = useState(!configured);
+  const [selectedIds, setSelectedIds] = useState(widget?.config?.bank_ids || []);
+  const [operation, setOperation] = useState(widget?.config?.operation || 'sum');
+  const [value, setValue] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { getBanks().then(setBanks).catch(() => setBanks([])); }, []);
+
+  useEffect(() => {
+    if (!configured) return;
+    getWidgetFormulaValue(widget.id).then(setValue).catch(() => setValue({ result: null }));
+  }, [widget?.id, widget?.config, configured]);
+
+  const toggleBank = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const updated = await updateDashboardWidget(widget.id, { config: { bank_ids: selectedIds, operation } });
+      onWidgetUpdated?.(updated);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing || !banks) {
+    return (
+      <Box sx={{ height: '100%', overflow: 'auto' }}>
+        {!banks ? <Loading /> : (
+          <>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+              Pick 2+ accounts and an operation.
+            </Typography>
+            <List dense disablePadding sx={{ maxHeight: 130, overflow: 'auto', mb: 1 }}>
+              {banks.map((b) => (
+                <ListItem key={b.id} disablePadding onClick={() => toggleBank(b.id)} sx={{ cursor: 'pointer' }}>
+                  <Checkbox size="small" checked={selectedIds.includes(b.id)} sx={{ p: 0.5 }} />
+                  <ListItemText
+                    primary={b.name}
+                    secondary={formatCurrency(b.current_balance || 0, { compact: true })}
+                    primaryTypographyProps={{ variant: 'body2' }}
+                    secondaryTypographyProps={{ variant: 'caption' }}
+                  />
+                </ListItem>
+              ))}
+            </List>
+            <Select
+              size="small" fullWidth value={operation}
+              onChange={(e) => setOperation(e.target.value)}
+              sx={{ mb: 1 }}
+            >
+              {Object.entries(OPERATION_LABELS).map(([key, label]) => (
+                <MenuItem key={key} value={key}>{label}</MenuItem>
+              ))}
+            </Select>
+            <Button size="small" variant="contained" fullWidth disabled={selectedIds.length < 1 || saving} onClick={save}>
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </>
+        )}
+      </Box>
+    );
+  }
+
+  if (!value) return <Loading />;
+  if (value.result == null) return <Empty text="Pick accounts with a balance to see a result." />;
+
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Typography variant="h4" fontWeight={800}>
+        {value.operation === 'percentage'
+          ? `${value.result.toFixed(1)}%`
+          : formatCurrency(value.result, { compact: true, currency: value.currency_code || undefined })}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
+        {(value.breakdown || []).map((b) => b.bank_name).join(OPERATION_JOINERS[value.operation] || ', ')}
+      </Typography>
+      <Button size="small" onClick={() => setEditing(true)} sx={{ alignSelf: 'flex-start', mt: 'auto' }}>
+        Edit formula
+      </Button>
     </Box>
   );
 }

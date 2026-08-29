@@ -36,6 +36,10 @@ export default function DashboardWidgets() {
     setWidgets((prev) => prev.filter((w) => w.id !== id));
   };
 
+  const handleWidgetUpdated = (updated) => {
+    setWidgets((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
+  };
+
   const move = async (index, direction) => {
     const next = [...widgets];
     const target = index + direction;
@@ -88,7 +92,7 @@ export default function DashboardWidgets() {
                   canMoveUp={i > 0}
                   canMoveDown={i < widgets.length - 1}
                 >
-                  <Content />
+                  <Content widget={w} onWidgetUpdated={handleWidgetUpdated} />
                 </WidgetCard>
               </Grid>
             );

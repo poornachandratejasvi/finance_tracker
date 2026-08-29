@@ -21,3 +21,23 @@ export async function reorderDashboardWidgets(ids: number[]): Promise<void> {
 export async function deleteDashboardWidget(id: number): Promise<void> {
   await api.delete(`/api/dashboard-widgets/${id}`);
 }
+
+export async function updateDashboardWidget(
+  id: number,
+  payload: { size?: "small" | "medium" | "large"; config?: Record<string, unknown> }
+): Promise<DashboardWidget> {
+  const { data } = await api.put<DashboardWidget>(`/api/dashboard-widgets/${id}`, payload);
+  return data;
+}
+
+export interface FormulaValue {
+  result: number | null;
+  operation: "sum" | "difference" | "average" | "percentage";
+  currency_code: string | null;
+  breakdown: Array<{ bank_id: number; bank_name: string; balance: number; currency_code: string }>;
+}
+
+export async function getWidgetFormulaValue(id: number): Promise<FormulaValue> {
+  const { data } = await api.get<FormulaValue>(`/api/dashboard-widgets/${id}/formula-value`);
+  return data;
+}

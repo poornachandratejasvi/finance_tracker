@@ -871,6 +871,7 @@ export const addDashboardWidget = async (data) => (await api.post('/api/dashboar
 export const updateDashboardWidget = async (id, data) => (await api.put(`/api/dashboard-widgets/${id}`, data)).data;
 export const reorderDashboardWidgets = async (ids) => (await api.post('/api/dashboard-widgets/reorder', { ids })).data;
 export const deleteDashboardWidget = async (id) => (await api.delete(`/api/dashboard-widgets/${id}`)).data;
+export const getWidgetFormulaValue = async (id) => (await api.get(`/api/dashboard-widgets/${id}/formula-value`)).data;
 export const getDashboardSummary = async (params = {}) => (await api.get('/api/dashboard/summary', { params })).data;
 
 // Universal search

@@ -1,14 +1,14 @@
 import {
   AccountBalance, TrendingUp, PieChartOutline, ShowChart, Timeline,
   AccountBalanceWallet, Savings, CardGiftcard, Receipt, Speed,
-  CalendarMonth, Storefront, Autorenew, WarningAmber, Insights, LocalFireDepartment,
+  CalendarMonth, Storefront, Autorenew, WarningAmber, Insights, LocalFireDepartment, Functions,
 } from '@mui/icons-material';
 import {
   NetWorthContent, IncomeExpenseContent, SpendingByCategoryContent, CashflowTrendContent,
   BalanceTrendContent, BankBalancesContent, InvestmentsSummaryContent, RewardPointsSummaryContent,
   RecentTransactionsContent, BudgetProgressContent, SpendingHeatmapContent, TopMerchantsContent,
   RecurringSubscriptionsContent, SpendingAnomaliesContent, CashflowForecastContent,
-  ZeroSpendStreakContent,
+  ZeroSpendStreakContent, CustomFormulaContent,
 } from './widgetContents.jsx';
 
 // Single source of truth for every addable widget -- must stay in sync with
@@ -32,6 +32,10 @@ export const WIDGET_CATALOG = {
   spending_anomalies: { label: 'Spending Anomalies', description: 'Unusually large transactions, flagged automatically.', icon: WarningAmber, size: 'medium', Content: SpendingAnomaliesContent },
   cashflow_forecast: { label: 'Cash Flow Forecast', description: 'Expected upcoming income and bills.', icon: Insights, size: 'medium', Content: CashflowForecastContent },
   zero_spend_streak: { label: 'Zero-Spend Streak', description: 'Consecutive no-spend days, with badges.', icon: LocalFireDepartment, size: 'small', Content: ZeroSpendStreakContent },
+  // Unlike every other type above, this one can be added more than once (see
+  // AddWidgetDialog) -- each instance has its own config (which accounts +
+  // which operation), so "already added" doesn't apply to it.
+  custom_formula: { label: 'Custom Formula', description: 'Sum, difference, average or % across any of your accounts.', icon: Functions, size: 'medium', Content: CustomFormulaContent, repeatable: true },
 };
 
 export const WIDGET_TYPES = Object.keys(WIDGET_CATALOG);
