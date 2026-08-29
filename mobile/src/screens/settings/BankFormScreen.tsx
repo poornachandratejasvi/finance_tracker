@@ -4,7 +4,6 @@ import {
   Alert,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -15,6 +14,10 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { createBank, deleteBank, updateBank } from "../../api/banks";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { BanksStackParamList } from "../../navigation/BanksNavigator";
+import { FormGroup, FormSectionHeader } from "../../components/FormGroup";
+import { PickerRow, ToggleRow } from "../../components/PickerRow";
+import SelectModal from "../../components/SelectModal";
+import TextPromptModal from "../../components/TextPromptModal";
 
 type Props = NativeStackScreenProps<BanksStackParamList, "BankForm">;
 
@@ -46,6 +49,20 @@ export default function BankFormScreen({ route, navigation }: Props) {
     existing?.balance_above_threshold != null ? String(existing.balance_above_threshold) : ""
   );
   const [submitting, setSubmitting] = useState(false);
+
+  const [typeModalOpen, setTypeModalOpen] = useState(false);
+  const [balanceModalOpen, setBalanceModalOpen] = useState(false);
+  const [balanceDraft, setBalanceDraft] = useState(currentBalance);
+  const [belowModalOpen, setBelowModalOpen] = useState(false);
+  const [belowDraft, setBelowDraft] = useState(belowThreshold);
+  const [aboveModalOpen, setAboveModalOpen] = useState(false);
+  const [aboveDraft, setAboveDraft] = useState(aboveThreshold);
+  const [interestModalOpen, setInterestModalOpen] = useState(false);
+  const [interestDraft, setInterestDraft] = useState(interestRate);
+  const [minPaymentModalOpen, setMinPaymentModalOpen] = useState(false);
+  const [minPaymentDraft, setMinPaymentDraft] = useState(minimumPayment);
+  const [smsModalOpen, setSmsModalOpen] = useState(false);
+  const [smsDraft, setSmsDraft] = useState(smsSenderPattern);
 
   const onSave = async () => {
     if (!name.trim()) {
@@ -104,7 +121,7 @@ export default function BankFormScreen({ route, navigation }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.label}>Name</Text>
+      <Text style={styles.label}>Account name</Text>
       <TextInput
         style={styles.input}
         value={name}
@@ -113,39 +130,60 @@ export default function BankFormScreen({ route, navigation }: Props) {
         placeholderTextColor={colors.textSecondary}
       />
 
-      <Text style={styles.label}>Type</Text>
-      <View style={styles.chipRow}>
-        {BANK_TYPES.map((t) => (
-          <TouchableOpacity
-            key={t}
-            style={[styles.chip, bankType === t && styles.chipActive]}
-            onPress={() => setBankType(t)}
-          >
-            <Text style={[styles.chipText, bankType === t && styles.chipTextActive]}>{t}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <FormSectionHeader title="General" />
+      <FormGroup>
+        <PickerRow
+          icon="layers-outline"
+          label="Type"
+          value={bankType}
+          onPress={() => setTypeModalOpen(true)}
+        />
+        <PickerRow
+          icon="calculator-outline"
+          label="Current balance"
+          value={currentBalance ? `${currencyCode} ${currentBalance}` : null}
+          placeholder="Optional"
+          onPress={() => {
+            setBalanceDraft(currentBalance);
+            setBalanceModalOpen(true);
+          }}
+        />
+        <PickerRow icon="cash-outline" label="Currency" rightElement={
+          <TextInput
+            style={styles.inlineInput}
+            value={currencyCode}
+            onChangeText={(v) => setCurrencyCode(v.toUpperCase())}
+            autoCapitalize="characters"
+            maxLength={3}
+            placeholder="INR"
+            placeholderTextColor={colors.textSecondary}
+          />
+        } />
+        <PickerRow
+          icon="chatbubbles-outline"
+          label="SMS Sender ID"
+          value={smsSenderPattern || null}
+          placeholder="Optional"
+          onPress={() => {
+            setSmsDraft(smsSenderPattern);
+            setSmsModalOpen(true);
+          }}
+        />
+      </FormGroup>
       {bankType === "investment" && (
         <Text style={styles.hint}>
           Won't show up as a bank balance — this just lets statement emails from this
           sender (e.g. eCAS@cdslstatement.com for a CDSL CAS) get auto-downloaded, so
-          their holdings feed the Investments tab instead. Add the PDF password below
-          like any other bank once it's created.
+          their holdings feed the Investments tab instead.
         </Text>
       )}
+      <Text style={styles.hint}>
+        SMS Sender ID is the alphanumeric ID your bank's alert texts come from (e.g.
+        HDFCBK, AD-SBIINB), not a phone number -- lets an incoming SMS auto-match to
+        this account.
+      </Text>
 
-      <Text style={styles.label}>Currency code</Text>
-      <TextInput
-        style={styles.input}
-        value={currencyCode}
-        onChangeText={setCurrencyCode}
-        autoCapitalize="characters"
-        maxLength={3}
-        placeholder="INR"
-        placeholderTextColor={colors.textSecondary}
-      />
-
-      <Text style={styles.label}>Color</Text>
+      <FormSectionHeader title="Color" />
       <View style={styles.chipRow}>
         {COLORS.map((c) => (
           <TouchableOpacity
@@ -156,91 +194,64 @@ export default function BankFormScreen({ route, navigation }: Props) {
         ))}
       </View>
 
-      <Text style={styles.label}>Current balance (optional)</Text>
-      <TextInput
-        style={styles.input}
-        value={currentBalance}
-        onChangeText={setCurrentBalance}
-        keyboardType="decimal-pad"
-        placeholder="0.00"
-        placeholderTextColor={colors.textSecondary}
-      />
-
       {(bankType === "credit" || bankType === "loan") && (
         <>
-          <Text style={styles.label}>Interest rate % / year (optional)</Text>
-          <TextInput
-            style={styles.input}
-            value={interestRate}
-            onChangeText={setInterestRate}
-            keyboardType="decimal-pad"
-            placeholder="e.g. 42"
-            placeholderTextColor={colors.textSecondary}
-          />
-
-          <Text style={styles.label}>Minimum payment (optional)</Text>
-          <TextInput
-            style={styles.input}
-            value={minimumPayment}
-            onChangeText={setMinimumPayment}
-            keyboardType="decimal-pad"
-            placeholder="Leave blank to estimate as 2% of balance"
-            placeholderTextColor={colors.textSecondary}
-          />
+          <FormSectionHeader title="Debt details" />
+          <FormGroup>
+            <PickerRow
+              icon="trending-up-outline"
+              label="Interest rate %/year"
+              value={interestRate || null}
+              placeholder="Optional"
+              onPress={() => {
+                setInterestDraft(interestRate);
+                setInterestModalOpen(true);
+              }}
+            />
+            <PickerRow
+              icon="card-outline"
+              label="Minimum payment"
+              value={minimumPayment || null}
+              placeholder="Estimate as 2% of balance"
+              onPress={() => {
+                setMinPaymentDraft(minimumPayment);
+                setMinPaymentModalOpen(true);
+              }}
+            />
+          </FormGroup>
         </>
       )}
 
-      <Text style={styles.label}>SMS Sender ID (optional)</Text>
-      <TextInput
-        style={styles.input}
-        value={smsSenderPattern}
-        onChangeText={setSmsSenderPattern}
-        autoCapitalize="characters"
-        placeholder="HDFCBK"
-        placeholderTextColor={colors.textSecondary}
-      />
-      <Text style={styles.hint}>
-        The alphanumeric ID your bank's alert texts come from (e.g. HDFCBK,
-        AD-SBIINB) -- not a phone number. Lets an incoming SMS get matched to
-        this account automatically.
-      </Text>
-
-      <View style={styles.switchRow}>
-        <Text style={styles.label}>Notify if balance goes below a limit</Text>
-        <Switch value={belowEnabled} onValueChange={setBelowEnabled} />
-      </View>
-      {belowEnabled && (
-        <TextInput
-          style={styles.input}
-          value={belowThreshold}
-          onChangeText={setBelowThreshold}
-          keyboardType="decimal-pad"
-          placeholder="Minimum balance, e.g. 5000"
-          placeholderTextColor={colors.textSecondary}
-        />
-      )}
-
-      <View style={styles.switchRow}>
-        <Text style={styles.label}>Notify if balance goes above a limit</Text>
-        <Switch value={aboveEnabled} onValueChange={setAboveEnabled} />
-      </View>
-      {aboveEnabled && (
-        <TextInput
-          style={styles.input}
-          value={aboveThreshold}
-          onChangeText={setAboveThreshold}
-          keyboardType="decimal-pad"
-          placeholder="Maximum balance, e.g. 50000"
-          placeholderTextColor={colors.textSecondary}
-        />
-      )}
-
-      {existing && (
-        <View style={styles.switchRow}>
-          <Text style={styles.label}>Archived</Text>
-          <Switch value={isArchived} onValueChange={setIsArchived} />
-        </View>
-      )}
+      <FormSectionHeader title="In-app notifications" />
+      <FormGroup>
+        <ToggleRow icon="arrow-down-circle-outline" label="Balance below limit" value={belowEnabled} onValueChange={setBelowEnabled} />
+        {belowEnabled && (
+          <PickerRow
+            icon="remove-circle-outline"
+            label="Minimum balance"
+            value={belowThreshold || null}
+            placeholder="e.g. 5000"
+            onPress={() => {
+              setBelowDraft(belowThreshold);
+              setBelowModalOpen(true);
+            }}
+          />
+        )}
+        <ToggleRow icon="arrow-up-circle-outline" label="Balance above limit" value={aboveEnabled} onValueChange={setAboveEnabled} />
+        {aboveEnabled && (
+          <PickerRow
+            icon="add-circle-outline"
+            label="Maximum balance"
+            value={aboveThreshold || null}
+            placeholder="e.g. 50000"
+            onPress={() => {
+              setAboveDraft(aboveThreshold);
+              setAboveModalOpen(true);
+            }}
+          />
+        )}
+        {existing && <ToggleRow icon="archive-outline" label="Archived" value={isArchived} onValueChange={setIsArchived} />}
+      </FormGroup>
 
       <TouchableOpacity style={[styles.button, submitting && styles.buttonDisabled]} onPress={onSave} disabled={submitting}>
         {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save</Text>}
@@ -251,6 +262,75 @@ export default function BankFormScreen({ route, navigation }: Props) {
           <Text style={styles.deleteButtonText}>Delete Account</Text>
         </TouchableOpacity>
       )}
+
+      <SelectModal
+        visible={typeModalOpen}
+        title="Type"
+        options={BANK_TYPES.map((t) => ({ key: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))}
+        selectedKey={bankType}
+        onSelect={(k) => setBankType(k as string)}
+        onClose={() => setTypeModalOpen(false)}
+      />
+      <TextPromptModal
+        visible={balanceModalOpen}
+        title="Current balance"
+        value={balanceDraft}
+        onChangeValue={setBalanceDraft}
+        onSave={() => setCurrentBalance(balanceDraft.trim())}
+        onClose={() => setBalanceModalOpen(false)}
+        placeholder="0.00"
+        keyboardType="decimal-pad"
+      />
+      <TextPromptModal
+        visible={smsModalOpen}
+        title="SMS Sender ID"
+        value={smsDraft}
+        onChangeValue={setSmsDraft}
+        onSave={() => setSmsSenderPattern(smsDraft.trim().toUpperCase())}
+        onClose={() => setSmsModalOpen(false)}
+        placeholder="HDFCBK"
+        autoCapitalize="none"
+      />
+      <TextPromptModal
+        visible={interestModalOpen}
+        title="Interest rate %/year"
+        value={interestDraft}
+        onChangeValue={setInterestDraft}
+        onSave={() => setInterestRate(interestDraft.trim())}
+        onClose={() => setInterestModalOpen(false)}
+        placeholder="e.g. 42"
+        keyboardType="decimal-pad"
+      />
+      <TextPromptModal
+        visible={minPaymentModalOpen}
+        title="Minimum payment"
+        value={minPaymentDraft}
+        onChangeValue={setMinPaymentDraft}
+        onSave={() => setMinimumPayment(minPaymentDraft.trim())}
+        onClose={() => setMinPaymentModalOpen(false)}
+        placeholder="Leave blank to estimate"
+        keyboardType="decimal-pad"
+      />
+      <TextPromptModal
+        visible={belowModalOpen}
+        title="Minimum balance"
+        value={belowDraft}
+        onChangeValue={setBelowDraft}
+        onSave={() => setBelowThreshold(belowDraft.trim())}
+        onClose={() => setBelowModalOpen(false)}
+        placeholder="e.g. 5000"
+        keyboardType="decimal-pad"
+      />
+      <TextPromptModal
+        visible={aboveModalOpen}
+        title="Maximum balance"
+        value={aboveDraft}
+        onChangeValue={setAboveDraft}
+        onSave={() => setAboveThreshold(aboveDraft.trim())}
+        onClose={() => setAboveModalOpen(false)}
+        placeholder="e.g. 50000"
+        keyboardType="decimal-pad"
+      />
     </ScrollView>
   );
 }
@@ -258,7 +338,7 @@ export default function BankFormScreen({ route, navigation }: Props) {
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
-    label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 16, marginBottom: 6 },
+    label: { fontSize: 13, fontWeight: "600", color: c.text, marginBottom: 6 },
     hint: { fontSize: 11, color: c.textSecondary, marginTop: 6, fontStyle: "italic" },
     input: {
       borderWidth: 1,
@@ -270,19 +350,10 @@ const makeStyles = (c: ThemeColors) =>
       paddingVertical: 10,
       fontSize: 16,
     },
+    inlineInput: { color: c.text, fontSize: 14, textAlign: "right", minWidth: 60 },
     chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-    chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: c.chipBg },
-    chipActive: { backgroundColor: c.primary },
-    chipText: { color: c.text, fontSize: 13, textTransform: "capitalize" },
-    chipTextActive: { color: "#fff", fontWeight: "600" },
     swatch: { width: 32, height: 32, borderRadius: 16 },
     swatchActive: { borderWidth: 3, borderColor: c.text },
-    switchRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginTop: 8,
-    },
     button: {
       marginTop: 28,
       backgroundColor: c.primary,

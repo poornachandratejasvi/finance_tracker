@@ -4,7 +4,6 @@ import {
   Alert,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -17,6 +16,10 @@ import { listLabels } from "../../api/labels";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
 import { Label, RecordType } from "../../types";
+import { FormGroup, FormSectionHeader } from "../../components/FormGroup";
+import { PickerRow, ToggleRow } from "../../components/PickerRow";
+import SelectModal from "../../components/SelectModal";
+import TextPromptModal from "../../components/TextPromptModal";
 
 type Props = NativeStackScreenProps<SettingsStackParamList, "AutoRuleForm">;
 
@@ -33,7 +36,8 @@ export default function AutoRuleFormScreen({ route, navigation }: Props) {
   // server-side) -- category/labels are irrelevant for it, so they're hidden.
   const [isTransferRule, setIsTransferRule] = useState(existing?.record_type === "transfer");
   const [name, setName] = useState(existing?.name || "");
-  const [keywords, setKeywords] = useState((existing?.keywords || []).join(", "));
+  const [keywords, setKeywords] = useState<string[]>(existing?.keywords || []);
+  const [keywordInput, setKeywordInput] = useState("");
   const [recordType, setRecordType] = useState<RecordType>(
     existing?.record_type && existing.record_type !== "transfer" ? existing.record_type : "any"
   );
@@ -43,6 +47,10 @@ export default function AutoRuleFormScreen({ route, navigation }: Props) {
   const [notifyDiscord, setNotifyDiscord] = useState(!!existing?.notify_discord);
   const [labels, setLabels] = useState<Label[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  const [recordTypeModalOpen, setRecordTypeModalOpen] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState(category);
 
   useEffect(() => {
     listLabels()
@@ -54,11 +62,19 @@ export default function AutoRuleFormScreen({ route, navigation }: Props) {
     setLabelIds((prev) => (prev.includes(id) ? prev.filter((l) => l !== id) : [...prev, id]));
   };
 
+  const addKeyword = () => {
+    const kw = keywordInput.trim();
+    if (!kw) return;
+    if (!keywords.some((k) => k.toLowerCase() === kw.toLowerCase())) {
+      setKeywords((prev) => [...prev, kw]);
+    }
+    setKeywordInput("");
+  };
+
+  const removeKeyword = (kw: string) => setKeywords((prev) => prev.filter((k) => k !== kw));
+
   const onSave = async () => {
-    const keywordList = keywords
-      .split(",")
-      .map((k) => k.trim())
-      .filter(Boolean);
+    const keywordList = [...keywords, ...(keywordInput.trim() ? [keywordInput.trim()] : [])];
     if (!name.trim()) {
       Alert.alert("Missing name", "Give this rule a name.");
       return;
@@ -113,7 +129,7 @@ export default function AutoRuleFormScreen({ route, navigation }: Props) {
 
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.label}>Rule type</Text>
+      <Text style={styles.label}>What Automatic Rule are you creating?</Text>
       <View style={styles.chipRow}>
         <TouchableOpacity
           style={[styles.typeOption, !isTransferRule && styles.typeOptionActive]}
@@ -131,53 +147,70 @@ export default function AutoRuleFormScreen({ route, navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.label}>Name</Text>
-      <TextInput
-        style={styles.input}
-        value={name}
-        onChangeText={setName}
-        placeholder="e.g. Swiggy orders"
-        placeholderTextColor={colors.textSecondary}
-      />
+      <FormSectionHeader title="General" />
+      <FormGroup>
+        <PickerRow icon="text-outline" label="Rule name" rightElement={
+          <TextInput
+            style={styles.inlineInput}
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g. Swiggy orders"
+            placeholderTextColor={colors.textSecondary}
+          />
+        } />
+      </FormGroup>
 
-      <Text style={styles.label}>Keywords (comma-separated)</Text>
-      <TextInput
-        style={styles.input}
-        value={keywords}
-        onChangeText={setKeywords}
-        placeholder="swiggy, zomato"
-        placeholderTextColor={colors.textSecondary}
-        autoCapitalize="none"
-      />
+      <FormSectionHeader title="Matching criteria" />
+      <View style={styles.keywordCard}>
+        <View style={styles.labelWrap}>
+          {keywords.map((kw) => (
+            <TouchableOpacity key={kw} style={styles.keywordChip} onPress={() => removeKeyword(kw)}>
+              <Text style={styles.keywordChipText}>{kw} ✕</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.keywordInputRow}>
+          <TextInput
+            style={[styles.input, styles.keywordInput]}
+            value={keywordInput}
+            onChangeText={setKeywordInput}
+            placeholder="Add a keyword (e.g. swiggy)"
+            placeholderTextColor={colors.textSecondary}
+            autoCapitalize="none"
+            onSubmitEditing={addKeyword}
+          />
+          <TouchableOpacity style={styles.addKeywordButton} onPress={addKeyword}>
+            <Text style={styles.buttonText}>Add</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {!isTransferRule && (
         <>
-          <Text style={styles.label}>Applies to</Text>
-          <View style={styles.chipRow}>
-            {RECORD_TYPES.map((rt) => (
-              <TouchableOpacity
-                key={rt}
-                style={[styles.chip, recordType === rt && styles.chipActive]}
-                onPress={() => setRecordType(rt)}
-              >
-                <Text style={[styles.chipText, recordType === rt && styles.chipTextActive]}>{rt}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={styles.label}>Category (optional)</Text>
-          <TextInput
-            style={styles.input}
-            value={category}
-            onChangeText={setCategory}
-            placeholder="Food & Dining"
-            placeholderTextColor={colors.textSecondary}
-          />
+          <FormSectionHeader title="Assign action" />
+          <FormGroup>
+            <PickerRow
+              icon="funnel-outline"
+              label="Applies to"
+              value={recordType}
+              onPress={() => setRecordTypeModalOpen(true)}
+            />
+            <PickerRow
+              icon="pricetag-outline"
+              label="Category"
+              value={category || null}
+              placeholder="Optional"
+              onPress={() => {
+                setCategoryDraft(category);
+                setCategoryModalOpen(true);
+              }}
+            />
+          </FormGroup>
 
           {labels.length > 0 && (
             <>
-              <Text style={styles.label}>Labels</Text>
-              <View style={styles.chipRow}>
+              <FormSectionHeader title="Labels" />
+              <View style={styles.labelWrap}>
                 {labels.map((l) => (
                   <TouchableOpacity
                     key={l.id}
@@ -195,14 +228,11 @@ export default function AutoRuleFormScreen({ route, navigation }: Props) {
         </>
       )}
 
-      <View style={styles.switchRow}>
-        <Text style={styles.label}>Active</Text>
-        <Switch value={isActive} onValueChange={setIsActive} />
-      </View>
-      <View style={styles.switchRow}>
-        <Text style={styles.label}>Notify on Discord</Text>
-        <Switch value={notifyDiscord} onValueChange={setNotifyDiscord} />
-      </View>
+      <FormSectionHeader title="Automation" />
+      <FormGroup>
+        <ToggleRow icon="checkmark-circle-outline" label="Active" value={isActive} onValueChange={setIsActive} />
+        <ToggleRow icon="notifications-outline" label="Notify on Discord" value={notifyDiscord} onValueChange={setNotifyDiscord} />
+      </FormGroup>
 
       <TouchableOpacity style={[styles.button, submitting && styles.buttonDisabled]} onPress={onSave} disabled={submitting}>
         {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save</Text>}
@@ -213,6 +243,24 @@ export default function AutoRuleFormScreen({ route, navigation }: Props) {
           <Text style={styles.deleteButtonText}>Delete Rule</Text>
         </TouchableOpacity>
       )}
+
+      <SelectModal
+        visible={recordTypeModalOpen}
+        title="Applies to"
+        options={RECORD_TYPES.map((rt) => ({ key: rt, label: rt.charAt(0).toUpperCase() + rt.slice(1) }))}
+        selectedKey={recordType}
+        onSelect={(k) => setRecordType(k as RecordType)}
+        onClose={() => setRecordTypeModalOpen(false)}
+      />
+      <TextPromptModal
+        visible={categoryModalOpen}
+        title="Category"
+        value={categoryDraft}
+        onChangeValue={setCategoryDraft}
+        onSave={() => setCategory(categoryDraft.trim())}
+        onClose={() => setCategoryModalOpen(false)}
+        placeholder="e.g. Food & Dining"
+      />
     </ScrollView>
   );
 }
@@ -231,6 +279,7 @@ const makeStyles = (c: ThemeColors) =>
       paddingVertical: 10,
       fontSize: 16,
     },
+    inlineInput: { flex: 1, color: c.text, fontSize: 14, textAlign: "right" },
     chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     typeOption: {
       flex: 1,
@@ -246,11 +295,18 @@ const makeStyles = (c: ThemeColors) =>
     chipActive: { backgroundColor: c.primary },
     chipText: { color: c.text, fontSize: 13, textTransform: "capitalize" },
     chipTextActive: { color: "#fff", fontWeight: "600" },
-    switchRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
+    keywordCard: { backgroundColor: c.card, borderRadius: 12, padding: 14 },
+    labelWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    keywordChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: c.chipBg, marginBottom: 4 },
+    keywordChipText: { color: c.text, fontSize: 13, fontWeight: "600" },
+    keywordInputRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+    keywordInput: { flex: 1 },
+    addKeywordButton: {
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingHorizontal: 18,
+      justifyContent: "center",
       alignItems: "center",
-      marginTop: 4,
     },
     button: {
       marginTop: 28,
