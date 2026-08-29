@@ -115,6 +115,30 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
             sender_domain = sender.split('@')[-1].rstrip('>').lower() if '@' in sender else ''
             bank = next((b for d, b in domain_to_bank.items() if sender_domain and sender_domain.endswith(d)), None)
             if not bank:
+                # An alert-keyword match from a sender domain no configured bank owns.
+                # Previously this was a silent `continue` -- no log, no record, no way
+                # to ever notice a bank alert was being ignored. Log it (visible in
+                # Settings -> Application Logs) and mark the message processed under
+                # the per-user "External" bank so it isn't re-logged every 15 minutes
+                # for the next ~2 days (this task's rolling after_date window) -- but
+                # deliberately don't create a Transaction for it, since we have no
+                # confirmed bank to attribute real money movement to.
+                logger.warning(
+                    "Alert email from unrecognized sender '%s' (Gmail account %s) -- no bank has this domain "
+                    "configured. Add it to a bank's sender email(s) if this is a real bank alert.",
+                    sender, gmail_account.id,
+                )
+                from app.api.endpoints.ingest import _get_external_bank
+                from app.models.models import User
+                owner = db.query(User).filter(User.id == gmail_account.user_id).first()
+                if owner:
+                    external = _get_external_bank(db, owner)
+                    db.add(BankEmail(
+                        gmail_account_id=gmail_account.id, bank_id=external.id, email_id=msg['id'],
+                        subject=msg.get('subject'), from_email=sender, received_date=msg.get('date'),
+                        has_attachment=False, email_type='alert', is_processed=True,
+                    ))
+                    db.commit()
                 continue
 
             parsed = parse_alert_email(sender, msg.get('subject', ''), msg.get('body', '') or '', received_date=msg.get('date'))
