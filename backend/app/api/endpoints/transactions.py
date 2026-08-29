@@ -17,6 +17,7 @@ from app.schemas.transaction import (
     BulkDeleteRequest,
 )
 from app.services.transaction_service import TransactionService
+from app.services import audit_service
 from app.utils.parsing import parse_csv_list as _parse_csv_list
 from app.core.household import visible_user_ids
 
@@ -506,6 +507,37 @@ def get_spending_insights(
     }
 
 
+@router.get("/audit-log")
+def get_audit_log(
+    transaction_id: Optional[int] = None,
+    limit: int = Query(100, le=500),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Every recorded edit/delete, most recent first. Pass transaction_id to see
+    one transaction's full history (including entries from after it was deleted,
+    since transaction_id isn't a foreign key)."""
+    import json
+    from app.models.models import TransactionAuditLog
+
+    q = db.query(TransactionAuditLog).filter(
+        TransactionAuditLog.user_id.in_(visible_user_ids(db, current_user))
+    )
+    if transaction_id is not None:
+        q = q.filter(TransactionAuditLog.transaction_id == transaction_id)
+    rows = q.order_by(TransactionAuditLog.changed_at.desc()).limit(limit).all()
+    return [
+        {
+            "id": r.id,
+            "transaction_id": r.transaction_id,
+            "action": r.action,
+            "changes": json.loads(r.changes) if r.changes else {},
+            "changed_at": r.changed_at.isoformat() if r.changed_at else None,
+        }
+        for r in rows
+    ]
+
+
 @router.get("/{transaction_id}", response_model=TransactionResponse)
 def get_transaction(
     transaction_id: int,
@@ -551,12 +583,13 @@ def update_transaction(
         )
     
     update_data = trans_data.dict(exclude_unset=True)
+    audit_service.record_update(db, transaction, update_data)
     for key, value in update_data.items():
         setattr(transaction, key, value)
-    
+
     db.commit()
     db.refresh(transaction)
-    
+
     return transaction
 
 
@@ -580,6 +613,7 @@ def delete_transaction(
             detail="Transaction not found"
         )
     
+    audit_service.record_delete(db, transaction)
     db.delete(transaction)
     db.commit()
 
@@ -596,13 +630,16 @@ def bulk_delete_transactions(
     ids = payload.transaction_ids or []
     if not ids:
         return {"deleted": 0}
-    deleted = (
+    matched = (
         db.query(Transaction)
         .filter(Transaction.user_id.in_(visible_user_ids(db, current_user)), Transaction.id.in_(ids))
-        .delete(synchronize_session=False)
+        .all()
     )
+    for t in matched:
+        audit_service.record_delete(db, t)
+        db.delete(t)
     db.commit()
-    return {"deleted": deleted}
+    return {"deleted": len(matched)}
 
 
 @router.post("/bulk-confirm")
@@ -686,20 +723,19 @@ def bulk_edit_transactions(
     for transaction in transactions:
         changed = False
         # Update allowed fields
+        audited_fields = {}
         if 'category' in updates and updates['category']:
-            transaction.category = updates['category']
-            changed = True
-
+            audited_fields['category'] = updates['category']
         if 'notes' in updates and updates['notes'] is not None:
-            transaction.notes = updates['notes']
-            changed = True
-
+            audited_fields['notes'] = updates['notes']
         if 'from_account' in updates and updates['from_account'] is not None:
-            transaction.from_account = updates['from_account']
-            changed = True
-
+            audited_fields['from_account'] = updates['from_account']
         if 'to_account' in updates and updates['to_account'] is not None:
-            transaction.to_account = updates['to_account']
+            audited_fields['to_account'] = updates['to_account']
+        if audited_fields:
+            audit_service.record_update(db, transaction, audited_fields)
+            for field, value in audited_fields.items():
+                setattr(transaction, field, value)
             changed = True
 
         if 'is_duplicate' in updates:

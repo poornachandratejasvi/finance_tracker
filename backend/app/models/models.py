@@ -435,6 +435,11 @@ class SavingsGoal(Base):
     # transaction up to the nearest `roundup_to` and adds the difference here.
     roundup_enabled = Column(Boolean, default=False)
     roundup_to = Column(Integer, default=10)
+    # Predictive auto-sweep: guards /predictive-sweep to once per calendar month per
+    # goal, same idempotency shape as Budget.last_alerted_period -- the "safe to
+    # save" figure is derived from live balances/forecasts, not a per-transaction
+    # flag, so without this a second click would sweep the same surplus twice.
+    last_predictive_sweep_period = Column(String(7))
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -819,4 +824,22 @@ class VehicleInsurancePolicy(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     vehicle = relationship("Vehicle", back_populates="policies")
+    user = relationship("User")
+
+
+class TransactionAuditLog(Base):
+    """Immutable record of every edit/delete made to a transaction, for tax/
+    business-expense record-keeping. transaction_id is deliberately NOT a foreign
+    key -- it must survive the row it refers to being deleted (a 'deleted' entry's
+    whole point is to outlive the transaction)."""
+    __tablename__ = "transaction_audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    transaction_id = Column(Integer, nullable=False, index=True)
+    action = Column(String(10), nullable=False)  # 'updated' | 'deleted'
+    # 'updated': {field: {"old": ..., "new": ...}}; 'deleted': a full field snapshot.
+    changes = Column(Text, nullable=False)
+    changed_at = Column(DateTime, default=utcnow, index=True)
+
     user = relationship("User")
