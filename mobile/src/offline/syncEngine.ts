@@ -145,7 +145,13 @@ async function drainNativeIntentQueue(): Promise<void> {
     return;
   }
 
-  const banks = await getCachedBanks().catch(() => []);
+  // Prefer a live fetch over the cache: on a fresh install (or right after
+  // reinstalling a new build), the local bank cache is empty until the first
+  // full syncNow() pass finishes -- which happens AFTER this drain step in the
+  // very same call -- so relying on the cache here would silently no-op a
+  // queued native-intent transaction on exactly the first app open after it
+  // was created, looking indistinguishable from data loss.
+  const banks = await listBanks().catch(() => getCachedBanks().catch(() => []));
 
   // No accounts synced to this device yet -- can't resolve any account, so leave
   // the file untouched entirely rather than losing these entries.
