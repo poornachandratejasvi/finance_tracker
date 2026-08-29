@@ -15,6 +15,7 @@ export interface GoalPayload {
   is_active?: boolean;
   roundup_enabled?: boolean;
   roundup_to?: number;
+  monthly_target?: number | null;
 }
 
 export async function getRoundupPreview(goalId: number): Promise<RoundupPreview> {
@@ -39,4 +40,9 @@ export async function updateGoal(goalId: number, payload: Partial<GoalPayload>):
 
 export async function deleteGoal(goalId: number): Promise<void> {
   await api.delete(`/api/goals/${goalId}`);
+}
+
+export async function contributeToGoal(goalId: number, amount: number): Promise<Goal> {
+  const { data } = await api.post<Goal>(`/api/goals/${goalId}/contribute`, { amount });
+  return data;
 }

@@ -84,6 +84,11 @@ export default function GoalsScreen({ navigation }: Props) {
               </Text>
               {item.target_date && <Text style={styles.meta}>by {formatDate(item.target_date)}</Text>}
             </View>
+            {item.monthly_target != null && (
+              <Text style={[styles.monthlyBadge, item.monthly_target_met && styles.monthlyBadgeMet]}>
+                {item.monthly_target_met ? "✓ " : ""}This month: {formatCurrency(item.this_month_saved ?? 0)} / {formatCurrency(item.monthly_target)}
+              </Text>
+            )}
           </TouchableOpacity>
         )}
       />
@@ -109,6 +114,8 @@ const makeStyles = (c: ThemeColors) =>
     progressFill: { height: 8, borderRadius: 4 },
     cardFooter: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
     meta: { fontSize: 12, color: c.textSecondary },
+    monthlyBadge: { fontSize: 12, color: c.textSecondary, marginTop: 8 },
+    monthlyBadgeMet: { color: c.primary, fontWeight: "600" },
     addButton: {
       margin: 16,
       backgroundColor: c.primary,

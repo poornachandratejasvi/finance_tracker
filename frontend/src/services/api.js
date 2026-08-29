@@ -488,6 +488,7 @@ export const deleteGoal = async (id) => {
 };
 export const getRoundupPreview = async (goalId) => (await api.get(`/api/goals/${goalId}/roundup-preview`)).data;
 export const sweepRoundups = async (goalId) => (await api.post(`/api/goals/${goalId}/sweep-roundups`)).data;
+export const contributeToGoal = async (goalId, amount) => (await api.post(`/api/goals/${goalId}/contribute`, { amount })).data;
 
 // Debt payoff calculator
 export const getDebtSummary = async () => (await api.get('/api/debt/summary')).data;

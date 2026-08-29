@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.core.time_utils import utcnow
 from app.api.endpoints.auth import get_current_active_user, require_write_access
-from app.models.models import User, SavingsGoal, Transaction, TransactionType, Bank
+from app.models.models import User, SavingsGoal, SavingsGoalContribution, Transaction, TransactionType, Bank
 
 router = APIRouter()
 
@@ -26,6 +26,7 @@ class GoalCreate(BaseModel):
     color: Optional[str] = "#4e79a7"
     roundup_enabled: bool = False
     roundup_to: int = 10
+    monthly_target: Optional[float] = None
 
 
 class GoalUpdate(BaseModel):
@@ -37,6 +38,7 @@ class GoalUpdate(BaseModel):
     is_active: Optional[bool] = None
     roundup_enabled: Optional[bool] = None
     roundup_to: Optional[int] = None
+    monthly_target: Optional[float] = None
 
 
 def _parse_date(s: Optional[str]) -> Optional[datetime]:
@@ -48,8 +50,28 @@ def _parse_date(s: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def _to_dict(g: SavingsGoal) -> dict:
+def _month_bounds(now: datetime = None):
+    now = now or utcnow()
+    start = datetime(now.year, now.month, 1)
+    end = datetime(now.year + 1, 1, 1) if now.month == 12 else datetime(now.year, now.month + 1, 1)
+    return start, end
+
+
+def _this_month_saved(db: Session, goal_id: int) -> float:
+    start, end = _month_bounds()
+    return float(
+        db.query(func.coalesce(func.sum(SavingsGoalContribution.amount), 0.0))
+        .filter(
+            SavingsGoalContribution.goal_id == goal_id,
+            SavingsGoalContribution.contributed_at >= start,
+            SavingsGoalContribution.contributed_at < end,
+        ).scalar() or 0.0
+    )
+
+
+def _to_dict(db: Session, g: SavingsGoal) -> dict:
     pct = round((g.current_amount / g.target_amount) * 100, 1) if g.target_amount else 0.0
+    this_month_saved = round(_this_month_saved(db, g.id), 2) if g.monthly_target else None
     return {
         "id": g.id,
         "name": g.name,
@@ -62,6 +84,9 @@ def _to_dict(g: SavingsGoal) -> dict:
         "is_active": g.is_active,
         "roundup_enabled": g.roundup_enabled,
         "roundup_to": g.roundup_to,
+        "monthly_target": g.monthly_target,
+        "this_month_saved": this_month_saved,
+        "monthly_target_met": (this_month_saved >= g.monthly_target) if g.monthly_target else None,
         "created_at": g.created_at.isoformat() + "Z" if g.created_at else None,
     }
 
@@ -69,7 +94,7 @@ def _to_dict(g: SavingsGoal) -> dict:
 @router.get("/")
 def list_goals(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     rows = db.query(SavingsGoal).filter(SavingsGoal.user_id == current_user.id).order_by(SavingsGoal.created_at.desc()).all()
-    return [_to_dict(g) for g in rows]
+    return [_to_dict(db, g) for g in rows]
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -84,11 +109,12 @@ def create_goal(payload: GoalCreate, db: Session = Depends(get_db), current_user
         is_active=True,
         roundup_enabled=payload.roundup_enabled,
         roundup_to=payload.roundup_to or 10,
+        monthly_target=payload.monthly_target,
     )
     db.add(g)
     db.commit()
     db.refresh(g)
-    return _to_dict(g)
+    return _to_dict(db, g)
 
 
 @router.put("/{goal_id}")
@@ -112,10 +138,36 @@ def update_goal(goal_id: int, payload: GoalUpdate, db: Session = Depends(get_db)
         g.roundup_enabled = payload.roundup_enabled
     if payload.roundup_to is not None:
         g.roundup_to = payload.roundup_to
+    if payload.monthly_target is not None:
+        g.monthly_target = payload.monthly_target
     g.updated_at = utcnow()
     db.commit()
     db.refresh(g)
-    return _to_dict(g)
+    return _to_dict(db, g)
+
+
+class ContributeRequest(BaseModel):
+    amount: float
+
+
+@router.post("/{goal_id}/contribute")
+def contribute_to_goal(
+    goal_id: int, payload: ContributeRequest,
+    db: Session = Depends(get_db), current_user: User = Depends(require_write_access),
+):
+    """Manually record money saved toward this goal -- adds to current_amount
+    and logs a SavingsGoalContribution so it counts toward monthly_target."""
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero.")
+    g = db.query(SavingsGoal).filter(SavingsGoal.id == goal_id, SavingsGoal.user_id == current_user.id).first()
+    if not g:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    g.current_amount = round((g.current_amount or 0.0) + payload.amount, 2)
+    g.updated_at = utcnow()
+    db.add(SavingsGoalContribution(goal_id=g.id, user_id=current_user.id, amount=payload.amount, source="manual"))
+    db.commit()
+    db.refresh(g)
+    return _to_dict(db, g)
 
 
 @router.delete("/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -175,9 +227,11 @@ def sweep_roundups(goal_id: int, db: Session = Depends(get_db), current_user: Us
     total = round(total, 2)
     g.current_amount = round((g.current_amount or 0.0) + total, 2)
     g.updated_at = utcnow()
+    if total > 0:
+        db.add(SavingsGoalContribution(goal_id=g.id, user_id=current_user.id, amount=total, source="roundup"))
     db.commit()
     db.refresh(g)
-    return {"swept_amount": total, "transaction_count": len(txns), "goal": _to_dict(g)}
+    return {"swept_amount": total, "transaction_count": len(txns), "goal": _to_dict(db, g)}
 
 
 def _safe_to_save(db: Session, user_id: int) -> dict:
@@ -239,11 +293,12 @@ def predictive_sweep(
     computed = _safe_to_save(db, current_user.id)
     amount = computed["safe_to_save"] if payload.amount is None else max(0.0, min(payload.amount, computed["safe_to_save"]))
     if amount <= 0:
-        return {"swept_amount": 0.0, "goal": _to_dict(g), **computed}
+        return {"swept_amount": 0.0, "goal": _to_dict(db, g), **computed}
 
     g.current_amount = round((g.current_amount or 0.0) + amount, 2)
     g.last_predictive_sweep_period = period
     g.updated_at = utcnow()
+    db.add(SavingsGoalContribution(goal_id=g.id, user_id=current_user.id, amount=round(amount, 2), source="predictive_sweep"))
     db.commit()
     db.refresh(g)
-    return {"swept_amount": round(amount, 2), "goal": _to_dict(g), **computed}
+    return {"swept_amount": round(amount, 2), "goal": _to_dict(db, g), **computed}

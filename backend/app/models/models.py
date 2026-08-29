@@ -449,9 +449,32 @@ class SavingsGoal(Base):
     # save" figure is derived from live balances/forecasts, not a per-transaction
     # flag, so without this a second click would sweep the same surplus twice.
     last_predictive_sweep_period = Column(String(7))
+    # Recurring savings target -- e.g. "put away ₹10,000 every month" -- tracked
+    # against SavingsGoalContribution rows (not current_amount directly), since
+    # current_amount can also be set by a plain manual edit that isn't really
+    # "this month's saving."
+    monthly_target = Column(Float, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
+    user = relationship("User")
+
+
+class SavingsGoalContribution(Base):
+    """One deposit toward a SavingsGoal's current_amount -- recorded whenever
+    money is added via the manual "Add Contribution" action, a round-up sweep,
+    or a predictive sweep, so a monthly_target can be checked against what was
+    actually saved in a given calendar month rather than just the lifetime total."""
+    __tablename__ = "savings_goal_contributions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    goal_id = Column(Integer, ForeignKey("savings_goals.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount = Column(Float, nullable=False)
+    source = Column(String(20), default="manual")  # manual | roundup | predictive_sweep
+    contributed_at = Column(DateTime, default=utcnow, index=True)
+
+    goal = relationship("SavingsGoal")
     user = relationship("User")
 
 

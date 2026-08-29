@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import { createGoal, deleteGoal, sweepRoundups, updateGoal } from "../../api/goals";
+import { contributeToGoal, createGoal, deleteGoal, sweepRoundups, updateGoal } from "../../api/goals";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { SettingsStackParamList } from "../../navigation/SettingsNavigator";
 import { todayIsoDate } from "../../utils/format";
@@ -34,8 +34,11 @@ export default function GoalFormScreen({ route, navigation }: Props) {
   const [isActive, setIsActive] = useState(existing?.is_active !== false);
   const [roundupEnabled, setRoundupEnabled] = useState(existing?.roundup_enabled || false);
   const [roundupTo, setRoundupTo] = useState(existing?.roundup_to || 10);
+  const [monthlyTarget, setMonthlyTarget] = useState(existing?.monthly_target != null ? String(existing.monthly_target) : "");
   const [submitting, setSubmitting] = useState(false);
   const [sweeping, setSweeping] = useState(false);
+  const [contribAmount, setContribAmount] = useState("");
+  const [contributing, setContributing] = useState(false);
 
   const onSave = async () => {
     if (!name.trim() || !targetAmount) {
@@ -53,6 +56,7 @@ export default function GoalFormScreen({ route, navigation }: Props) {
         is_active: isActive,
         roundup_enabled: roundupEnabled,
         roundup_to: roundupTo,
+        monthly_target: monthlyTarget ? parseFloat(monthlyTarget) : null,
       };
       if (existing) {
         await updateGoal(existing.id, payload);
@@ -84,6 +88,25 @@ export default function GoalFormScreen({ route, navigation }: Props) {
       Alert.alert("Couldn't sweep", "Please try again.");
     } finally {
       setSweeping(false);
+    }
+  };
+
+  const onContribute = async () => {
+    if (!existing) return;
+    const amount = parseFloat(contribAmount);
+    if (!amount || amount <= 0) {
+      Alert.alert("Invalid amount", "Enter an amount greater than zero.");
+      return;
+    }
+    setContributing(true);
+    try {
+      await contributeToGoal(existing.id, amount);
+      setContribAmount("");
+      navigation.goBack();
+    } catch {
+      Alert.alert("Couldn't save", "Please try again.");
+    } finally {
+      setContributing(false);
     }
   };
 
@@ -146,6 +169,44 @@ export default function GoalFormScreen({ route, navigation }: Props) {
         placeholderTextColor={colors.textSecondary}
         autoCapitalize="none"
       />
+
+      <Text style={styles.label}>Monthly savings target (optional)</Text>
+      <TextInput
+        style={styles.input}
+        value={monthlyTarget}
+        onChangeText={setMonthlyTarget}
+        keyboardType="decimal-pad"
+        placeholder="e.g. 10000"
+        placeholderTextColor={colors.textSecondary}
+      />
+      <Text style={styles.hint}>
+        Tracks whether you've put away that much toward this goal each calendar month.
+      </Text>
+      {existing?.monthly_target != null && (
+        <>
+          <Text style={styles.hint}>
+            This month: ₹{(existing.this_month_saved ?? 0).toFixed(2)} of ₹{existing.monthly_target.toFixed(2)} saved
+            {existing.monthly_target_met ? " — target met ✓" : ""}
+          </Text>
+          <View style={styles.contribRow}>
+            <TextInput
+              style={[styles.input, styles.contribInput]}
+              value={contribAmount}
+              onChangeText={setContribAmount}
+              keyboardType="decimal-pad"
+              placeholder="Amount"
+              placeholderTextColor={colors.textSecondary}
+            />
+            <TouchableOpacity
+              style={[styles.contribButton, contributing && styles.buttonDisabled]}
+              onPress={onContribute}
+              disabled={contributing}
+            >
+              {contributing ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.buttonText}>Add</Text>}
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
 
       <Text style={styles.label}>Color</Text>
       <View style={styles.chipRow}>
@@ -235,6 +296,15 @@ const makeStyles = (c: ThemeColors) =>
       paddingVertical: 12, alignItems: "center",
     },
     sweepButtonText: { color: c.primary, fontSize: 14, fontWeight: "600" },
+    contribRow: { flexDirection: "row", gap: 8, marginTop: 8 },
+    contribInput: { flex: 1 },
+    contribButton: {
+      backgroundColor: c.primary,
+      borderRadius: 8,
+      paddingHorizontal: 20,
+      justifyContent: "center",
+      alignItems: "center",
+    },
     switchRow: {
       flexDirection: "row",
       justifyContent: "space-between",

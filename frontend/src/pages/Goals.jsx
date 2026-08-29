@@ -4,13 +4,13 @@ import {
   LinearProgress, Grid, Dialog, DialogTitle, DialogContent, DialogActions, Chip,
   FormControlLabel, Switch, MenuItem,
 } from '@mui/material';
-import { Add, Delete, Edit, Savings } from '@mui/icons-material';
-import { listGoals, createGoal, updateGoal, deleteGoal, sweepRoundups } from '../services/api';
+import { Add, Delete, Edit, Savings, CheckCircle, RadioButtonUnchecked } from '@mui/icons-material';
+import { listGoals, createGoal, updateGoal, deleteGoal, sweepRoundups, contributeToGoal } from '../services/api';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 const blank = {
   name: '', target_amount: '', current_amount: '', target_date: '', color: '#4e79a7',
-  roundup_enabled: false, roundup_to: 10,
+  roundup_enabled: false, roundup_to: 10, monthly_target: '',
 };
 
 export default function Goals() {
@@ -21,6 +21,8 @@ export default function Goals() {
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
   const [sweeping, setSweeping] = useState(null);
+  const [contributing, setContributing] = useState(null);
+  const [contribAmount, setContribAmount] = useState('');
 
   const load = async () => {
     try { setGoals(await listGoals()); } catch (e) { setErr('Failed to load goals'); }
@@ -34,6 +36,7 @@ export default function Goals() {
       name: g.name, target_amount: g.target_amount, current_amount: g.current_amount,
       target_date: g.target_date ? g.target_date.slice(0, 10) : '', color: g.color || '#4e79a7',
       roundup_enabled: g.roundup_enabled || false, roundup_to: g.roundup_to || 10,
+      monthly_target: g.monthly_target || '',
     });
     setOpen(true);
   };
@@ -49,6 +52,7 @@ export default function Goals() {
       color: form.color,
       roundup_enabled: form.roundup_enabled,
       roundup_to: parseInt(form.roundup_to, 10) || 10,
+      monthly_target: form.monthly_target ? parseFloat(form.monthly_target) : null,
     };
     try {
       if (editing) await updateGoal(editing, payload);
@@ -60,6 +64,21 @@ export default function Goals() {
   const remove = async (id) => {
     if (!window.confirm('Delete this goal?')) return;
     try { await deleteGoal(id); load(); } catch (e) { setErr('Failed to delete goal'); }
+  };
+
+  const contribute = async (goal) => {
+    const amount = parseFloat(contribAmount);
+    if (!amount || amount <= 0) { setErr('Enter an amount greater than zero.'); return; }
+    setErr(''); setMsg('');
+    try {
+      await contributeToGoal(goal.id, amount);
+      setMsg(`Added ${inr(amount)} to "${goal.name}".`);
+      setContributing(null);
+      setContribAmount('');
+      load();
+    } catch (e) {
+      setErr('Failed to record contribution.');
+    }
   };
 
   const sweep = async (goal) => {
@@ -117,6 +136,34 @@ export default function Goals() {
                   <Typography variant="caption" color="text.secondary">{inr(g.remaining)} to go</Typography>
                   {g.target_date && <Chip label={`by ${g.target_date.slice(0, 10)}`} size="small" variant="outlined" />}
                 </Box>
+                {g.monthly_target != null && (
+                  <Box sx={{ mt: 1.5, pt: 1.5, borderTop: 1, borderColor: 'divider' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                      {g.monthly_target_met ? (
+                        <CheckCircle fontSize="small" color="success" />
+                      ) : (
+                        <RadioButtonUnchecked fontSize="small" color="disabled" />
+                      )}
+                      <Typography variant="body2" color={g.monthly_target_met ? 'success.main' : 'text.secondary'}>
+                        This month: {inr(g.this_month_saved)} of {inr(g.monthly_target)} saved
+                        {g.monthly_target_met ? ' — target met' : ''}
+                      </Typography>
+                    </Box>
+                    {contributing === g.id ? (
+                      <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                        <TextField
+                          size="small" type="number" placeholder="Amount" value={contribAmount}
+                          onChange={(e) => setContribAmount(e.target.value)} autoFocus
+                          onKeyDown={(e) => { if (e.key === 'Enter') contribute(g); }}
+                        />
+                        <Button size="small" variant="contained" onClick={() => contribute(g)}>Add</Button>
+                        <Button size="small" onClick={() => { setContributing(null); setContribAmount(''); }}>Cancel</Button>
+                      </Box>
+                    ) : (
+                      <Button size="small" onClick={() => setContributing(g.id)}>Add Contribution</Button>
+                    )}
+                  </Box>
+                )}
                 {g.roundup_enabled && (
                   <Box sx={{ mt: 1.5, pt: 1.5, borderTop: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Chip icon={<Savings fontSize="small" />} label={`Round-up to ₹${g.roundup_to}`} size="small" variant="outlined" />
@@ -140,6 +187,12 @@ export default function Goals() {
             <TextField label="Current amount (₹)" type="number" value={form.current_amount} onChange={(e) => setForm({ ...form, current_amount: e.target.value })} fullWidth />
             <TextField label="Target date" type="date" value={form.target_date} onChange={(e) => setForm({ ...form, target_date: e.target.value })} InputLabelProps={{ shrink: true }} fullWidth />
             <TextField label="Color" type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} sx={{ width: 100 }} />
+            <TextField
+              label="Monthly savings target (₹, optional)" type="number"
+              value={form.monthly_target} onChange={(e) => setForm({ ...form, monthly_target: e.target.value })}
+              helperText="e.g. 10000 — tracks whether you've put away that much toward this goal each calendar month"
+              fullWidth
+            />
             <FormControlLabel
               control={<Switch checked={form.roundup_enabled} onChange={(e) => setForm({ ...form, roundup_enabled: e.target.checked })} />}
               label="Round-up savings — round each expense up and sweep the spare change here"

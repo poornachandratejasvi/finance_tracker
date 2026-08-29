@@ -185,6 +185,7 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "roundup_enabled", "ALTER TABLE savings_goals ADD COLUMN roundup_enabled BOOLEAN DEFAULT FALSE")
         _add_column_if_missing(columns, "roundup_to", "ALTER TABLE savings_goals ADD COLUMN roundup_to INTEGER DEFAULT 10")
         _add_column_if_missing(columns, "last_predictive_sweep_period", "ALTER TABLE savings_goals ADD COLUMN last_predictive_sweep_period VARCHAR(7)")
+        _add_column_if_missing(columns, "monthly_target", "ALTER TABLE savings_goals ADD COLUMN monthly_target FLOAT")
 
     if "users" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("users")}

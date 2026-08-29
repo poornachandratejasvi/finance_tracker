@@ -388,6 +388,9 @@ export interface Goal {
   is_active: boolean;
   roundup_enabled: boolean;
   roundup_to: number;
+  monthly_target: number | null;
+  this_month_saved: number | null;
+  monthly_target_met: boolean | null;
   created_at: string;
 }
 
