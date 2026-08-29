@@ -29,6 +29,12 @@ export type RootStackParamList = {
   ScanReceipt: undefined;
   EditTransaction: { transaction: Transaction };
   Add: { prefill?: ReceiptPrefill } | undefined;
+  // Reachable from the More grid (and Search) rather than the tab bar -- a
+  // Tab.Screen with tabBarButton:()=>null still reserves a flex slot in the
+  // tab bar row (that's what caused the uneven-looking spacing), so these
+  // live as root-stack screens instead, exactly like Add/Search/ScanReceipt.
+  BanksStack: NavigatorScreenParams<BanksStackParamList>;
+  SettingsStack: NavigatorScreenParams<SettingsStackParamList>;
 };
 
 export type TabParamList = {
@@ -36,11 +42,6 @@ export type TabParamList = {
   Transactions: undefined;
   Analytics: undefined;
   More: undefined;
-  // Banks/Settings stay registered (so their ~30 existing screens are still
-  // reachable via navigate("Banks", {screen: ...}) from the More grid) but are
-  // hidden from the visible tab bar -- see tabBarButton: () => null below.
-  Banks: NavigatorScreenParams<BanksStackParamList>;
-  Settings: NavigatorScreenParams<SettingsStackParamList>;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -119,17 +120,6 @@ function AppTabs({ navigation }: any) {
           name="More"
           component={MoreHubScreen}
           options={{ tabBarIcon: tabIcon("ellipsis-horizontal-circle-outline", "ellipsis-horizontal-circle"), tabBarLabel: tabLabel("More"), title: "More" }}
-        />
-        {/* Hidden from the tab bar -- still fully reachable via the More grid. */}
-        <Tab.Screen
-          name="Banks"
-          component={BanksNavigator}
-          options={{ tabBarButton: () => null, headerShown: false, title: "Banks" }}
-        />
-        <Tab.Screen
-          name="Settings"
-          component={SettingsNavigator}
-          options={{ tabBarButton: () => null, headerShown: false }}
         />
       </Tab.Navigator>
 
@@ -234,6 +224,8 @@ export default function RootNavigator() {
                 ),
               })}
             />
+            <Stack.Screen name="BanksStack" component={BanksNavigator} options={{ headerShown: false }} />
+            <Stack.Screen name="SettingsStack" component={SettingsNavigator} options={{ headerShown: false }} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

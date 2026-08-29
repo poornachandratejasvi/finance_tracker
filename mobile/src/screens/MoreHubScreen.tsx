@@ -2,20 +2,22 @@ import React from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../context/AuthContext";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
-import { TabParamList } from "../navigation/RootNavigator";
+import { TabParamList, RootStackParamList } from "../navigation/RootNavigator";
 
-type Nav = BottomTabNavigationProp<TabParamList>;
+type TabNav = BottomTabNavigationProp<TabParamList>;
+type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
 interface Tile {
   key: string;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
-  go: (nav: Nav) => void;
+  go: (tabNav: TabNav, rootNav: RootNav) => void;
   adminOnly?: boolean;
 }
 
@@ -25,28 +27,35 @@ interface Tile {
 // settings/banks screens into one huge grid, the highest-traffic ones get a
 // direct tile and everything else is one tap away via the "Accounts &
 // Statements" and "All Settings" catch-all tiles (which land on the existing,
-// still-fully-functional BanksHub/SettingsHub list screens).
+// still-fully-functional BanksHub/SettingsHub list screens). BanksStack and
+// SettingsStack are root-level screens (not tabs -- see RootNavigator), so
+// they're reached via the root nav, not the tab nav.
 const TILES: Tile[] = [
-  { key: "records", label: "Records", icon: "list-outline", color: "#2e7d32", go: (n) => n.navigate("Transactions") },
-  { key: "investments", label: "Investments", icon: "trending-up-outline", color: "#6a1b9a", go: (n) => n.navigate("Banks", { screen: "Investments" }) },
-  { key: "budgets", label: "Budgets", icon: "wallet-outline", color: "#ef6c00", go: (n) => n.navigate("Settings", { screen: "Budgets" }) },
-  { key: "goals", label: "Goals", icon: "flag-outline", color: "#c2185b", go: (n) => n.navigate("Settings", { screen: "Goals" }) },
-  { key: "reward-points", label: "Reward Points", icon: "gift-outline", color: "#f9a825", go: (n) => n.navigate("Banks", { screen: "RewardPoints" }) },
-  { key: "vehicles", label: "Vehicles", icon: "car-outline", color: "#1565c0", go: (n) => n.navigate("Settings", { screen: "Vehicles" }) },
-  { key: "debt-payoff", label: "Debt Payoff", icon: "trending-down-outline", color: "#c62828", go: (n) => n.navigate("Settings", { screen: "DebtPayoff" }) },
-  { key: "automatic-rules", label: "Automatic Rules", icon: "flash-outline", color: "#4527a0", go: (n) => n.navigate("Settings", { screen: "AutoRules" }) },
-  { key: "labels", label: "Labels", icon: "bookmark-outline", color: "#00838f", go: (n) => n.navigate("Settings", { screen: "Labels" }) },
-  { key: "categories", label: "Categories", icon: "pricetags-outline", color: "#558b2f", go: (n) => n.navigate("Settings", { screen: "Categories" }) },
-  { key: "recycle-bin", label: "Recycle Bin", icon: "trash-outline", color: "#616161", go: (n) => n.navigate("Settings", { screen: "RecycleBin" }) },
-  { key: "ask-ai", label: "Ask AI", icon: "chatbubble-ellipses-outline", color: "#5e35b1", go: (n) => n.navigate("Settings", { screen: "AskAi" }) },
-  { key: "jobs", label: "Jobs", icon: "sync-outline", color: "#00695c", go: (n) => n.navigate("Settings", { screen: "Jobs" }) },
-  { key: "family-dashboard", label: "Family Dashboard", icon: "people-outline", color: "#8e24aa", go: (n) => n.navigate("Banks", { screen: "FamilyDashboard" }), adminOnly: true },
-  { key: "accounts", label: "Accounts & Statements", icon: "business-outline", color: "#283593", go: (n) => n.navigate("Banks", { screen: "BanksHub" }) },
-  { key: "settings", label: "All Settings", icon: "settings-outline", color: "#37474f", go: (n) => n.navigate("Settings", { screen: "SettingsHub" }) },
+  { key: "records", label: "Records", icon: "list-outline", color: "#2e7d32", go: (tn) => tn.navigate("Transactions") },
+  { key: "investments", label: "Investments", icon: "trending-up-outline", color: "#6a1b9a", go: (_, rn) => rn.navigate("BanksStack", { screen: "Investments" }) },
+  { key: "budgets", label: "Budgets", icon: "wallet-outline", color: "#ef6c00", go: (_, rn) => rn.navigate("SettingsStack", { screen: "Budgets" }) },
+  { key: "goals", label: "Goals", icon: "flag-outline", color: "#c2185b", go: (_, rn) => rn.navigate("SettingsStack", { screen: "Goals" }) },
+  { key: "reward-points", label: "Reward Points", icon: "gift-outline", color: "#f9a825", go: (_, rn) => rn.navigate("BanksStack", { screen: "RewardPoints" }) },
+  { key: "vehicles", label: "Vehicles", icon: "car-outline", color: "#1565c0", go: (_, rn) => rn.navigate("SettingsStack", { screen: "Vehicles" }) },
+  { key: "debt-payoff", label: "Debt Payoff", icon: "trending-down-outline", color: "#c62828", go: (_, rn) => rn.navigate("SettingsStack", { screen: "DebtPayoff" }) },
+  { key: "automatic-rules", label: "Automatic Rules", icon: "flash-outline", color: "#4527a0", go: (_, rn) => rn.navigate("SettingsStack", { screen: "AutoRules" }) },
+  { key: "labels", label: "Labels", icon: "bookmark-outline", color: "#00838f", go: (_, rn) => rn.navigate("SettingsStack", { screen: "Labels" }) },
+  { key: "categories", label: "Categories", icon: "pricetags-outline", color: "#558b2f", go: (_, rn) => rn.navigate("SettingsStack", { screen: "Categories" }) },
+  { key: "recycle-bin", label: "Recycle Bin", icon: "trash-outline", color: "#616161", go: (_, rn) => rn.navigate("SettingsStack", { screen: "RecycleBin" }) },
+  { key: "ask-ai", label: "Ask AI", icon: "chatbubble-ellipses-outline", color: "#5e35b1", go: (_, rn) => rn.navigate("SettingsStack", { screen: "AskAi" }) },
+  { key: "jobs", label: "Jobs", icon: "sync-outline", color: "#00695c", go: (_, rn) => rn.navigate("SettingsStack", { screen: "Jobs" }) },
+  { key: "family-dashboard", label: "Family Dashboard", icon: "people-outline", color: "#8e24aa", go: (_, rn) => rn.navigate("BanksStack", { screen: "FamilyDashboard" }), adminOnly: true },
+  { key: "accounts", label: "Accounts & Statements", icon: "business-outline", color: "#283593", go: (_, rn) => rn.navigate("BanksStack", { screen: "BanksHub" }) },
+  { key: "settings", label: "All Settings", icon: "settings-outline", color: "#37474f", go: (_, rn) => rn.navigate("SettingsStack", { screen: "SettingsHub" }) },
 ];
 
 export default function MoreHubScreen() {
-  const navigation = useNavigation<Nav>();
+  const tabNavigation = useNavigation<TabNav>();
+  // useNavigation() always returns the CLOSEST navigator (the tab navigator
+  // here) regardless of the generic type asserted -- getParent() is what
+  // actually walks up to the root stack, which is where BanksStack/
+  // SettingsStack live (see RootNavigator).
+  const rootNavigation = tabNavigation.getParent<RootNav>()!;
   const { user } = useAuth();
   const { colors } = useTheme();
   const styles = makeStyles(colors);
@@ -55,7 +64,7 @@ export default function MoreHubScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <TouchableOpacity style={styles.profileRow} onPress={() => navigation.navigate("Settings", { screen: "Profile" })}>
+      <TouchableOpacity style={styles.profileRow} onPress={() => rootNavigation.navigate("SettingsStack", { screen: "Profile" })}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{(user?.full_name || user?.username || "?").charAt(0).toUpperCase()}</Text>
         </View>
@@ -68,7 +77,7 @@ export default function MoreHubScreen() {
 
       <View style={styles.grid}>
         {tiles.map((t) => (
-          <TouchableOpacity key={t.key} style={styles.tile} onPress={() => t.go(navigation)} activeOpacity={0.7}>
+          <TouchableOpacity key={t.key} style={styles.tile} onPress={() => t.go(tabNavigation, rootNavigation)} activeOpacity={0.7}>
             <View style={[styles.tileIcon, { backgroundColor: t.color }]}>
               <Ionicons name={t.icon} size={22} color="#fff" />
             </View>

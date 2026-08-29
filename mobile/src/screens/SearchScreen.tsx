@@ -23,22 +23,26 @@ const SECTIONS: { key: keyof SearchResponse; label: string; icon: keyof typeof I
   { key: "reward_points", label: "Reward Points", icon: "gift-outline" },
 ];
 
+// Transactions/Dashboard are tabs (nested under root "Tabs"); Banks/Settings
+// are root-level screens (see RootNavigator) -- so destinations name the
+// ROOT screen to navigate to directly, nesting further via params only for
+// the tab case.
 function destinationFor(item: SearchResultItem): { screen: string; params?: any } {
   switch (item.type) {
     case "transaction":
-      return { screen: "Transactions" };
+      return { screen: "Tabs", params: { screen: "Transactions" } };
     case "bank":
-      return { screen: "Banks" };
+      return { screen: "BanksStack" };
     case "category":
-      return { screen: "Transactions" };
+      return { screen: "Tabs", params: { screen: "Transactions" } };
     case "label":
-      return { screen: "Transactions" };
+      return { screen: "Tabs", params: { screen: "Transactions" } };
     case "template":
-      return { screen: "Settings" };
+      return { screen: "SettingsStack" };
     case "reward_point":
-      return { screen: "Banks", params: { screen: "RewardPoints" } };
+      return { screen: "BanksStack", params: { screen: "RewardPoints" } };
     default:
-      return { screen: "Dashboard" };
+      return { screen: "Tabs", params: { screen: "Dashboard" } };
   }
 }
 
@@ -68,7 +72,7 @@ export default function SearchScreen() {
 
   const handleSelect = (item: SearchResultItem) => {
     const dest = destinationFor(item);
-    navigation.navigate("Tabs", dest);
+    navigation.navigate(dest.screen, dest.params);
   };
 
   const hasAnyResults = results && SECTIONS.some((s) => (results[s.key] || []).length > 0);
