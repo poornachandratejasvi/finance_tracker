@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import { alpha } from '@mui/material/styles';
 import {
-  Container, Paper, TablePagination, Typography, Box, Button, TextField, Select, MenuItem,
+  Container, Paper, Typography, Box, Button, TextField, Select, MenuItem,
   FormControl, InputLabel, Chip, IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
   Alert, CircularProgress, Tooltip, Checkbox, FormControlLabel,
 } from '@mui/material';
@@ -12,9 +13,11 @@ import api, {
   getTransactions, deleteTransaction,
   getBanks, getLabels, getCategories, getCurrencies, bulkLabelTransactions, createAutoLabelRule,
   bulkDeleteTransactions, bulkConfirmTransactions,
+  getSavedFilters, createSavedFilter, deleteSavedFilter,
 } from '../services/api';
 import BulkEditDialog from '../components/BulkEditDialog.jsx';
 import FilterSidebar from '../components/FilterSidebar.jsx';
+import MonthPager, { currentMonthPeriod } from '../components/MonthPager.jsx';
 import CategoryIcon from '../components/CategoryIcon.jsx';
 import TransactionDialog from '../components/TransactionDialog.jsx';
 import { formatCurrency } from '../utils/format';
@@ -78,9 +81,15 @@ function Transactions() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
   const [total, setTotal] = useState(0);
+  const [period, setPeriod] = useState(() => currentMonthPeriod());
+
+  // "My filter" -- named filter presets (scope='records'), same SavedFilter table/
+  // API ModernDashboard.jsx already uses for Analytics (scope='analytics').
+  const [savedFilters, setSavedFilters] = useState([]);
+  const [selectedSavedId, setSelectedSavedId] = useState('');
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
 
   const [filters, setFilters] = useState(() => {
     const params = new URLSearchParams(location.search);
@@ -151,10 +160,13 @@ function Transactions() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const params = {
-        skip: page * rowsPerPage, limit: rowsPerPage,
-        sort_by: sortBy, sort_dir: sortDir,
-      };
+      // Month-scoped (like the reference app) rather than paginated -- a single
+      // period's transactions are fetched in one shot (a "high enough" cap, not
+      // true pagination) so the period's net total and "select all" are computed
+      // from the full period, not just one page of it.
+      const params = { limit: 5000, sort_by: sortBy, sort_dir: sortDir };
+      if (period?.start_date) params.start_date = period.start_date;
+      if (period?.end_date) params.end_date = period.end_date;
       if (filters.accountIds.length) params.bank_id = filters.accountIds.join(',');
       if (filters.categoryNames.length) params.category = filters.categoryNames.join(',');
       if (filters.labelIds.length) params.label_id = filters.labelIds.join(',');
@@ -185,7 +197,7 @@ function Transactions() {
       setLoading(false);
     }
   }, [
-    page, rowsPerPage, sortBy, sortDir, debouncedSearch,
+    period, sortBy, sortDir, debouncedSearch,
     filters.accountIds, filters.categoryNames, filters.labelIds,
     filters.recordTypes, filters.amountMin, filters.amountMax, filters.confirmationStatus,
     filters.paymentTypes,
@@ -193,7 +205,42 @@ function Transactions() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Any filter change resets to the first page. Search is applied after debounce.
+  const loadSavedFilters = useCallback(() => {
+    getSavedFilters('records').then((res) => setSavedFilters(Array.isArray(res) ? res : [])).catch(() => setSavedFilters([]));
+  }, []);
+  useEffect(() => { loadSavedFilters(); }, [loadSavedFilters]);
+
+  const applySavedFilter = (id) => {
+    setSelectedSavedId(id);
+    const found = savedFilters.find((f) => f.id === id);
+    if (found) handleFiltersChange(found.payload || {});
+  };
+
+  const handleSaveNew = async () => {
+    const name = saveName.trim();
+    if (!name) return;
+    try {
+      const entry = await createSavedFilter({ name, scope: 'records', payload: filters });
+      setSavedFilters((prev) => [...prev, entry]);
+      setSelectedSavedId(entry.id);
+      setSaveName('');
+      setSaveDialogOpen(false);
+    } catch (err) {
+      setError('Failed to save filter');
+    }
+  };
+
+  const handleDeleteSaved = async () => {
+    if (!selectedSavedId) return;
+    try {
+      await deleteSavedFilter(selectedSavedId);
+      setSavedFilters((prev) => prev.filter((f) => f.id !== selectedSavedId));
+      setSelectedSavedId('');
+    } catch (err) {
+      setError('Failed to delete filter');
+    }
+  };
+
   // Defensively normalizes the array-valued filter fields -- if a child control
   // ever passes one of these as null/undefined instead of [], fetchData's
   // `.length` reads would throw and the whole page would show as failed to load.
@@ -203,17 +250,15 @@ function Transactions() {
       if (!Array.isArray(merged[key])) merged[key] = [];
     }
     setFilters(merged);
-    setPage(0);
   };
 
   const handleSortChange = (e) => {
     const [by, dir] = e.target.value.split(':');
     setSortBy(by);
     setSortDir(dir);
-    setPage(0);
   };
 
-  // Group the loaded page by calendar day, preserving the order rows arrive in.
+  // Group the period's transactions by calendar day, preserving arrival order.
   const dayGroups = useMemo(() => {
     const groups = [];
     const byDay = new Map();
@@ -234,6 +279,13 @@ function Transactions() {
   const isSelected = (id) => selectedTransactions.some((s) => s.id === id);
   const allSelected = transactions.length > 0 && selectedTransactions.length === transactions.length;
   const someSelected = selectedTransactions.length > 0 && !allSelected;
+
+  // Header net total: the selection's total once anything is checked (matching
+  // the reference app), otherwise the whole period's.
+  const headerNet = useMemo(() => {
+    const rows = selectedTransactions.length ? selectedTransactions : transactions;
+    return rows.reduce((sum, t) => sum + (t.transaction_type === 'credit' ? 1 : -1) * Number(t.amount || 0), 0);
+  }, [transactions, selectedTransactions]);
 
   const toggleSelectAll = (checked) => setSelectedTransactions(checked ? [...transactions] : []);
   const toggleSelectOne = (t, checked) => {
@@ -385,8 +437,10 @@ function Transactions() {
         // Export exactly what the user selected.
         rows = selectedTransactions;
       } else {
-        // Export ALL rows matching the current filters (not just the current page).
+        // Export ALL rows matching the current filters + period, same scope the list shows.
         const params = { skip: 0, limit: 10000, sort_by: sortBy, sort_dir: sortDir };
+        if (period?.start_date) params.start_date = period.start_date;
+        if (period?.end_date) params.end_date = period.end_date;
         if (filters.accountIds.length) params.bank_id = filters.accountIds.join(',');
         if (filters.categoryNames.length) params.category = filters.categoryNames.join(',');
         if (filters.labelIds.length) params.label_id = filters.labelIds.join(',');
@@ -519,11 +573,56 @@ function Transactions() {
           labels={labels}
           amountBound={amountBound}
           show={['search', 'accounts', 'categories', 'labels', 'recordTypes', 'amount', 'confirmationStatus', 'paymentTypes']}
+          myFilterSlot={(
+            <Box>
+              <Typography variant="caption" color="text.secondary">My filter</Typography>
+              <Box display="flex" gap={0.5} mt={0.5}>
+                <FormControl size="small" fullWidth>
+                  <Select
+                    displayEmpty
+                    value={selectedSavedId}
+                    onChange={(e) => applySavedFilter(e.target.value)}
+                    renderValue={(sel) => savedFilters.find((f) => f.id === sel)?.name || 'Select filter'}
+                  >
+                    <MenuItem value=""><em>Select filter</em></MenuItem>
+                    {savedFilters.map((f) => (
+                      <MenuItem key={f.id} value={f.id}>{f.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Tooltip title="Save as new filter">
+                  <IconButton size="small" color="primary" onClick={() => setSaveDialogOpen(true)}>
+                    <Add fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                {selectedSavedId && (
+                  <Tooltip title="Delete this saved filter">
+                    <IconButton size="small" color="error" onClick={handleDeleteSaved}>
+                      <Delete fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Box>
+            </Box>
+          )}
         />
 
         <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
-          {/* Header + bulk actions */}
-          <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderRadius: 2 }}>
+          <MonthPager period={period} onChange={setPeriod} />
+
+          {/* Header + bulk actions -- a selection turns the bar's background pale
+              and the action buttons solid-colored (matching the reference app),
+              instead of just enabling/disabling outlined buttons. */}
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 1.5, mb: 2, borderRadius: 2,
+              bgcolor: selectedTransactions.length > 0
+                ? (theme) => alpha(theme.palette.warning.main, 0.12)
+                : 'background.paper',
+              transition: 'background-color .15s',
+            }}
+          >
             <Box display="flex" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
               <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
                 <Checkbox
@@ -533,20 +632,43 @@ function Transactions() {
                   onChange={(e) => toggleSelectAll(e.target.checked)}
                 />
                 <Typography variant="subtitle1" fontWeight={600}>
-                  Found {total} record{total === 1 ? '' : 's'}
+                  {selectedTransactions.length > 0
+                    ? `Select all, selected ${selectedTransactions.length}`
+                    : `Found ${total} record${total === 1 ? '' : 's'}`}
                 </Typography>
-                {selectedTransactions.length > 0 && (
-                  <Chip size="small" label={`${selectedTransactions.length} selected`} color="primary" sx={{ ml: 0.5 }} />
-                )}
               </Box>
 
               <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
-                <Button size="small" variant="outlined" startIcon={<Edit />} disabled={selectedTransactions.length === 0} onClick={() => setBulkEditOpen(true)}>Edit</Button>
+                <Button
+                  size="small" startIcon={<Edit />} disabled={selectedTransactions.length === 0}
+                  variant={selectedTransactions.length ? 'contained' : 'outlined'} color="success"
+                  onClick={() => setBulkEditOpen(true)}
+                >
+                  Edit
+                </Button>
                 <Button size="small" variant="outlined" color="success" startIcon={<CheckCircleOutline />} disabled={selectedTransactions.length === 0} onClick={handleBulkConfirm}>Mark Confirmed</Button>
-                <Button size="small" variant="outlined" startIcon={<FileDownload />} onClick={handleExportCSV}>Export</Button>
-                <Button size="small" variant="outlined" color="error" startIcon={<Delete />} disabled={selectedTransactions.length === 0} onClick={handleBulkDelete}>Delete</Button>
+                <Button
+                  size="small" startIcon={<FileDownload />}
+                  variant={selectedTransactions.length ? 'contained' : 'outlined'} color="warning"
+                  onClick={handleExportCSV}
+                >
+                  Export
+                </Button>
+                <Button
+                  size="small" startIcon={<Delete />} disabled={selectedTransactions.length === 0}
+                  variant={selectedTransactions.length ? 'contained' : 'outlined'} color="error"
+                  onClick={handleBulkDelete}
+                >
+                  Delete
+                </Button>
                 <Tooltip title="Auto-merges duplicate transactions and moves the extras to the Recycle Bin -- restorable there if a merge was wrong">
-                  <Button size="small" variant="outlined" color="warning" startIcon={<ContentCopy />} onClick={handleSolveDuplicities}>Solve Duplicities</Button>
+                  <Button
+                    size="small" startIcon={<ContentCopy />}
+                    variant={selectedTransactions.length ? 'contained' : 'outlined'} color="info"
+                    onClick={handleSolveDuplicities}
+                  >
+                    Solve Duplicities
+                  </Button>
                 </Tooltip>
                 <FormControl size="small" sx={{ minWidth: 170 }}>
                   <InputLabel>Sort by</InputLabel>
@@ -556,6 +678,9 @@ function Transactions() {
                     ))}
                   </Select>
                 </FormControl>
+                <Typography fontWeight={700} sx={{ color: headerNet < 0 ? 'error.main' : 'success.main', ml: 1 }}>
+                  {formatCurrency(headerNet)}
+                </Typography>
               </Box>
             </Box>
           </Paper>
@@ -567,7 +692,9 @@ function Transactions() {
             <>
               <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
                 {dayGroups.length === 0 ? (
-                  <Box p={6} textAlign="center"><Typography color="text.secondary">No records found</Typography></Box>
+                  <Box p={6} textAlign="center">
+                    <Typography color="text.secondary">Sorry, no records were found for this combination of filters.</Typography>
+                  </Box>
                 ) : (
                   dayGroups.map((g) => (
                     <Box key={g.key}>
@@ -604,7 +731,11 @@ function Transactions() {
                             onChange={(e) => toggleSelectOne(t, e.target.checked)}
                           />
                           <CategoryIcon name={t.category} size={36} />
-                          <Box sx={{ minWidth: 0, flex: 1 }}>
+                          {/* Category (bold) + account/source underneath it, separate from the
+                              raw merchant description -- matching the reference app's layout,
+                              which keeps "what kind of spend + where it came from" together and
+                              gives the actual description its own column. */}
+                          <Box sx={{ minWidth: 0, width: 220, flexShrink: 0 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                               <Typography noWrap fontWeight={600}>{t.category || 'Uncategorized'}</Typography>
                               {t.is_confirmed === false && (
@@ -612,34 +743,30 @@ function Transactions() {
                                   <Chip label="Pending" size="small" color="warning" variant="outlined" sx={{ height: 18, fontSize: 11 }} />
                                 </Tooltip>
                               )}
-                              {t.source === 'sms' && (
-                                <Tooltip title="Auto-detected from a bank SMS on your phone">
-                                  <Chip label="SMS" size="small" color="info" variant="outlined" sx={{ height: 18, fontSize: 11 }} />
-                                </Tooltip>
-                              )}
                             </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: t.bank_color || accountDotColor(t.bank_type) }} />
+                              <Typography variant="body2" color="text.secondary" noWrap>
+                                {t.bank_name || 'Unknown'}{t.source === 'sms' ? ' sms' : ''}
+                              </Typography>
+                            </Box>
+                          </Box>
+
+                          <Box sx={{ minWidth: 0, flex: 1 }}>
                             {t.description && (
                               <Typography noWrap variant="body2" color="text.secondary">{t.description}</Typography>
                             )}
                           </Box>
 
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: accountDotColor(t.bank_type) }} />
-                              <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: 130 }}>
-                                {t.bank_name || 'Unknown'}
-                              </Typography>
-                            </Box>
-                            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 220 }}>
-                              {(t.label_details || []).map((l) => (
-                                <Chip
-                                  key={l.id}
-                                  label={l.name}
-                                  size="small"
-                                  sx={{ bgcolor: l.color || 'grey.500', color: '#fff', height: 20 }}
-                                />
-                              ))}
-                            </Box>
+                          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 220, flexShrink: 0 }}>
+                            {(t.label_details || []).map((l) => (
+                              <Chip
+                                key={l.id}
+                                label={l.name}
+                                size="small"
+                                sx={{ bgcolor: l.color || 'grey.500', color: '#fff', height: 20 }}
+                              />
+                            ))}
                           </Box>
 
                           <Box sx={{ textAlign: 'right', flexShrink: 0, minWidth: 110 }}>
@@ -667,15 +794,6 @@ function Transactions() {
                   ))
                 )}
               </Paper>
-              <TablePagination
-                component="div"
-                count={total}
-                page={page}
-                onPageChange={(e, p) => setPage(p)}
-                rowsPerPage={rowsPerPage}
-                onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
-                rowsPerPageOptions={[10, 25, 50, 100]}
-              />
             </>
           )}
         </Box>
@@ -695,6 +813,21 @@ function Transactions() {
         onSaved={handleDialogSaved}
         onReloadCategories={reloadReferenceData}
       />
+
+      <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Save as new</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus fullWidth size="small" label="Name" sx={{ mt: 1 }}
+            value={saveName} onChange={(e) => setSaveName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveNew(); }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" disabled={!saveName.trim()} onClick={handleSaveNew}>Save</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={quickAddOpen} onClose={() => setQuickAddOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Quick Add with AI</DialogTitle>

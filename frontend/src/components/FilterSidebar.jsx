@@ -61,6 +61,7 @@ export default function FilterSidebar({
   show = ['search', 'accounts', 'categories', 'labels', 'recordTypes', 'amount'],
   title = 'Filters',
   width = 260,
+  myFilterSlot = null,
 }) {
   const v = { ...DEFAULT_FILTERS, ...(value || {}) };
   const set = (patch) => onChange({ ...v, ...patch });
@@ -146,6 +147,8 @@ export default function FilterSidebar({
           </span>
         </Tooltip>
       </Box>
+
+      {myFilterSlot && <Box mb={2}>{myFilterSlot}</Box>}
 
       <Box display="flex" flexDirection="column" gap={2}>
         {has('search') && (

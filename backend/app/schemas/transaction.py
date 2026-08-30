@@ -44,6 +44,7 @@ class TransactionResponse(TransactionBase):
     bank_id: int
     bank_name: Optional[str] = None
     bank_type: Optional[str] = None
+    bank_color: Optional[str] = None
     currency_code: Optional[str] = None
     pdf_statement_id: Optional[int] = None
     is_duplicate: bool

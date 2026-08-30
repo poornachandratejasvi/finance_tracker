@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
 from typing import List, Optional
@@ -143,6 +144,7 @@ def list_transactions(
         trans_dict = TransactionResponse.from_orm(trans).dict()
         trans_dict['bank_name'] = trans.bank.name if trans.bank else None
         trans_dict['bank_type'] = trans.bank.bank_type if trans.bank else None
+        trans_dict['bank_color'] = trans.bank.color if trans.bank else None
         trans_dict['currency_code'] = trans.currency_code or bank_cur.get(trans.bank_id, 'INR')
         trans_dict['pdf_file'] = trans.pdf_statement.file_name if trans.pdf_statement else None
         trans_dict['labels'] = [tl.label.name for tl in trans.transaction_labels]
