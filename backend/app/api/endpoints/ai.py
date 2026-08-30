@@ -14,9 +14,9 @@ from sqlalchemy import func, case
 
 from app.core.database import get_db
 from app.api.endpoints.auth import get_current_active_user
-from app.models.models import User, Transaction, Category, Bank, TransactionType, AppSetting, AutoRule
+from app.models.models import User, Transaction, Category, Bank, TransactionType, AppSetting
 from app.services import ai_service, currency_service
-from app.services.autorules import get_active_rules, parse_list
+from app.services.autorules import remember_category
 
 router = APIRouter()
 
@@ -168,14 +168,10 @@ def ai_categorize_transactions(data: AICategorizeRequest, db: Session = Depends(
     except Exception as e:
         raise HTTPException(status_code=400, detail=_ai_error_message(db, current_user.id, e))
 
-    # Remember each AI-picked category as an AutoRule keyed on the merchant's most
-    # distinctive word, so the SAME merchant showing up again never needs to ask AI
-    # again -- it hits this rule (via apply_auto_rules_and_notify, which every
-    # ingest/sync/PDF path already runs) before ever falling through to here.
-    existing_keywords = {
-        str(kw).upper().strip() for r in get_active_rules(db, current_user.id) for kw in parse_list(r.keywords)
-    }
-
+    # Remember each AI-picked category as an AutoRule (see autorules.remember_category)
+    # so the SAME merchant showing up again never needs to ask AI again -- it hits
+    # this rule (via apply_auto_rules_and_notify, which every ingest/sync/PDF path
+    # already runs) before ever falling through to here.
     updated = 0
     rules_created = 0
     for idx, cat in mapping.items():
@@ -185,14 +181,7 @@ def ai_categorize_transactions(data: AICategorizeRequest, db: Session = Depends(
             if t.category != cat:
                 t.category = cat
                 updated += 1
-        keyword = _merchant_keyword(order[idx])
-        if keyword and keyword not in existing_keywords:
-            db.add(AutoRule(
-                user_id=current_user.id, name=f"Auto: {keyword.title()}",
-                keywords=json.dumps([keyword]), record_type="any", category=cat,
-                label_ids=json.dumps([]), priority=0, is_active=True,
-            ))
-            existing_keywords.add(keyword)
+        if remember_category(db, current_user.id, order[idx], cat):
             rules_created += 1
     db.commit()
     return {"updated": updated, "considered": len(txns), "unique": len(rep_items), "rules_created": rules_created}
@@ -285,27 +274,6 @@ _NUM_RE = re.compile(r"\d+")
 def _norm_desc(desc: str) -> str:
     d = _NUM_RE.sub("", (desc or "").upper())
     return " ".join(d.split())[:40]
-
-
-# Generic banking/UPI boilerplate words that show up in most descriptions and would
-# make a useless (over-broad) AutoRule keyword if picked instead of the actual merchant.
-_GENERIC_DESC_WORDS = {
-    "UPI", "POS", "NEFT", "IMPS", "RTGS", "ACH", "REF", "TXN", "PYMT", "PAY", "PAYMENT",
-    "FROM", "VIA", "THE", "AND", "FOR", "INFO", "CARD",
-    "PURCHASE", "SPENT", "DEBIT", "CREDIT", "TRANSFER", "BANK",
-}
-_WORD_RE = re.compile(r"[A-Z]{4,}")
-
-
-def _merchant_keyword(norm_desc: str) -> Optional[str]:
-    """Picks the single most distinctive word out of an already-digit-stripped,
-    normalized description to use as a new AutoRule's keyword -- e.g. "SWIGGY" out
-    of "UPI-SWIGGY-YBL@ICICI", not the whole (fragile, reference-code-sensitive)
-    string. Splits on any non-letter run (hyphens/underscores/@ are common in UPI
-    IDs, not just spaces) so a hyphen-joined merchant name still tokenizes.
-    Longest word wins, generic banking terms excluded. None if nothing usable."""
-    words = [w for w in _WORD_RE.findall(norm_desc) if w not in _GENERIC_DESC_WORDS]
-    return max(words, key=len) if words else None
 
 
 @router.get("/predictions")

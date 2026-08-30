@@ -19,6 +19,7 @@ from app.schemas.transaction import (
 )
 from app.services.transaction_service import TransactionService
 from app.services import audit_service
+from app.services.autorules import remember_category, UNCATEGORIZED_VALUES
 from app.utils.parsing import parse_csv_list as _parse_csv_list
 from app.core.household import visible_user_ids
 
@@ -666,8 +667,19 @@ def update_transaction(
     
     update_data = trans_data.dict(exclude_unset=True)
     audit_service.record_update(db, transaction, update_data)
+
+    # A user manually assigning a category to a previously-unclassified merchant is
+    # exactly the same signal as an AI categorization -- remember it as an AutoRule
+    # (see autorules.remember_category) so the same merchant is auto-categorized
+    # next time instead of showing up as "needs categorization" again.
+    was_uncategorized = transaction.category in UNCATEGORIZED_VALUES
+    new_category = update_data.get("category")
+
     for key, value in update_data.items():
         setattr(transaction, key, value)
+
+    if was_uncategorized and new_category and new_category not in UNCATEGORIZED_VALUES:
+        remember_category(db, transaction.user_id, transaction.description, new_category)
 
     db.commit()
     db.refresh(transaction)
