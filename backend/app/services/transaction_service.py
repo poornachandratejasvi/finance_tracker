@@ -161,7 +161,15 @@ class TransactionService:
     
     @staticmethod
     def categorize_transaction(description: str) -> Optional[str]:
-        """Auto-categorize transaction based on description"""
+        """Best-effort auto-categorize from a hardcoded keyword list. Returns None
+        (not 'Others') when nothing matches -- an honest "not categorized yet" that
+        renders as "Uncategorized" and is still picked up by every "needs
+        categorization" sweep (AI Categorize, Apply Rules), same as a NULL category
+        from any other path (e.g. Gmail alert emails, which never call this at all).
+        Previously this returned the literal string 'Others' unconditionally,
+        permanently mislabeling any transaction whose merchant isn't one of the ~8
+        keyword buckets below (most real-world merchants) as if it had been
+        deliberately categorized, instead of leaving it visibly unclassified."""
         categories = {
             'Food & Dining': ['restaurant', 'food', 'zomato', 'swiggy', 'cafe', 'pizza', 'burger'],
             'Shopping': ['amazon', 'flipkart', 'myntra', 'shopping', 'mall', 'store'],
@@ -172,13 +180,13 @@ class TransactionService:
             'Transfer': ['upi', 'imps', 'neft', 'rtgs', 'transfer'],
             'ATM Withdrawal': ['atm', 'withdrawal', 'cash'],
         }
-        
+
         description_lower = description.lower()
-        
+
         for category, keywords in categories.items():
             if any(keyword in description_lower for keyword in keywords):
                 return category
-        
-        return 'Others'
+
+        return None
 
 
