@@ -15,23 +15,30 @@ from sqlalchemy.orm import Session
 from app.core.api_auth import get_user_from_api_key
 from app.core.database import get_db
 from app.models.models import Bank, Transaction, TransactionType, User
+from app.services.balance_service import get_computed_net_by_bank
 
 router = APIRouter()
 
 
 @router.get("")
 def get_summary(db: Session = Depends(get_db), user: User = Depends(get_user_from_api_key)):
-    # Same live-balance aggregate as the net-worth-trend endpoint's "current"
-    # figure -- bank_type='investment' is excluded (those rows only exist to
-    # auto-download CAS/PPF statement emails, not to hold a real balance).
-    savings = float(db.query(func.coalesce(func.sum(Bank.current_balance), 0.0)).filter(
-        Bank.user_id == user.id,
-        Bank.bank_type.notin_(["credit", "investment"]),
-        Bank.current_balance.isnot(None),
-    ).scalar() or 0.0)
-    credit = float(db.query(func.coalesce(func.sum(Bank.current_balance), 0.0)).filter(
-        Bank.user_id == user.id, Bank.bank_type == "credit", Bank.current_balance.isnot(None),
-    ).scalar() or 0.0)
+    # Same live-balance aggregate as the net-worth-trend endpoint's "current" figure --
+    # bank_type='investment' is excluded (those rows only exist to auto-download
+    # CAS/PPF statement emails, not to hold a real balance). Falls back to the
+    # computed-from-transactions net for a bank that's never had a statement balance
+    # stored, instead of a plain SQL sum silently skipping it (current_balance IS NULL).
+    banks = db.query(Bank).filter(Bank.user_id == user.id, Bank.bank_type != "investment").all()
+    computed_net_by_bank = get_computed_net_by_bank(db, user.id)
+    savings = 0.0
+    credit = 0.0
+    for b in banks:
+        raw = b.current_balance if b.current_balance is not None else computed_net_by_bank.get(b.id)
+        if raw is None:
+            continue
+        if b.bank_type == "credit":
+            credit += abs(raw)
+        else:
+            savings += raw
 
     now = datetime.utcnow()
     month_start = datetime(now.year, now.month, 1)

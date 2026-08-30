@@ -17,7 +17,7 @@ import { listBanks, reorderBanks } from "../../api/banks";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { BanksStackParamList } from "../../navigation/BanksNavigator";
 import { Bank } from "../../types";
-import { formatCurrency } from "../../utils/format";
+import { formatCurrency, signedAccountBalance } from "../../utils/format";
 
 type Props = NativeStackScreenProps<BanksStackParamList, "Banks">;
 
@@ -104,7 +104,7 @@ export default function BanksScreen({ navigation }: Props) {
                 <Text style={styles.meta}>Feeds Investments</Text>
               ) : (
                 <Text style={styles.balance}>
-                  {formatCurrency(item.current_balance ?? item.computed_balance ?? 0, item.currency_code)}
+                  {formatCurrency(signedAccountBalance(item), item.currency_code)}
                 </Text>
               )}
             </TouchableOpacity>

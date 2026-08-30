@@ -7,6 +7,7 @@ import calendar
 from app.core.database import get_db
 from app.models.models import User, Transaction, Bank, TransactionType, BalanceSnapshot
 from app.api.endpoints.auth import get_current_active_user
+from app.services.balance_service import get_computed_net_by_bank
 from app.utils.parsing import parse_csv_list as _parse_csv_list
 import logging
 
@@ -142,28 +143,38 @@ def get_dashboard_summary(
         for row in period_bank_q
     }
 
+    # Fallback for banks that have never had a statement balance stored (current_balance
+    # is NULL) -- e.g. a credit card added and used via SMS/ingest alerts alone, never
+    # from an uploaded statement. Without this they silently summed/displayed as 0 here
+    # even though list_banks() (the web Banks page) already showed a real computed
+    # balance for the same account via its own computed_balance fallback.
+    computed_net_by_bank = get_computed_net_by_bank(db, current_user.id)
+
     bank_balances = []
     savings_total = 0.0
     credit_total = 0.0
     period_savings_net = 0.0
     period_credit_net = 0.0
     for bank in banks:
-        if bank.current_balance is None:
-            bbal = 0.0
-        else:
-            bbal = bank.current_balance
+        is_credit = bank.bank_type == 'credit'
+        raw_bal = bank.current_balance if bank.current_balance is not None else computed_net_by_bank.get(bank.id)
+        magnitude = 0.0 if raw_bal is None else (abs(raw_bal) if is_credit else raw_bal)
         bp = period_by_bank.get(bank.id, {"period_credit": 0.0, "period_debit": 0.0, "period_net": 0.0})
-        if bank.bank_type == 'credit':
-            credit_total += bbal
+        if is_credit:
+            credit_total += magnitude
             period_credit_net += bp["period_net"]
         else:
-            savings_total += bbal
+            savings_total += magnitude
             period_savings_net += bp["period_net"]
         bank_balances.append({
             "bank_id": bank.id,
             "bank_name": bank.name,
             "bank_type": bank.bank_type,
-            "current_balance": round(bbal, 2),
+            # Signed for display -- a credit card's owed amount always shows negative
+            # (same convention as signedAccountBalance() in frontend/src/utils/format.js),
+            # unlike credit_total/savings_total above which keep the unsigned "amount
+            # owed" convention the net-worth math (savings_total - credit_total) expects.
+            "current_balance": round(-magnitude if is_credit else magnitude, 2),
             "balance_updated_at": bank.balance_updated_at,
             "period_credit": round(bp["period_credit"], 2),
             "period_debit": round(bp["period_debit"], 2),
@@ -374,14 +385,26 @@ def get_net_worth(
     # Live current aggregate. bank_type='investment' is excluded -- those rows exist
     # only to auto-download CAS/PPF statement emails, not to hold a real balance
     # (the InvestmentAccount feature tracks that separately).
-    savings = float(db.query(func.coalesce(func.sum(Bank.current_balance), 0.0)).filter(
-        Bank.user_id == current_user.id,
-        Bank.bank_type.notin_(["credit", "investment"]),
-        Bank.current_balance.isnot(None),
-    ).scalar() or 0.0)
-    credit = float(db.query(func.coalesce(func.sum(Bank.current_balance), 0.0)).filter(
-        Bank.user_id == current_user.id, Bank.bank_type == "credit", Bank.current_balance.isnot(None)
-    ).scalar() or 0.0)
+    #
+    # A plain SQL sum of current_balance would silently skip any bank that's never
+    # had a statement balance stored (current_balance IS NULL) instead of using its
+    # computed-from-transactions fallback -- undercounting net worth for exactly the
+    # kind of account (e.g. a credit card tracked via SMS/ingest alerts only) that
+    # most needs the fallback. Same fallback list_banks()/get_dashboard_summary() use.
+    live_banks = db.query(Bank).filter(
+        Bank.user_id == current_user.id, Bank.bank_type != "investment",
+    ).all()
+    computed_net_by_bank = get_computed_net_by_bank(db, current_user.id)
+    savings = 0.0
+    credit = 0.0
+    for b in live_banks:
+        raw = b.current_balance if b.current_balance is not None else computed_net_by_bank.get(b.id)
+        if raw is None:
+            continue
+        if b.bank_type == "credit":
+            credit += abs(raw)
+        else:
+            savings += raw
     current = {"savings_total": round(savings, 2), "credit_total": round(credit, 2), "net_worth": round(savings - credit, 2)}
     return {"series": series, "current": current}
 

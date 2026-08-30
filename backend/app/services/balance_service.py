@@ -140,3 +140,46 @@ def recompute_all_balances(db, user_id: int) -> int:
             changed += 1
     db.commit()
     return changed
+
+
+def get_computed_net_by_bank(db, user_ids) -> dict:
+    """All-time credit-minus-debit per bank -- the fallback balance estimate for
+    a bank that has never had a statement balance stored (current_balance is
+    NULL). Shared by the dashboard summary and the net-worth-trend "current"
+    aggregate so a bank in that state reads the same computed number on every
+    surface instead of silently summing as zero on some and correctly on
+    others (list_banks()'s own computed_balance is a separate, richer query
+    that also needs last_transaction_at, so it isn't rebased on this).
+    """
+    from sqlalchemy import func, case
+    from app.models.models import Transaction, TransactionType
+
+    ids = [user_ids] if isinstance(user_ids, int) else list(user_ids)
+    rows = (
+        db.query(
+            Transaction.bank_id,
+            func.sum(case((Transaction.transaction_type == TransactionType.CREDIT, Transaction.amount), else_=0)).label("total_credit"),
+            func.sum(case((Transaction.transaction_type == TransactionType.DEBIT, Transaction.amount), else_=0)).label("total_debit"),
+        )
+        .filter(Transaction.user_id.in_(ids))
+        .group_by(Transaction.bank_id)
+        .all()
+    )
+    return {row.bank_id: float(row.total_credit or 0) - float(row.total_debit or 0) for row in rows}
+
+
+def signed_display_balance(bank, computed_net_by_bank: dict) -> float:
+    """The balance to DISPLAY for a bank: stored current_balance if present,
+    else the computed-net fallback above; a credit card's owed amount always
+    renders negative regardless of source (mirrors signedAccountBalance() in
+    frontend/src/utils/format.js -- current_balance is stored as a positive
+    amount-owed for credit cards, per apply_statement_balance() above, and the
+    computed net isn't a reliable sign on its own).
+    """
+    is_credit = (getattr(bank, "bank_type", "") or "").lower() == "credit"
+    raw = bank.current_balance
+    if raw is None:
+        raw = computed_net_by_bank.get(bank.id)
+    if raw is None:
+        return 0.0
+    return -abs(raw) if is_credit else float(raw)
