@@ -44,7 +44,7 @@ def remember_category(db: Session, user_id: int, description: Optional[str], cat
     category) so a merchant that was just categorized -- by AI or a user's manual
     edit -- doesn't need asking again next time, and immediately sweeps every
     OTHER still-uncategorized transaction for a match too (see
-    _sweep_uncategorized), so historical occurrences of the same merchant get
+    sweep_uncategorized), so historical occurrences of the same merchant get
     fixed retroactively, not just future ones. No-ops if no usable keyword can be
     extracted, or if an active rule already covers this keyword (regardless of
     that rule's own category -- an existing rule already governs this merchant,
@@ -73,13 +73,13 @@ def remember_category(db: Session, user_id: int, description: Optional[str], cat
     # and so the sweep below can query against a rule that already has an id.
     db.flush()
 
-    fixed = _sweep_uncategorized(db, user_id, rule)
+    fixed = sweep_uncategorized(db, user_id, rule)
     if fixed:
         logger.info("Retroactively categorized %d existing transaction(s) via new rule '%s'", fixed, rule.name)
     return True, fixed
 
 
-def _sweep_uncategorized(db: Session, user_id: int, rule: AutoRule) -> int:
+def sweep_uncategorized(db: Session, user_id: int, rule: AutoRule) -> int:
     """Immediately re-checks every OTHER still-uncategorized transaction against a
     JUST-created rule -- not just future ones. Catches a merchant that showed up
     unclassified many times before the first occurrence ever got a real category

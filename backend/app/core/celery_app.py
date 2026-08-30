@@ -18,7 +18,8 @@ celery_app = Celery(
         "app.tasks.gmail_health_tasks", "app.tasks.alert_sync_tasks", "app.tasks.credit_balance_tasks",
         "app.tasks.watcher_tasks", "app.tasks.reward_points_tasks", "app.tasks.subscription_reminder_tasks",
         "app.tasks.budget_alert_tasks", "app.tasks.balance_alert_tasks", "app.tasks.recycle_bin_tasks",
-        "app.tasks.dedupe_tasks", "app.tasks.paperless_tasks",
+        "app.tasks.dedupe_tasks", "app.tasks.paperless_tasks", "app.tasks.ai_categorize_tasks",
+        "app.tasks.stale_pending_tasks",
     ],
 )
 
@@ -130,6 +131,29 @@ celery_app.conf.beat_schedule = {
     # Bin, so a wrong call is a restore away, not gone for good.
     "auto-resolve-duplicates": {
         "task": "transactions.auto_resolve_duplicates_all",
+        "schedule": 24 * 60 * 60.0,
+    },
+    # Same "AI Categorize" a person could click manually, run for every user who
+    # has an AI provider configured, so a new merchant no keyword rule recognizes
+    # gets a real category (and a remembered rule + retroactive backfill, see
+    # autorules.remember_category) without anyone needing to trigger it. Skips
+    # users with no AI provider set up entirely -- see ai_service.is_configured.
+    "ai-auto-categorize": {
+        "task": "ai.auto_categorize_all",
+        "schedule": 24 * 60 * 60.0,
+    },
+    # A pending (is_confirmed=False) transaction from a real-time alert/SMS/
+    # Shortcut source is meant to be confirmed once the real statement arrives
+    # and matches it (create_or_reconcile_transaction) -- but nothing ever
+    # resolves one that never gets a match (a date/amount just outside
+    # tolerance, a statement that never got parsed, etc), so it sits "Pending"
+    # forever with no action ever taken. After a generous grace period the
+    # money movement is certain either way (the bank already alerted on it) --
+    # only whether it got double-checked against a statement line was ever in
+    # question -- so auto-confirm anything this stale instead of leaving it as
+    # a permanent, unresolvable nag. See app.tasks.stale_pending_tasks.
+    "auto-confirm-stale-pending": {
+        "task": "transactions.auto_confirm_stale_pending",
         "schedule": 24 * 60 * 60.0,
     },
 }

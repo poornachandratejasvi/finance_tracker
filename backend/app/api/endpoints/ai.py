@@ -16,7 +16,6 @@ from app.core.database import get_db
 from app.api.endpoints.auth import get_current_active_user
 from app.models.models import User, Transaction, Category, Bank, TransactionType, AppSetting
 from app.services import ai_service, currency_service
-from app.services.autorules import remember_category
 
 router = APIRouter()
 
@@ -143,54 +142,12 @@ class AICategorizeRequest(BaseModel):
 
 @router.post("/categorize")
 def ai_categorize_transactions(data: AICategorizeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    q = db.query(Transaction).filter(Transaction.user_id == current_user.id)
-    if data.only_uncategorized:
-        q = q.filter((Transaction.category.is_(None)) | (Transaction.category == "") |
-                     (Transaction.category.in_(["Unknown", "Others"])))
-    txns = q.order_by(Transaction.transaction_date.desc()).limit(max(1, min(data.limit, 500))).all()
-    if not txns:
-        return {"updated": 0, "considered": 0, "unique": 0}
-    cats = [c.name for c in db.query(Category).filter(Category.user_id == current_user.id).all()]
-
-    # Dedupe by normalized description: send each unique merchant to the AI once, then
-    # apply the result to every matching transaction. Big token/quota saving.
-    groups = defaultdict(list)          # norm_desc -> [txn]
-    order = []                          # preserve first-seen order
-    for t in txns:
-        nd = _norm_desc(t.description)
-        if nd not in groups:
-            order.append(nd)
-        groups[nd].append(t)
-    rep_items = [{"id": i, "description": groups[nd][0].description or ""} for i, nd in enumerate(order)]
-
     try:
-        mapping = ai_service.ai_categorize(db, current_user.id, rep_items, cats)
+        result = ai_service.auto_categorize_user(db, current_user.id, data.only_uncategorized, data.limit)
+        db.commit()
+        return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=_ai_error_message(db, current_user.id, e))
-
-    # Remember each AI-picked category as an AutoRule (see autorules.remember_category)
-    # so the SAME merchant showing up again never needs to ask AI again -- it hits
-    # this rule (via apply_auto_rules_and_notify, which every ingest/sync/PDF path
-    # already runs) before ever falling through to here.
-    updated = 0
-    rules_created = 0
-    retroactively_fixed = 0
-    for idx, cat in mapping.items():
-        if idx < 0 or idx >= len(order) or not cat:
-            continue
-        for t in groups[order[idx]]:
-            if t.category != cat:
-                t.category = cat
-                updated += 1
-        created, fixed = remember_category(db, current_user.id, order[idx], cat)
-        if created:
-            rules_created += 1
-            retroactively_fixed += fixed
-    db.commit()
-    return {
-        "updated": updated, "considered": len(txns), "unique": len(rep_items),
-        "rules_created": rules_created, "retroactively_fixed": retroactively_fixed,
-    }
 
 
 class AIQuickAddRequest(BaseModel):

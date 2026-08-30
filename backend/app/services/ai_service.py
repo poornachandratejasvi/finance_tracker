@@ -413,6 +413,80 @@ def ai_categorize(db: Session, uid: int, items: List[Dict], categories: List[str
     return result
 
 
+def is_configured(db: Session, uid: int) -> bool:
+    """True if the user has at least one AI provider enabled -- used to skip
+    users entirely in the automatic daily sweep (auto_categorize_user) rather
+    than let every uncategorized user hit the 'AI is not configured' exception
+    path in complete()."""
+    return bool(get_config(db, uid).get("providers"))
+
+
+_NUM_RE = re.compile(r"\d+")
+
+
+def _norm_desc(desc: Optional[str]) -> str:
+    d = _NUM_RE.sub("", (desc or "").upper())
+    return " ".join(d.split())[:40]
+
+
+def auto_categorize_user(db: Session, user_id: int, only_uncategorized: bool = True, limit: int = 200) -> dict:
+    """Sends a batch of a user's transaction descriptions to their configured AI
+    provider and applies the category it picks, deduped by normalized description
+    (one AI call per unique merchant, not per transaction). Shared by the manual
+    'AI Categorize' endpoint (app/api/endpoints/ai.py) and the daily
+    ai.auto_categorize_all Celery task -- same logic either way, since the whole
+    point of the periodic version is "the same result a human would have gotten
+    by clicking the button, just without needing to click it".
+
+    Each newly-picked category is remembered as an AutoRule (autorules.
+    remember_category), which also retroactively fixes every other matching
+    Uncategorized/Others transaction -- not just the ones in this batch.
+    """
+    from app.models.models import Transaction, Category
+    from app.services.autorules import remember_category
+
+    q = db.query(Transaction).filter(Transaction.user_id == user_id)
+    if only_uncategorized:
+        q = q.filter((Transaction.category.is_(None)) | (Transaction.category == "") |
+                     (Transaction.category.in_(["Unknown", "Others"])))
+    txns = q.order_by(Transaction.transaction_date.desc()).limit(max(1, min(limit, 500))).all()
+    if not txns:
+        return {"updated": 0, "considered": 0, "unique": 0, "rules_created": 0, "retroactively_fixed": 0}
+    cats = [c.name for c in db.query(Category).filter(Category.user_id == user_id).all()]
+
+    groups: Dict[str, list] = {}
+    order: List[str] = []
+    for t in txns:
+        nd = _norm_desc(t.description)
+        if nd not in groups:
+            order.append(nd)
+            groups[nd] = []
+        groups[nd].append(t)
+    rep_items = [{"id": i, "description": groups[nd][0].description or ""} for i, nd in enumerate(order)]
+
+    mapping = ai_categorize(db, user_id, rep_items, cats)
+
+    updated = 0
+    rules_created = 0
+    retroactively_fixed = 0
+    for idx, cat in mapping.items():
+        if idx < 0 or idx >= len(order) or not cat:
+            continue
+        for t in groups[order[idx]]:
+            if t.category != cat:
+                t.category = cat
+                updated += 1
+        created, fixed = remember_category(db, user_id, order[idx], cat)
+        if created:
+            rules_created += 1
+            retroactively_fixed += fixed
+
+    return {
+        "updated": updated, "considered": len(txns), "unique": len(rep_items),
+        "rules_created": rules_created, "retroactively_fixed": retroactively_fixed,
+    }
+
+
 def ai_insights(db: Session, uid: int, summary_text: str) -> str:
     system = (
         "You are a friendly personal-finance analyst. Given a spending summary, write a short "

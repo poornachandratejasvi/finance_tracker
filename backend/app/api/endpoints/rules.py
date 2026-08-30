@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.models.models import User, AutoRule, Transaction, TransactionType, TransactionLabel
 from app.schemas.auto_rule import AutoRuleCreate, AutoRuleUpdate, AutoRuleResponse
-from app.services.autorules import get_active_rules, match_rule, apply_rule, parse_list
+from app.services.autorules import get_active_rules, match_rule, apply_rule, parse_list, sweep_uncategorized
 
 router = APIRouter()
 
@@ -50,7 +50,20 @@ def create_rule(data: AutoRuleCreate, db: Session = Depends(get_db), current_use
         priority=data.priority or 0, is_active=data.is_active if data.is_active is not None else True,
         notify_discord=bool(data.notify_discord),
     )
-    db.add(rule); db.commit(); db.refresh(rule)
+    db.add(rule)
+    db.flush()
+    # A hand-written rule deserves the same immediate backfill an AI/manual
+    # categorization already gets (see autorules.remember_category) -- otherwise
+    # a rule someone just typed in Settings only helps future transactions until
+    # they separately remember to click "Apply Rules". Scoped to rules that
+    # actually assign a category (plain category, or a transfer rule -- which
+    # forces category="Transfer" regardless of the category field, see
+    # apply_rule) -- a labels-only rule should apply to ALL matching
+    # transactions, not just already-uncategorized ones, so it's out of scope
+    # for this specific "fix stale Uncategorized/Others" sweep.
+    if rule.category or (rule.record_type or "any").lower() == "transfer":
+        sweep_uncategorized(db, current_user.id, rule)
+    db.commit(); db.refresh(rule)
     return _to_response(rule)
 
 
