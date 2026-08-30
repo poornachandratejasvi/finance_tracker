@@ -15,10 +15,34 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.api.endpoints.auth import get_current_active_user, require_write_access
-from app.models.models import User, DashboardWidget
+from app.models.models import User, DashboardWidget, AppSetting
 from app.services.custom_widget_service import compute_custom_formula
 
 router = APIRouter()
+
+# Seeded once per user the first time they'd otherwise see an empty "Your
+# Widgets" section -- matches the reference app's own out-of-the-box Dashboard
+# feed (Cash Flow, Balance Trend, a budget card, recent records, a spending
+# breakdown, Portfolio), so a fresh/never-configured account isn't just a bare
+# page with an "Add widget" button. Never re-seeded after the first time,
+# including if the user later deletes every widget -- that's a deliberate
+# choice, not something to keep undoing.
+DEFAULT_WIDGET_TYPES = (
+    "income_expense", "balance_trend", "budget_progress",
+    "recent_transactions", "spending_by_category", "investments_summary",
+)
+
+
+def _seed_default_widgets_if_needed(db: Session, user_id: int) -> None:
+    flag_key = f"dashboard_widgets_seeded:{user_id}"
+    if db.query(AppSetting).filter(AppSetting.key == flag_key).first():
+        return
+    has_any = db.query(DashboardWidget.id).filter(DashboardWidget.user_id == user_id).first()
+    if not has_any:
+        for position, widget_type in enumerate(DEFAULT_WIDGET_TYPES):
+            db.add(DashboardWidget(user_id=user_id, widget_type=widget_type, position=position, size="medium"))
+    db.add(AppSetting(key=flag_key, value="1"))
+    db.commit()
 
 # The catalog of widget types a client is allowed to add -- kept here (not just
 # in the frontend) so a stale/hand-crafted request can't sneak in an unknown
@@ -77,6 +101,7 @@ def _to_dict(w: DashboardWidget) -> dict:
 @router.get("/")
 def list_widgets(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """List the current user's dashboard widgets, in display order."""
+    _seed_default_widgets_if_needed(db, current_user.id)
     widgets = (
         db.query(DashboardWidget)
         .filter(DashboardWidget.user_id == current_user.id)

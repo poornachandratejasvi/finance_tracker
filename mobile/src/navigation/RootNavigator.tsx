@@ -18,9 +18,12 @@ import SearchScreen from "../screens/SearchScreen";
 import ScanReceiptScreen from "../screens/ScanReceiptScreen";
 import EditTransactionScreen from "../screens/EditTransactionScreen";
 import MoreHubScreen from "../screens/MoreHubScreen";
+import MetricDetailScreen from "../screens/MetricDetailScreen";
 import BanksNavigator, { BanksStackParamList } from "./BanksNavigator";
 import SettingsNavigator, { SettingsStackParamList } from "./SettingsNavigator";
 import { Transaction } from "../types";
+
+export type MetricKey = "balance" | "spending" | "cashflow" | "outlook" | "credit" | "income";
 
 export type RootStackParamList = {
   Login: undefined;
@@ -35,6 +38,7 @@ export type RootStackParamList = {
   // live as root-stack screens instead, exactly like Add/Search/ScanReceipt.
   BanksStack: NavigatorScreenParams<BanksStackParamList>;
   SettingsStack: NavigatorScreenParams<SettingsStackParamList>;
+  MetricDetail: { metric: MetricKey };
 };
 
 export type TabParamList = {
@@ -226,6 +230,7 @@ export default function RootNavigator() {
             />
             <Stack.Screen name="BanksStack" component={BanksNavigator} options={{ headerShown: false }} />
             <Stack.Screen name="SettingsStack" component={SettingsNavigator} options={{ headerShown: false }} />
+            <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ headerShown: true, title: "" }} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

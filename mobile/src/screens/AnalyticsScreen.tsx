@@ -1,11 +1,13 @@
 import React, { useCallback, useState } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 
@@ -18,6 +20,9 @@ import { useTheme, ThemeColors } from "../context/ThemeContext";
 import { AnalyticsComparison, BalanceTrendResponse, CashflowResponse, DashboardSummary } from "../types";
 import { formatCurrency } from "../utils/format";
 import PeriodPager, { ResolvedPeriod } from "../components/PeriodPager";
+import { RootStackParamList, MetricKey } from "../navigation/RootNavigator";
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const CHART_HEIGHT = 110;
 
@@ -49,6 +54,10 @@ function previousPeriod(period: ResolvedPeriod): { start: string; end: string } 
 export default function AnalyticsScreen() {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  // This screen is a tab; MetricDetail lives on the root stack (see
+  // RootNavigator), so getParent() is needed to reach it.
+  const tabNavigation = useNavigation<Nav>();
+  const rootNavigation = tabNavigation.getParent<Nav>() || tabNavigation;
 
   const [period, setPeriod] = useState<ResolvedPeriod | null>(null);
   const [periodCashflow, setPeriodCashflow] = useState<CashflowResponse | null>(null);
@@ -140,7 +149,7 @@ export default function AnalyticsScreen() {
   const incomeChangePct = incomeB > 0 ? Math.round(((incomeA - incomeB) / incomeB) * 100) : null;
   const cashflowNet = periodCashflow?.totals.net ?? 0;
 
-  const metrics: Array<{ key: string; label: string; value: string; icon: keyof typeof Ionicons.glyphMap; color: string; badge?: string }> = [
+  const metrics: Array<{ key: MetricKey; label: string; value: string; icon: keyof typeof Ionicons.glyphMap; color: string; badge?: string }> = [
     { key: "balance", label: "Balance", value: formatCurrency(balanceTrend?.ending_balance ?? 0), icon: "analytics-outline", color: "#1565c0" },
     { key: "spending", label: "Spending", value: formatCurrency(periodCashflow?.totals.expense ?? 0), icon: "pie-chart-outline", color: "#c62828" },
     { key: "cashflow", label: "Cash Flow", value: formatCurrency(cashflowNet), icon: "swap-vertical-outline", color: cashflowNet >= 0 ? "#2e7d32" : "#c62828" },
@@ -168,7 +177,12 @@ export default function AnalyticsScreen() {
 
       <View style={styles.metricGrid}>
         {metrics.map((m) => (
-          <View key={m.key} style={styles.metricCard}>
+          <TouchableOpacity
+            key={m.key}
+            style={styles.metricCard}
+            activeOpacity={0.7}
+            onPress={() => rootNavigation.navigate("MetricDetail", { metric: m.key })}
+          >
             <View style={styles.metricTop}>
               <Text style={styles.metricLabel} numberOfLines={1}>{m.label}</Text>
               <View style={[styles.metricIcon, { backgroundColor: m.color }]}>
@@ -181,7 +195,7 @@ export default function AnalyticsScreen() {
                 {m.badge} vs previous
               </Text>
             )}
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
 
