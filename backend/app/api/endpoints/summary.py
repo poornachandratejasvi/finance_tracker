@@ -48,6 +48,11 @@ def get_summary(db: Session = Depends(get_db), user: User = Depends(get_user_fro
     ).scalar() or 0
 
     return {
+        # total_balance/monthly_spend are the field names the homepage.dev
+        # customapi widget's mappings actually reference -- keep these two
+        # names stable, the rest are extras for future widgets.
+        "total_balance": round(savings - credit, 2),
+        "monthly_spend": round(float(expense), 2),
         "net_worth": round(savings - credit, 2),
         "savings_total": round(savings, 2),
         "credit_total": round(credit, 2),
