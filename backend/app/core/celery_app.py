@@ -19,7 +19,7 @@ celery_app = Celery(
         "app.tasks.watcher_tasks", "app.tasks.reward_points_tasks", "app.tasks.subscription_reminder_tasks",
         "app.tasks.budget_alert_tasks", "app.tasks.balance_alert_tasks", "app.tasks.recycle_bin_tasks",
         "app.tasks.dedupe_tasks", "app.tasks.paperless_tasks", "app.tasks.ai_categorize_tasks",
-        "app.tasks.stale_pending_tasks",
+        "app.tasks.stale_pending_tasks", "app.tasks.goal_sweep_tasks",
     ],
 )
 
@@ -154,6 +154,16 @@ celery_app.conf.beat_schedule = {
     # a permanent, unresolvable nag. See app.tasks.stale_pending_tasks.
     "auto-confirm-stale-pending": {
         "task": "transactions.auto_confirm_stale_pending",
+        "schedule": 24 * 60 * 60.0,
+    },
+    # Round-up savings already has an explicit per-goal opt-in (SavingsGoal.
+    # roundup_enabled) -- this just runs the existing sweep-roundups action for
+    # every goal that has it turned on, instead of someone needing to click it
+    # per goal. Pure bookkeeping, already idempotent (roundup_swept flags each
+    # transaction it touches). Predictive sweep is deliberately NOT automated
+    # here -- see app.tasks.goal_sweep_tasks's docstring for why.
+    "goals-auto-sweep-roundups": {
+        "task": "goals.auto_sweep_roundups",
         "schedule": 24 * 60 * 60.0,
     },
 }
