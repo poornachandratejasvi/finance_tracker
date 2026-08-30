@@ -623,21 +623,30 @@ function Transactions() {
               transition: 'background-color .15s',
             }}
           >
-            <Box display="flex" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
-              <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+            {/* Row 1: record count/selection state on the left, net total pinned to
+                the right -- kept in its own non-wrapping row so a narrow viewport
+                wraps the (longer) action-button row below instead of ever pushing
+                the total off to its own line. */}
+            <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} mb={1}>
+              <Box display="flex" alignItems="center" gap={1} sx={{ minWidth: 0 }}>
                 <Checkbox
                   size="small"
                   checked={allSelected}
                   indeterminate={someSelected}
                   onChange={(e) => toggleSelectAll(e.target.checked)}
                 />
-                <Typography variant="subtitle1" fontWeight={600}>
+                <Typography variant="subtitle1" fontWeight={600} noWrap>
                   {selectedTransactions.length > 0
                     ? `Select all, selected ${selectedTransactions.length}`
                     : `Found ${total} record${total === 1 ? '' : 's'}`}
                 </Typography>
               </Box>
+              <Typography fontWeight={700} noWrap sx={{ color: headerNet < 0 ? 'error.main' : 'success.main', flexShrink: 0 }}>
+                {formatCurrency(headerNet)}
+              </Typography>
+            </Box>
 
+            <Box display="flex" alignItems="center" justifyContent="flex-end" flexWrap="wrap" gap={1}>
               <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
                 <Button
                   size="small" startIcon={<Edit />} disabled={selectedTransactions.length === 0}
@@ -678,9 +687,6 @@ function Transactions() {
                     ))}
                   </Select>
                 </FormControl>
-                <Typography fontWeight={700} sx={{ color: headerNet < 0 ? 'error.main' : 'success.main', ml: 1 }}>
-                  {formatCurrency(headerNet)}
-                </Typography>
               </Box>
             </Box>
           </Paper>
