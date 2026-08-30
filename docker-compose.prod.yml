@@ -136,11 +136,71 @@ services:
     networks:
       - finance-network
 
+  # Ensures the `paperless` database exists on this SAME Postgres server -- avoids
+  # running a second Postgres instance just for Paperless-ngx. Idempotent (safe to
+  # leave permanently): a no-op after the first run.
+  paperless-db-init:
+    image: postgres:15-alpine
+    environment:
+      - PGPASSWORD=${POSTGRES_PASSWORD:-financepass}
+    entrypoint:
+      - sh
+      - -c
+      - >
+        psql -h db -U ${POSTGRES_USER:-financeuser} -d ${POSTGRES_DB:-financedb} -tc
+        "SELECT 1 FROM pg_database WHERE datname = '${PAPERLESS_DB_NAME:-paperless}'" | grep -q 1 ||
+        psql -h db -U ${POSTGRES_USER:-financeuser} -d ${POSTGRES_DB:-financedb} -c
+        "CREATE DATABASE ${PAPERLESS_DB_NAME:-paperless}"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - finance-network
+
+  # Document archive for scanned receipts (see backend/app/services/paperless_service.py).
+  # No Traefik here -- published directly on the host at PAPERLESS_PORT (default 8010).
+  # Reachable at http://<this-host>:8010, or set PAPERLESS_URL if you put your own
+  # reverse proxy in front of it.
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    environment:
+      - PAPERLESS_REDIS=redis://redis:6379/1
+      - PAPERLESS_DBHOST=db
+      - PAPERLESS_DBNAME=${PAPERLESS_DB_NAME:-paperless}
+      - PAPERLESS_DBUSER=${POSTGRES_USER:-financeuser}
+      - PAPERLESS_DBPASS=${POSTGRES_PASSWORD:-financepass}
+      - PAPERLESS_URL=${PAPERLESS_URL:-http://localhost:${PAPERLESS_PORT:-8010}}
+      - PAPERLESS_SECRET_KEY=${PAPERLESS_SECRET_KEY}
+      - PAPERLESS_ADMIN_USER=${PAPERLESS_ADMIN_USER:-admin}
+      - PAPERLESS_ADMIN_PASSWORD=${PAPERLESS_ADMIN_PASSWORD}
+      - PAPERLESS_TIME_ZONE=${PAPERLESS_TIME_ZONE:-Asia/Kolkata}
+      - PAPERLESS_OCR_LANGUAGE=${PAPERLESS_OCR_LANGUAGE:-eng}
+    ports:
+      - "${PAPERLESS_PORT:-8010}:8000"
+    volumes:
+      - paperless_data:/usr/src/paperless/data
+      - paperless_media:/usr/src/paperless/media
+      - paperless_export:/usr/src/paperless/export
+      - paperless_consume:/usr/src/paperless/consume
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      paperless-db-init:
+        condition: service_completed_successfully
+    networks:
+      - finance-network
+
 volumes:
   postgres_data:
   redis_data:
   backend_uploads:
   gmail_credentials:
+  paperless_data:
+  paperless_media:
+  paperless_export:
+  paperless_consume:
 
 networks:
   finance-network:
