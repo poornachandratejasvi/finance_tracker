@@ -34,3 +34,21 @@ export async function scanReceipt(photoUri: string): Promise<ReceiptScanResult> 
   });
   return data;
 }
+
+// Archives the original receipt photo to Paperless-ngx (if configured -- see
+// Settings -> External Accounts) and links it to the transaction the scan-to-
+// draft flow above created. scanReceipt() only extracts data and discards the
+// photo, so this is a separate call once the reviewed transaction is actually
+// saved.
+export async function attachReceipt(transactionId: number, photoUri: string): Promise<void> {
+  const form = new FormData();
+  form.append("file", {
+    uri: photoUri,
+    name: "receipt.jpg",
+    type: "image/jpeg",
+  } as unknown as Blob);
+
+  await api.post(`/api/transactions/${transactionId}/attach-receipt`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+}

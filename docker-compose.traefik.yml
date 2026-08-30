@@ -152,11 +152,85 @@ services:
       - "traefik.http.routers.finance-frontend-rtr.service=finance-frontend-svc"
       - "traefik.http.services.finance-frontend-svc.loadbalancer.server.port=3000"
 
+  # Ensures the `paperless` database exists on the SAME Postgres server the finance
+  # app already uses -- avoids running a second Postgres instance just for this.
+  # Idempotent (safe to leave in the stack permanently): a no-op after the first
+  # run, on both a fresh volume and an existing one.
+  paperless-db-init:
+    image: postgres:15-alpine
+    environment:
+      - PGPASSWORD=${POSTGRES_PASSWORD:-financepass}
+    entrypoint:
+      - sh
+      - -c
+      - >
+        psql -h db -U ${POSTGRES_USER:-financeuser} -d ${POSTGRES_DB:-financedb} -tc
+        "SELECT 1 FROM pg_database WHERE datname = '${PAPERLESS_DB_NAME:-paperless}'" | grep -q 1 ||
+        psql -h db -U ${POSTGRES_USER:-financeuser} -d ${POSTGRES_DB:-financedb} -c
+        "CREATE DATABASE ${PAPERLESS_DB_NAME:-paperless}"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - finance-network
+
+  # Document archive for scanned receipts (see backend/app/services/paperless_service.py) --
+  # a separate, general-purpose document management app, not something this project builds.
+  # Shares this stack's Postgres (own database, see paperless-db-init above) and Redis
+  # (own logical DB index) instead of running its own, since this is a single small VM.
+  paperless:
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    environment:
+      - PAPERLESS_REDIS=redis://redis:6379/1
+      - PAPERLESS_DBHOST=db
+      - PAPERLESS_DBNAME=${PAPERLESS_DB_NAME:-paperless}
+      - PAPERLESS_DBUSER=${POSTGRES_USER:-financeuser}
+      - PAPERLESS_DBPASS=${POSTGRES_PASSWORD:-financepass}
+      - PAPERLESS_URL=https://${PAPERLESS_TRAEFIK_DOMAIN}
+      - PAPERLESS_SECRET_KEY=${PAPERLESS_SECRET_KEY}
+      - PAPERLESS_ADMIN_USER=${PAPERLESS_ADMIN_USER:-admin}
+      - PAPERLESS_ADMIN_PASSWORD=${PAPERLESS_ADMIN_PASSWORD}
+      - PAPERLESS_TIME_ZONE=${PAPERLESS_TIME_ZONE:-Asia/Kolkata}
+      - PAPERLESS_OCR_LANGUAGE=${PAPERLESS_OCR_LANGUAGE:-eng}
+    volumes:
+      - paperless_data:/usr/src/paperless/data
+      - paperless_media:/usr/src/paperless/media
+      - paperless_export:/usr/src/paperless/export
+      - paperless_consume:/usr/src/paperless/consume
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      paperless-db-init:
+        condition: service_completed_successfully
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+        labels: "service=paperless"
+    networks:
+      - finance-network
+      - t2_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.paperless-rtr.entrypoints=https"
+      - "traefik.http.routers.paperless-rtr.rule=Host(`${PAPERLESS_TRAEFIK_DOMAIN}`)"
+      - "traefik.http.routers.paperless-rtr.tls=true"
+      - "traefik.http.routers.paperless-rtr.priority=1"
+      - "traefik.http.routers.paperless-rtr.service=paperless-svc"
+      - "traefik.http.services.paperless-svc.loadbalancer.server.port=8000"
+
 volumes:
   postgres_data:
   redis_data:
   backend_uploads:
   gmail_credentials:
+  paperless_data:
+  paperless_media:
+  paperless_export:
+  paperless_consume:
 
 networks:
   finance-network:

@@ -40,6 +40,7 @@ export default function ScanReceiptScreen() {
           items: result.items,
           tax: result.tax,
           tip: result.tip,
+          photoUri: uri,
         },
       });
     } catch (err: any) {

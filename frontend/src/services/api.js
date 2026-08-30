@@ -729,6 +729,19 @@ export const updateDiscordWebhook = async (webhookUrl) =>
   (await api.put('/api/notifications/discord', { webhook_url: webhookUrl })).data;
 export const testDiscordWebhook = async () => (await api.post('/api/notifications/discord/test')).data;
 
+// Paperless-ngx (receipt archive -- see backend/app/services/paperless_service.py)
+export const getPaperlessConfig = async () => (await api.get('/api/settings/paperless-config')).data;
+export const savePaperlessConfig = async (baseUrl, apiToken) =>
+  (await api.post('/api/settings/paperless-config', { base_url: baseUrl, ...(apiToken !== undefined ? { api_token: apiToken } : {}) })).data;
+export const testPaperlessConfig = async () => (await api.post('/api/settings/paperless-config/test')).data;
+export const attachReceipt = async (transactionId, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return (await api.post(`/api/transactions/${transactionId}/attach-receipt`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })).data;
+};
+
 // Transaction watchers (named recurring-transaction expectations that get a fresh
 // Google Task each month and auto-complete it when a matching transaction appears)
 export const getWatchers = async () => (await api.get('/api/watchers/')).data;

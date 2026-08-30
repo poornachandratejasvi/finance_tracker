@@ -18,7 +18,7 @@ celery_app = Celery(
         "app.tasks.gmail_health_tasks", "app.tasks.alert_sync_tasks", "app.tasks.credit_balance_tasks",
         "app.tasks.watcher_tasks", "app.tasks.reward_points_tasks", "app.tasks.subscription_reminder_tasks",
         "app.tasks.budget_alert_tasks", "app.tasks.balance_alert_tasks", "app.tasks.recycle_bin_tasks",
-        "app.tasks.dedupe_tasks",
+        "app.tasks.dedupe_tasks", "app.tasks.paperless_tasks",
     ],
 )
 

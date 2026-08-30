@@ -182,6 +182,7 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "roundup_swept", "ALTER TABLE transactions ADD COLUMN roundup_swept BOOLEAN DEFAULT FALSE")
         # Recycle bin: NULL = not deleted; set on delete, cleared on restore, hard-purged after 30 days.
         _add_column_if_missing(columns, "deleted_at", "ALTER TABLE transactions ADD COLUMN deleted_at TIMESTAMP")
+        _add_column_if_missing(columns, "paperless_document_id", "ALTER TABLE transactions ADD COLUMN paperless_document_id INTEGER")
 
     if "savings_goals" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("savings_goals")}
@@ -302,6 +303,7 @@ def _ensure_columns() -> None:
     _ensure_index("ix_transactions_user_date", "transactions", "(user_id, transaction_date)")
     _ensure_index("ix_transactions_user_bank", "transactions", "(user_id, bank_id)")
     _ensure_index("ix_transactions_transaction_date", "transactions", "(transaction_date)")
+    _ensure_index("ix_transactions_paperless_document_id", "transactions", "(paperless_document_id)")
 
     # transaction_labels.transaction_id was declared with ondelete="CASCADE" in the
     # model from the start, but the live table predates that (create_all only

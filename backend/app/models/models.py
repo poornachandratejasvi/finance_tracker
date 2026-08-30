@@ -238,6 +238,10 @@ class Transaction(Base):
     # any other client.
     client_uuid = Column(String(36), index=True)
     roundup_swept = Column(Boolean, default=False)
+    # Paperless-ngx document ID a scanned receipt was archived as (see
+    # app.services.paperless_service) -- set asynchronously once the consume task
+    # finishes (app.tasks.paperless_tasks), NULL until then or if never scanned.
+    paperless_document_id = Column(Integer, index=True)
 
     # 'alert' rows (parsed from a real-time bank SMS/email alert, before the official
     # statement arrives) start life unconfirmed; everything else defaults confirmed.

@@ -53,6 +53,8 @@ class TransactionResponse(TransactionBase):
     is_confirmed: bool = True
     source: Optional[str] = None
     client_uuid: Optional[str] = None
+    paperless_document_id: Optional[int] = None
+    receipt_url: Optional[str] = None  # computed: Paperless-ngx document link, if archived there
     labels: List[str] = []
     label_details: List[dict] = []  # [{id,name,color}] for colored chips
     created_at: datetime

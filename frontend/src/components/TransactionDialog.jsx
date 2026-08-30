@@ -4,7 +4,7 @@ import {
   Select, MenuItem, FormControl, InputLabel, ToggleButton, ToggleButtonGroup, Chip,
   IconButton, Typography, Divider, Tooltip, Alert, CircularProgress, Autocomplete,
 } from '@mui/material';
-import { Add, Delete, Close, AutoAwesome, History } from '@mui/icons-material';
+import { Add, Delete, Close, AutoAwesome, History, Description } from '@mui/icons-material';
 import CategoryIcon from './CategoryIcon';
 import { ICON_KEYS, getCategoryIconComponent, invalidateCategories } from '../utils/categories';
 import { formatCurrency } from '../utils/format';
@@ -424,6 +424,23 @@ export default function TransactionDialog({
       <DialogContent dividers>
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
         {notice && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setNotice('')}>{notice}</Alert>}
+
+        {isEdit && transaction?.receipt_url && (
+          <Box sx={{ mb: 2 }}>
+            <Chip
+              component="a"
+              href={transaction.receipt_url}
+              target="_blank"
+              rel="noreferrer"
+              clickable
+              size="small"
+              icon={<Description fontSize="small" />}
+              label="View Receipt"
+              color="primary"
+              variant="outlined"
+            />
+          </Box>
+        )}
 
         <Grid container spacing={3}>
           {/* LEFT COLUMN */}

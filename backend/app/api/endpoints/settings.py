@@ -132,6 +132,42 @@ def test_discord_webhook(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Paperless-ngx -- archive scanned receipts there instead of this app trying to
+# be its own document store. See app.services.paperless_service.
+# ──────────────────────────────────────────────────────────────────────────────
+class PaperlessConfig(BaseModel):
+    base_url: str
+    api_token: Optional[str] = None  # omit to leave an already-saved token untouched
+
+
+@router.get("/paperless-config")
+def get_paperless_config(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    from app.services import paperless_service
+    return paperless_service.get_config(db)
+
+
+@router.post("/paperless-config")
+def save_paperless_config(
+    data: PaperlessConfig,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    from app.services import paperless_service
+    paperless_service.set_config(db, data.base_url, data.api_token)
+    return paperless_service.get_config(db)
+
+
+@router.post("/paperless-config/test")
+def test_paperless_config(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    from app.services import paperless_service
+    if not paperless_service.is_configured(db):
+        raise HTTPException(status_code=400, detail="Paperless-ngx isn't configured yet -- set the URL and API token first.")
+    if not paperless_service.test_connection(db):
+        raise HTTPException(status_code=400, detail="Couldn't reach Paperless-ngx with those settings -- check the URL and token.")
+    return {"success": True, "message": "Connected to Paperless-ngx successfully."}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Extra notification services (Apprise) -- Discord (above) is one target among
 # many; these are any other Apprise-supported service URLs (Telegram, Slack,
 # email, ntfy, Pushover, ...). See app.services.notify_service.

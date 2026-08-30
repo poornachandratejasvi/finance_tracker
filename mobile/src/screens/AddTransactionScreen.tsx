@@ -17,6 +17,7 @@ import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
 import { listBanks } from "../api/banks";
 import { listCategories } from "../api/categories";
 import { createTransaction } from "../api/transactions";
+import { attachReceipt } from "../api/receipts";
 import { quickAddParse } from "../api/ai";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { Bank, Category, TransactionType } from "../types";
@@ -40,6 +41,7 @@ export interface ReceiptPrefill {
   items?: { name: string; amount: number }[];
   tax?: number | null;
   tip?: number | null;
+  photoUri?: string | null; // carried through so the original photo can be archived to Paperless-ngx on save
 }
 
 // Formats a scanned receipt's line items (with tax/tip split proportionally
@@ -82,6 +84,7 @@ export default function AddTransactionScreen() {
   const [notes, setNotes] = useState("");
   const [fromAccount, setFromAccount] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [receiptPhotoUri, setReceiptPhotoUri] = useState<string | null>(null);
   const [quickText, setQuickText] = useState("");
   const [quickParsing, setQuickParsing] = useState(false);
   const { isOnline } = useOffline();
@@ -129,6 +132,7 @@ export default function AddTransactionScreen() {
     const receiptNotes = formatReceiptNotes(prefill.items, prefill.tax, prefill.tip);
     if (receiptNotes) setNotes(receiptNotes);
     setMode("expense");
+    if (prefill.photoUri) setReceiptPhotoUri(prefill.photoUri);
     navigation.setParams({ prefill: undefined } as never);
   }, [route.params?.prefill]);
 
@@ -161,6 +165,7 @@ export default function AddTransactionScreen() {
     setDate(todayIsoDate());
     setFromAccount("");
     setShowKeypad(true);
+    setReceiptPhotoUri(null);
   };
 
   const onSubmit = async () => {
@@ -201,6 +206,12 @@ export default function AddTransactionScreen() {
       }
       const created = await createTransaction(payload);
       upsertTransactions([created]).catch(() => {});
+      if (receiptPhotoUri) {
+        // Best-effort -- the transaction is already saved either way; a failure
+        // here (e.g. Paperless-ngx not configured/unreachable) just means no
+        // receipt gets archived, not a lost transaction.
+        attachReceipt(Number(created.id), receiptPhotoUri).catch(() => {});
+      }
       Alert.alert("Saved", "Transaction added.");
       resetForm();
     } catch (err: any) {

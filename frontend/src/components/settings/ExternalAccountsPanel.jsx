@@ -5,12 +5,13 @@ import {
   CircularProgress, Tooltip,
 } from '@mui/material';
 import {
-  Email, Refresh, PlayArrow, Sync as SyncIcon, LinkOff, Add, UploadFile, CheckCircle, Forum,
+  Email, Refresh, PlayArrow, Sync as SyncIcon, LinkOff, Add, UploadFile, CheckCircle, Forum, Description,
 } from '@mui/icons-material';
 import api, {
   getGmailAccountsStatus, getGmailAuthUrl, checkGmailAccountNow, testGmailNotification,
   disconnectGmailAccount, getGoogleCredentialsStatus, uploadGoogleCredentials,
   getDiscordConfig, updateDiscordWebhook, testDiscordWebhook,
+  getPaperlessConfig, savePaperlessConfig, testPaperlessConfig,
 } from '../../services/api';
 import { formatDate, timeAgo } from '../../utils/format';
 
@@ -58,20 +59,31 @@ export default function ExternalAccountsPanel() {
   const [notifyUrlsSaved, setNotifyUrlsSaved] = useState(false);
   const [notifyUrlsStatus, setNotifyUrlsStatus] = useState(null);
 
+  // Paperless-ngx
+  const [paperlessConfig, setPaperlessConfig] = useState(null);
+  const [paperlessUrlInput, setPaperlessUrlInput] = useState('');
+  const [paperlessTokenInput, setPaperlessTokenInput] = useState('');
+  const [paperlessSaving, setPaperlessSaving] = useState(false);
+  const [paperlessTesting, setPaperlessTesting] = useState(false);
+  const [paperlessTestResult, setPaperlessTestResult] = useState(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [statusRes, credRes, discordRes, notifyRes] = await Promise.all([
+      const [statusRes, credRes, discordRes, notifyRes, paperlessRes] = await Promise.all([
         getGmailAccountsStatus().catch(() => ({ accounts: [] })),
         getGoogleCredentialsStatus().catch(() => null),
         getDiscordConfig().catch(() => null),
         api.get('/api/settings/notify-urls').catch(() => null),
+        getPaperlessConfig().catch(() => null),
       ]);
       setAccounts(statusRes?.accounts || []);
       setCredStatus(credRes);
       setDiscordWebhookSet(!!discordRes?.webhook_set);
       setNotifyUrlsText((notifyRes?.data?.urls || []).join('\n'));
+      setPaperlessConfig(paperlessRes);
+      setPaperlessUrlInput(paperlessRes?.base_url || '');
     } catch (e) {
       setError(apiError(e, 'Failed to load external accounts'));
     } finally {
@@ -201,6 +213,37 @@ export default function ExternalAccountsPanel() {
       setDiscordTestResult({ ok: false, message: 'Request failed.' });
     } finally {
       setDiscordTesting(false);
+    }
+  };
+
+  const handleSavePaperless = async () => {
+    setPaperlessSaving(true);
+    setPaperlessTestResult(null);
+    setError('');
+    try {
+      // Omit api_token entirely when the field is left blank -- so re-saving just
+      // the URL doesn't accidentally wipe an already-stored token.
+      const res = await savePaperlessConfig(paperlessUrlInput.trim(), paperlessTokenInput.trim() || undefined);
+      setPaperlessConfig(res);
+      setPaperlessTokenInput('');
+      setSuccess('Paperless-ngx settings saved.');
+    } catch (e) {
+      setError(apiError(e, 'Failed to save Paperless-ngx settings'));
+    } finally {
+      setPaperlessSaving(false);
+    }
+  };
+
+  const handleTestPaperless = async () => {
+    setPaperlessTesting(true);
+    setPaperlessTestResult(null);
+    try {
+      const res = await testPaperlessConfig();
+      setPaperlessTestResult({ ok: true, message: res.message });
+    } catch (e) {
+      setPaperlessTestResult({ ok: false, message: apiError(e, 'Connection test failed.') });
+    } finally {
+      setPaperlessTesting(false);
     }
   };
 
@@ -398,6 +441,64 @@ export default function ExternalAccountsPanel() {
         {notifyUrlsStatus && (
           <Alert severity={notifyUrlsStatus.success ? 'success' : 'error'} sx={{ mt: 1.5 }} onClose={() => setNotifyUrlsStatus(null)}>
             {notifyUrlsStatus.success ? notifyUrlsStatus.message : notifyUrlsStatus.error}
+          </Alert>
+        )}
+      </Paper>
+
+      {/* ── Paperless-ngx ────────────────────────────────────────────────── */}
+      <Paper variant="outlined" sx={{ mb: 3, p: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <Description color="action" />
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Paperless-ngx (receipt archive)</Typography>
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          A scanned receipt gets archived here (OCR'd, searchable, kept long-term) instead of this app
+          storing the photo itself — the transaction it belongs to shows a "View Receipt" link once
+          Paperless finishes processing it.
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mb: 1 }}>
+          <TextField
+            size="small"
+            label="Paperless-ngx URL"
+            placeholder="https://paperless.yourdomain.com"
+            value={paperlessUrlInput}
+            onChange={(e) => setPaperlessUrlInput(e.target.value)}
+            sx={{ minWidth: 280, flex: 1 }}
+          />
+          <TextField
+            size="small"
+            label={paperlessConfig?.has_token ? 'Replace API token' : 'API token'}
+            placeholder="Settings -> My Profile -> API Tokens, in Paperless"
+            value={paperlessTokenInput}
+            onChange={(e) => setPaperlessTokenInput(e.target.value)}
+            sx={{ minWidth: 280, flex: 1 }}
+          />
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Button
+            variant="contained" size="small"
+            onClick={handleSavePaperless}
+            disabled={paperlessSaving || !paperlessUrlInput.trim()}
+          >
+            {paperlessSaving ? 'Saving…' : 'Save'}
+          </Button>
+          <Button
+            variant="outlined" size="small"
+            onClick={handleTestPaperless}
+            disabled={paperlessTesting || !paperlessConfig?.base_url}
+          >
+            {paperlessTesting ? 'Testing…' : 'Test connection'}
+          </Button>
+          <Chip
+            size="small"
+            color={paperlessConfig?.base_url && paperlessConfig?.has_token ? 'success' : 'default'}
+            variant="outlined"
+            label={paperlessConfig?.base_url && paperlessConfig?.has_token ? 'Configured' : 'Not configured'}
+          />
+        </Box>
+        {paperlessTestResult && (
+          <Alert severity={paperlessTestResult.ok ? 'success' : 'error'} sx={{ mt: 1.5 }} onClose={() => setPaperlessTestResult(null)}>
+            {paperlessTestResult.message}
           </Alert>
         )}
       </Paper>

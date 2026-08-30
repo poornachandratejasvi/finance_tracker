@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
@@ -139,6 +139,10 @@ def list_transactions(
     from app.services.currency_service import bank_currency_map
     bank_cur = bank_currency_map(db, household_ids)
 
+    # Fetched once (not per-row) -- see paperless_service.document_url for the per-row shape.
+    from app.services import paperless_service
+    paperless_base_url = paperless_service.get_config(db).get("base_url")
+
     # Add bank name, currency and labels (with colors) to response
     result = []
     for trans in transactions:
@@ -153,6 +157,8 @@ def list_transactions(
             {"id": tl.label.id, "name": tl.label.name, "color": tl.label.color}
             for tl in trans.transaction_labels if tl.label
         ]
+        if paperless_base_url and trans.paperless_document_id:
+            trans_dict['receipt_url'] = f"{paperless_base_url}/documents/{trans.paperless_document_id}/"
         result.append(trans_dict)
 
     return {"items": result, "total": total, "skip": skip, "limit": limit}
@@ -640,8 +646,12 @@ def get_transaction(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Transaction not found"
         )
-    
-    return transaction
+
+    trans_dict = TransactionResponse.from_orm(transaction).dict()
+    if transaction.paperless_document_id:
+        from app.services import paperless_service
+        trans_dict['receipt_url'] = paperless_service.document_url(db, transaction.paperless_document_id)
+    return trans_dict
 
 
 @router.put("/{transaction_id}", response_model=TransactionResponse)
@@ -895,6 +905,45 @@ def update_custom_fields(
         "custom_fields": current_custom
     }
 
+
+@router.post("/{transaction_id}/attach-receipt")
+async def attach_receipt(
+    transaction_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_write_access),
+):
+    """Archives a scanned receipt image to Paperless-ngx and links the resulting
+    document to this transaction, once Paperless finishes OCR/indexing it (async
+    -- see app.tasks.paperless_tasks). Used after the receipt-scan-to-draft flow
+    (POST /api/receipts/scan) creates the transaction itself; this call carries
+    the original photo over to Paperless for long-term, searchable archival,
+    which the scan endpoint never does on its own."""
+    from app.services import paperless_service
+
+    transaction = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.user_id.in_(visible_user_ids(db, current_user)),
+    ).first()
+    if not transaction:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+
+    if not paperless_service.is_configured(db):
+        raise HTTPException(status_code=400, detail="Paperless-ngx isn't configured -- set it up in Settings first.")
+
+    image_bytes = await file.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    title = f"Receipt - {transaction.description or 'transaction'} - {transaction.transaction_date.date().isoformat()}"
+    task_id = paperless_service.upload_document(db, image_bytes, file.filename or "receipt.jpg", title=title)
+    if not task_id:
+        raise HTTPException(status_code=502, detail="Failed to upload the receipt to Paperless-ngx.")
+
+    from app.tasks.paperless_tasks import resolve_paperless_document
+    resolve_paperless_document.delay(transaction_id, task_id)
+
+    return {"success": True, "message": "Receipt uploaded -- it'll be linked here once Paperless finishes processing it."}
 
 
 
