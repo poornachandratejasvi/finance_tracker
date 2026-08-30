@@ -88,6 +88,15 @@ Visit Paperless at whichever URL applies above, and log in with
    the URL from step 1 above (e.g. `https://paperless.yourdomain.com` or
    `http://<host>:8010`) and the API token → **Save** → **Test connection**.
 
+The URL you enter here is only ever used to build the "View Receipt" link a
+person clicks (it has to be one their browser can reach). The backend's own
+API calls (upload, task polling, the connection test itself) go over Docker's
+internal network instead by default (`http://paperless:8000` — the Docker
+service name, works automatically since both containers share `finance-network`)
+rather than round-tripping out through Cloudflare/Traefik and back in. See
+`PAPERLESS_INTERNAL_URL` in `.env.example` if Paperless runs somewhere that
+default can't reach.
+
 That's it — the next scanned-and-saved receipt (mobile) gets archived
 automatically, and its transaction shows a "View Receipt" link once Paperless
 finishes OCR/indexing it (usually a few seconds, occasionally longer on a slow
