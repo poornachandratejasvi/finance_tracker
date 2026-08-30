@@ -84,33 +84,39 @@ export function NetWorthContent() {
   );
 }
 
+// Matches the reference app's "Cash Flow" widget: a big THIS MONTH net
+// figure, then Income/Expenses as proportional bars (not just numbers) --
+// this is the first widget in the seeded default feed, so it's worth the
+// extra visual fidelity over the earlier plain label/value rows.
 export function IncomeExpenseContent() {
   const { colors } = useTheme();
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchDashboardSummary>> | null>(null);
   useEffect(() => { fetchDashboardSummary(currentMonthRange()).then(setData).catch(() => setData(null)); }, []);
   if (!data) return <Loading />;
+  const max = Math.max(data.total_credit, data.total_debit, 1);
   return (
-    <View style={{ gap: 8 }}>
-      <Row label="Income" value={formatCurrency(data.total_credit)} color={colors.primary} />
-      <Row label="Expenses" value={formatCurrency(data.total_debit)} color={colors.danger} />
-      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 6 }}>
-        <Row
-          label="Net"
-          value={formatCurrency(data.net_balance)}
-          color={data.net_balance >= 0 ? colors.primary : colors.danger}
-          bold
-        />
-      </View>
+    <View>
+      <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: "600" }}>THIS MONTH</Text>
+      <Text style={{ fontSize: 22, fontWeight: "800", color: data.net_balance >= 0 ? colors.text : colors.danger, marginTop: 2, marginBottom: 12 }}>
+        {formatCurrency(data.net_balance)}
+      </Text>
+      <BarRow label="Income" value={data.total_credit} max={max} color={colors.primary} />
+      <BarRow label="Expenses" value={data.total_debit} max={max} color={colors.danger} />
     </View>
   );
 }
 
-function Row({ label, value, color, bold }: { label: string; value: string; color?: string; bold?: boolean }) {
+function BarRow({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
   const { colors } = useTheme();
   return (
-    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-      <Text style={{ color: colors.textSecondary, fontWeight: bold ? "700" : "400" }}>{label}</Text>
-      <Text style={{ color: color || colors.text, fontWeight: "700" }}>{value}</Text>
+    <View style={{ marginBottom: 10 }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+        <Text style={{ color: colors.text, fontSize: 13 }}>{label}</Text>
+        <Text style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}>{formatCurrency(value)}</Text>
+      </View>
+      <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.chipBg, overflow: "hidden" }}>
+        <View style={{ height: 6, borderRadius: 3, width: `${Math.min(100, (value / max) * 100)}%`, backgroundColor: color }} />
+      </View>
     </View>
   );
 }
