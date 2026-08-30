@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import auth, users, banks, transactions, labels, sync, logs, oauth, pdfs, dashboard, field_mapping, settings, csv_exports, api_tokens, ingest, goals, categories, currencies, analytics, filters, templates, backup, ai, rules, notifications, notification_rules, gmail_accounts, watchers, imports, reward_points, family_dashboard, search, investments, dashboard_widgets, receipts, vehicles, debt, gamification, metrics
+from app.api.endpoints import auth, users, banks, transactions, labels, sync, logs, oauth, pdfs, dashboard, field_mapping, settings, csv_exports, api_tokens, ingest, goals, categories, currencies, analytics, filters, templates, backup, ai, rules, notifications, notification_rules, gmail_accounts, watchers, imports, reward_points, family_dashboard, search, investments, dashboard_widgets, receipts, vehicles, debt, gamification, metrics, summary
 
 api_router = APIRouter()
 
@@ -43,3 +43,4 @@ api_router.include_router(vehicles.router, prefix="/vehicles", tags=["Vehicles"]
 api_router.include_router(debt.router, prefix="/debt", tags=["Debt Payoff"])
 api_router.include_router(gamification.router, prefix="/gamification", tags=["Gamification"])
 api_router.include_router(metrics.router, prefix="/metrics", tags=["Metrics"])
+api_router.include_router(summary.router, prefix="/summary", tags=["Summary"])
