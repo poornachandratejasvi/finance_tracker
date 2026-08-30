@@ -151,6 +151,7 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
                         "transaction_date": parsed["transaction_date"],
                         "amount": parsed["amount"],
                         "transaction_type": parsed["transaction_type"],
+                        "description": parsed["description"],
                     },
                     source="alert",
                 )

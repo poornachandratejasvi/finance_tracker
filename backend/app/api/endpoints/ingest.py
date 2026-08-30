@@ -240,7 +240,7 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
         # of leaving a duplicate stuck pending forever.
         dup, deduped = dedupe_incoming_pending(
             db, user.id, default_bank_id,
-            {"transaction_date": txn_date, "amount": amount, "transaction_type": ttype},
+            {"transaction_date": txn_date, "amount": amount, "transaction_type": ttype, "description": description},
             source=source,
         )
         if deduped:

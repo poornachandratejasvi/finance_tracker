@@ -95,9 +95,16 @@ def dedupe_incoming_pending(db, user_id: int, bank_id: int, trans_data: dict, so
 
     Returns (transaction, True) if the caller should NOT create a new row --
     either an equal-or-better-provenance pending row already covers this
-    purchase, or a lower-priority one was just updated in place with the
-    incoming (higher-priority) data and source. Returns (None, False) if
+    purchase, or a lower-priority one was just updated (merged) in place with
+    the incoming (higher-priority) data and source. Returns (None, False) if
     there's no match and the caller should create a new row as usual.
+
+    The merge on upgrade adopts the higher-priority source's identifying
+    fields (date/amount/type/description -- e.g. Gmail's own transactional
+    text is more trustworthy than a Shortcut's free-typed description) while
+    leaving the existing row's category/notes/labels alone, so whatever a
+    matching AutoRule already attached to the lower-priority row survives
+    the merge instead of being wiped by re-running rules on the new source.
     """
     match = find_pending_match(
         db, user_id, bank_id,
@@ -108,8 +115,8 @@ def dedupe_incoming_pending(db, user_id: int, bank_id: int, trans_data: dict, so
         return None, False
     if _SOURCE_PRIORITY.get(match.source, 0) >= _SOURCE_PRIORITY.get(source, 0):
         return match, True
-    for key in ("transaction_date", "amount", "transaction_type"):
-        if key in trans_data:
+    for key in ("transaction_date", "amount", "transaction_type", "description"):
+        if trans_data.get(key) is not None:
             setattr(match, key, trans_data[key])
     match.source = source
     return match, True
