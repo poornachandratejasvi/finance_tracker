@@ -103,10 +103,27 @@ function AppTabs({ navigation }: any) {
         options={{
           tabBarIcon: tabIcon("grid-outline", "grid"),
           tabBarLabel: tabLabel("Dashboard"),
+          // Bell + gear, not a search icon -- the reference app's Dashboard
+          // header. There's no in-app notification inbox to open here (this
+          // app's alerts go out via Discord/Apprise, not an in-app feed), so
+          // the bell links to the closest existing equivalent: configuring
+          // notification rules. Global Search stays reachable via quick
+          // actions (long-press the app icon) and Records' own search bar.
           headerRight: () => (
-            <TouchableOpacity onPress={() => navigation.navigate("Search")} style={{ paddingHorizontal: 16 }}>
-              <Ionicons name="search" size={20} color={headerIconColor} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("SettingsStack", { screen: "NotificationRules" })}
+                style={{ paddingHorizontal: 10 }}
+              >
+                <Ionicons name="notifications-outline" size={20} color={headerIconColor} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("SettingsStack", { screen: "SettingsHub" })}
+                style={{ paddingHorizontal: 10 }}
+              >
+                <Ionicons name="settings-outline" size={20} color={headerIconColor} />
+              </TouchableOpacity>
+            </View>
           ),
         }}
       />
