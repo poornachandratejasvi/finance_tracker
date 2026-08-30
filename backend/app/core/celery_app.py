@@ -18,6 +18,7 @@ celery_app = Celery(
         "app.tasks.gmail_health_tasks", "app.tasks.alert_sync_tasks", "app.tasks.credit_balance_tasks",
         "app.tasks.watcher_tasks", "app.tasks.reward_points_tasks", "app.tasks.subscription_reminder_tasks",
         "app.tasks.budget_alert_tasks", "app.tasks.balance_alert_tasks", "app.tasks.recycle_bin_tasks",
+        "app.tasks.dedupe_tasks",
     ],
 )
 
@@ -118,6 +119,17 @@ celery_app.conf.beat_schedule = {
     # Once a day is plenty since the grace window is measured in days, not hours.
     "recycle-bin-purge": {
         "task": "recycle_bin.purge_expired",
+        "schedule": 24 * 60 * 60.0,
+    },
+    # Auto-merges and soft-deletes duplicate transactions (see
+    # duplicate_resolution_service.py) -- the real-time SMS/alert/ingest dedupe
+    # guard already stops most NEW duplicates at creation time, so this is a daily
+    # safety-net sweep for the cases it can't see (a row already confirmed before
+    # a later real-time source reports the same purchase) plus ongoing cleanup,
+    # not the only time duplicates get resolved -- soft-deleted via the Recycle
+    # Bin, so a wrong call is a restore away, not gone for good.
+    "auto-resolve-duplicates": {
+        "task": "transactions.auto_resolve_duplicates_all",
         "schedule": 24 * 60 * 60.0,
     },
 }

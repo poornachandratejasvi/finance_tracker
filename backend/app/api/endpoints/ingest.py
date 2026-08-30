@@ -22,7 +22,7 @@ from app.models.models import User, Bank, Category, Transaction, IngestMapping, 
 from app.services.transaction_service import TransactionService
 from app.services import shortcut_service
 from app.services import ai_sms_extraction
-from app.services.transaction_hooks import dedupe_incoming_pending
+from app.services.transaction_hooks import dedupe_incoming_pending, find_confirmed_match
 
 router = APIRouter()
 
@@ -246,6 +246,13 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
         if deduped:
             db.commit()
             return {"created": False, "skipped_duplicate": True, "transaction_id": dup.id, "merged_source": dup.source}
+
+        # Also check against already-CONFIRMED transactions -- e.g. a statement
+        # already recorded this purchase before this SMS/Shortcut report arrived.
+        # dedupe_incoming_pending above only ever looks at other PENDING rows.
+        confirmed_match = find_confirmed_match(db, user.id, default_bank_id, ttype, amount, txn_date)
+        if confirmed_match:
+            return {"created": False, "skipped_duplicate": True, "transaction_id": confirmed_match.id, "already_confirmed": True}
 
     notes = str(target["notes"]) if target.get("notes") is not None else None
     if unmatched_account_name:

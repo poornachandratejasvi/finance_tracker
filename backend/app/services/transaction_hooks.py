@@ -63,6 +63,28 @@ def find_pending_match(db, user_id: int, bank_id: int, transaction_type, amount,
     return query.order_by(Transaction.id.asc()).first()
 
 
+def find_confirmed_match(db, user_id: int, bank_id: int, transaction_type, amount, txn_date):
+    """Fuzzy-match an existing CONFIRMED transaction -- stops a real-time source
+    from creating a new pending duplicate when the real purchase was already
+    recorded (e.g. a PDF statement processed before this alert/SMS/Shortcut
+    report got around to arriving). Same tolerance window as find_pending_match."""
+    from app.models.models import Transaction, TransactionType
+
+    ttype = transaction_type.value if hasattr(transaction_type, "value") else transaction_type
+    if amount is None or txn_date is None or ttype not in ("debit", "credit"):
+        return None
+    return db.query(Transaction).filter(
+        Transaction.user_id == user_id,
+        Transaction.bank_id == bank_id,
+        Transaction.is_confirmed.is_(True),
+        Transaction.transaction_type == TransactionType(ttype),
+        Transaction.amount >= amount - _AMOUNT_TOLERANCE,
+        Transaction.amount <= amount + _AMOUNT_TOLERANCE,
+        Transaction.transaction_date >= txn_date - timedelta(days=_RECONCILE_WINDOW_DAYS),
+        Transaction.transaction_date <= txn_date + timedelta(days=_RECONCILE_WINDOW_DAYS),
+    ).first()
+
+
 def dedupe_incoming_pending(db, user_id: int, bank_id: int, trans_data: dict, source: str):
     """Cross-source duplicate guard for the real-time pending sources (Gmail
     alert / SMS auto-detect / iOS-Shortcut ingest). Without this, the same

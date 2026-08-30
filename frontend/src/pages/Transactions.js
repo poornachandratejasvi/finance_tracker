@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
-  Container, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  TablePagination, Typography, Box, Button, TextField, Select, MenuItem, FormControl,
-  InputLabel, Chip, IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
+  Container, Paper, TablePagination, Typography, Box, Button, TextField, Select, MenuItem,
+  FormControl, InputLabel, Chip, IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
   Alert, CircularProgress, Tooltip, Checkbox, FormControlLabel,
 } from '@mui/material';
 import {
@@ -63,21 +62,10 @@ const formatDayHeader = (iso) => {
   const d = parseTs(iso);
   return d ? d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Unknown date';
 };
-const formatDateShort = (iso) => {
-  const d = parseTs(iso);
-  return d ? d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Invalid';
-};
 const formatTime = (iso) => {
   const d = parseTs(iso);
   return d ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
 };
-
-// Colored signed amount (uses formatCurrency for the money portion).
-const renderAmount = (amt, type, currency) => (
-  <Box component="span" sx={{ color: type === 'credit' ? 'success.main' : 'error.main', fontWeight: 700 }}>
-    {type === 'credit' ? '+' : '-'}{formatCurrency(amt, { currency })}
-  </Box>
-);
 
 function Transactions() {
   const location = useLocation();
@@ -123,9 +111,6 @@ function Transactions() {
   const [quickAddText, setQuickAddText] = useState('');
   const [quickAddLoading, setQuickAddLoading] = useState(false);
   const [quickAddError, setQuickAddError] = useState('');
-
-  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
-  const [duplicateGroups, setDuplicateGroups] = useState([]);
 
   const [labelDialog, setLabelDialog] = useState({ open: false, transaction: null });
   const [selectedLabelIds, setSelectedLabelIds] = useState([]);
@@ -365,35 +350,28 @@ function Transactions() {
     }
   };
 
-  const handleFindDuplicates = async () => {
+  // Auto-merges + soft-deletes duplicates (see duplicate_resolution_service.py)
+  // instead of opening a manual review dialog -- a duplicate is assumed correct
+  // by default; the Recycle Bin (soft-delete, restorable for 30 days) is the
+  // "confirm if it's a duplicate or not" step, for after the fact rather than
+  // before. This also runs automatically once a day on its own; this button is
+  // just "run it now" instead of waiting.
+  const handleSolveDuplicities = async () => {
     try {
       setLoading(true);
-      const { data } = await api.get('/api/transactions/duplicates/find');
-      if (!data || !data.groups || data.groups.length === 0) {
+      const { data } = await api.post('/api/transactions/duplicates/auto-resolve');
+      if (!data || !data.groups_resolved) {
         setSuccess('No duplicates found!');
-        setDuplicateGroups([]);
       } else {
-        setDuplicateGroups(data.groups || []);
-        setDuplicateDialogOpen(true);
-        setSuccess(`Found ${data.duplicate_groups || 0} groups with ${data.total_duplicates || 0} duplicate transactions`);
+        setSuccess(
+          `Merged ${data.transactions_merged} duplicate transaction(s) across ${data.groups_resolved} group(s). `
+          + 'Anything merged by mistake can be restored from the Recycle Bin.'
+        );
+        fetchData();
       }
     } catch (err) {
-      setError('Failed to find duplicates');
+      setError('Failed to resolve duplicates');
       console.error('Duplicate error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteDuplicates = async (idsToDelete) => {
-    try {
-      setLoading(true);
-      await bulkDeleteTransactions(idsToDelete);
-      setSuccess(`Deleted ${idsToDelete.length} duplicate transactions`);
-      setDuplicateDialogOpen(false);
-      fetchData();
-    } catch (err) {
-      setError('Failed to delete duplicates');
     } finally {
       setLoading(false);
     }
@@ -567,7 +545,9 @@ function Transactions() {
                 <Button size="small" variant="outlined" color="success" startIcon={<CheckCircleOutline />} disabled={selectedTransactions.length === 0} onClick={handleBulkConfirm}>Mark Confirmed</Button>
                 <Button size="small" variant="outlined" startIcon={<FileDownload />} onClick={handleExportCSV}>Export</Button>
                 <Button size="small" variant="outlined" color="error" startIcon={<Delete />} disabled={selectedTransactions.length === 0} onClick={handleBulkDelete}>Delete</Button>
-                <Button size="small" variant="outlined" color="warning" startIcon={<ContentCopy />} onClick={handleFindDuplicates}>Solve Duplicities</Button>
+                <Tooltip title="Auto-merges duplicate transactions and moves the extras to the Recycle Bin -- restorable there if a merge was wrong">
+                  <Button size="small" variant="outlined" color="warning" startIcon={<ContentCopy />} onClick={handleSolveDuplicities}>Solve Duplicities</Button>
+                </Tooltip>
                 <FormControl size="small" sx={{ minWidth: 170 }}>
                   <InputLabel>Sort by</InputLabel>
                   <Select label="Sort by" value={`${sortBy}:${sortDir}`} onChange={handleSortChange}>
@@ -829,93 +809,6 @@ function Transactions() {
         }}
       />
 
-      {/* Duplicate manager */}
-      <Dialog open={duplicateDialogOpen} onClose={() => setDuplicateDialogOpen(false)} maxWidth="lg" fullWidth>
-        <DialogTitle>
-          Manage Duplicate Transactions
-          <Typography variant="body2" color="text.secondary">
-            Found {duplicateGroups.length} groups of duplicates. Select which transactions to delete.
-          </Typography>
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 2 }}>
-            {duplicateGroups.map((group, groupIndex) => (
-              <Paper key={groupIndex} sx={{ mb: 3, p: 2, bgcolor: 'grey.50' }}>
-                <Typography variant="subtitle1" fontWeight="bold" mb={2}>
-                  Group {groupIndex + 1}: {group.description} - {formatCurrency(group.amount)}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                  Date: {formatDateShort(group.date)} | {group.count} duplicates found
-                </Typography>
-                <TableContainer component={Paper}>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell padding="checkbox">Delete?</TableCell>
-                        <TableCell>ID</TableCell>
-                        <TableCell>Date</TableCell>
-                        <TableCell>Bank</TableCell>
-                        <TableCell>Description</TableCell>
-                        <TableCell>Amount</TableCell>
-                        <TableCell>Type</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {group.transactions && group.transactions.map((trans, idx) => (
-                        <TableRow key={trans.id} data-trans-id={trans.id}>
-                          <TableCell padding="checkbox">
-                            <Checkbox
-                              defaultChecked={idx > 0}
-                              onChange={(e) => {
-                                e.target.closest('tr').dataset.deleteSelected = e.target.checked ? 'true' : 'false';
-                              }}
-                            />
-                          </TableCell>
-                          <TableCell>{trans.id}</TableCell>
-                          <TableCell>{formatDateShort(trans.date)}</TableCell>
-                          <TableCell>{trans.bank_name}</TableCell>
-                          <TableCell>{trans.description}</TableCell>
-                          <TableCell>{renderAmount(trans.amount, trans.transaction_type, trans.currency_code)}</TableCell>
-                          <TableCell>
-                            <Chip
-                              label={trans.transaction_type}
-                              size="small"
-                              color={trans.transaction_type === 'credit' ? 'success' : 'error'}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Paper>
-            ))}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDuplicateDialogOpen(false)}>Cancel</Button>
-          <Button
-            onClick={() => {
-              const idsToDelete = [];
-              document.querySelectorAll('tr[data-trans-id][data-delete-selected="true"]').forEach((tr) => {
-                const id = parseInt(tr.dataset.transId, 10);
-                if (id) idsToDelete.push(id);
-              });
-              if (idsToDelete.length === 0) {
-                alert('No duplicates selected for deletion');
-                return;
-              }
-              if (window.confirm(`Delete ${idsToDelete.length} selected duplicate transactions?`)) {
-                handleDeleteDuplicates(idsToDelete);
-              }
-            }}
-            variant="contained"
-            color="error"
-          >
-            Delete Selected Duplicates
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Container>
   );
 }

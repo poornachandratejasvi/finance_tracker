@@ -10,16 +10,12 @@ keyword-based search instead of reusing that query.
 """
 import json
 import logging
-from datetime import timedelta
 from typing import List
 
-from app.models.models import Bank, BankEmail, GmailAccount, Transaction, TransactionType
+from app.models.models import Bank, BankEmail, GmailAccount, Transaction
 from app.services.gmail_service import GmailService, credentials_from_dict
 from app.services.alert_email_service import parse_alert_email
-from app.services.transaction_hooks import (
-    apply_auto_rules_and_notify, dedupe_incoming_pending,
-    _RECONCILE_WINDOW_DAYS, _AMOUNT_TOLERANCE,
-)
+from app.services.transaction_hooks import apply_auto_rules_and_notify, dedupe_incoming_pending
 
 logger = logging.getLogger(__name__)
 
@@ -61,16 +57,11 @@ def _already_confirmed(db, user_id: int, bank_id: int, parsed: dict) -> bool:
     """True if a CONFIRMED transaction already covers this real-world spend
     (e.g. the statement was processed before this alert got around to being
     synced) — in which case creating a pending duplicate would be wrong."""
-    return db.query(Transaction).filter(
-        Transaction.user_id == user_id,
-        Transaction.bank_id == bank_id,
-        Transaction.is_confirmed.is_(True),
-        Transaction.transaction_type == TransactionType(parsed["transaction_type"]),
-        Transaction.amount >= parsed["amount"] - _AMOUNT_TOLERANCE,
-        Transaction.amount <= parsed["amount"] + _AMOUNT_TOLERANCE,
-        Transaction.transaction_date >= parsed["transaction_date"] - timedelta(days=_RECONCILE_WINDOW_DAYS),
-        Transaction.transaction_date <= parsed["transaction_date"] + timedelta(days=_RECONCILE_WINDOW_DAYS),
-    ).first() is not None
+    from app.services.transaction_hooks import find_confirmed_match
+
+    return find_confirmed_match(
+        db, user_id, bank_id, parsed["transaction_type"], parsed["amount"], parsed["transaction_date"],
+    ) is not None
 
 
 def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_date=None) -> int:
