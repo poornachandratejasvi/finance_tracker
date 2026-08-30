@@ -1,12 +1,13 @@
 import React, { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import { DarkTheme, DefaultTheme, NavigationContainer, NavigatorScreenParams, useNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuth } from "../context/AuthContext";
-import { ThemeColors, useTheme } from "../context/ThemeContext";
+import { useTheme } from "../context/ThemeContext";
+import { useOffline } from "../offline/OfflineProvider";
 import { registerQuickActions, useQuickActionRouter } from "../utils/quickActions";
 import { TAB_BAR_HEIGHT, TAB_BAR_BOTTOM_MARGIN } from "./tabBarMetrics";
 import LoginScreen from "../screens/LoginScreen";
@@ -67,96 +68,81 @@ function tabLabel(text: string) {
 
 function AppTabs({ navigation }: any) {
   const { colors } = useTheme();
-  const styles = makeStyles(colors);
   const headerIconColor = colors.text;
+  const { isSyncing, triggerSync } = useOffline();
   return (
-    <View style={styles.flex}>
-      <Tab.Navigator
-        screenOptions={{
-          headerTitleAlign: "center",
-          tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.textSecondary,
-          // Deliberately NOT position:"absolute" -- this stays in normal layout
-          // flow (so it still reserves its own space and can't hide content
-          // behind it on any of the ~30 screens nested under the Banks/Settings
-          // tabs), just visually restyled as a rounded, inset "floating" card to
-          // match the reference app instead of a flush full-width bar.
-          tabBarStyle: {
-            marginHorizontal: 16,
-            marginBottom: TAB_BAR_BOTTOM_MARGIN,
-            height: TAB_BAR_HEIGHT,
-            borderRadius: TAB_BAR_HEIGHT / 2,
-            backgroundColor: colors.card,
-            borderTopWidth: 0,
-            elevation: 8,
-            shadowColor: "#000",
-            shadowOpacity: 0.15,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: 4 },
-          },
-          tabBarItemStyle: { paddingTop: 6 },
+    <Tab.Navigator
+      screenOptions={{
+        headerTitleAlign: "center",
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
+        // Deliberately NOT position:"absolute" -- this stays in normal layout
+        // flow (so it still reserves its own space and can't hide content
+        // behind it on any of the ~30 screens nested under the Banks/Settings
+        // tabs), just visually restyled as a rounded, inset "floating" card to
+        // match the reference app instead of a flush full-width bar.
+        tabBarStyle: {
+          marginHorizontal: 16,
+          marginBottom: TAB_BAR_BOTTOM_MARGIN,
+          height: TAB_BAR_HEIGHT,
+          borderRadius: TAB_BAR_HEIGHT / 2,
+          backgroundColor: colors.card,
+          borderTopWidth: 0,
+          elevation: 8,
+          shadowColor: "#000",
+          shadowOpacity: 0.15,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
+        },
+        tabBarItemStyle: { paddingTop: 6 },
+      }}
+    >
+      <Tab.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{
+          tabBarIcon: tabIcon("grid-outline", "grid"),
+          tabBarLabel: tabLabel("Dashboard"),
+          headerRight: () => (
+            <TouchableOpacity onPress={() => navigation.navigate("Search")} style={{ paddingHorizontal: 16 }}>
+              <Ionicons name="search" size={20} color={headerIconColor} />
+            </TouchableOpacity>
+          ),
         }}
-      >
-        <Tab.Screen
-          name="Dashboard"
-          component={DashboardScreen}
-          options={{
-            tabBarIcon: tabIcon("grid-outline", "grid"),
-            tabBarLabel: tabLabel("Dashboard"),
-            headerRight: () => (
-              <TouchableOpacity onPress={() => navigation.navigate("Search")} style={{ paddingHorizontal: 16 }}>
-                <Ionicons name="search" size={20} color={headerIconColor} />
+      />
+      <Tab.Screen
+        name="Transactions"
+        component={TransactionsScreen}
+        options={{
+          tabBarIcon: tabIcon("receipt-outline", "receipt"),
+          tabBarLabel: tabLabel("Records"),
+          // Records gets its own header "+" (matching the reference app) --
+          // Statistics/More get neither this nor the Dashboard's floating one.
+          headerRight: () => (
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <TouchableOpacity onPress={triggerSync} disabled={isSyncing} style={{ paddingHorizontal: 10 }}>
+                <Ionicons name="sync" size={20} color={isSyncing ? colors.textSecondary : headerIconColor} />
               </TouchableOpacity>
-            ),
-          }}
-        />
-        <Tab.Screen
-          name="Transactions"
-          component={TransactionsScreen}
-          options={{ tabBarIcon: tabIcon("receipt-outline", "receipt"), tabBarLabel: tabLabel("Records") }}
-        />
-        <Tab.Screen
-          name="Analytics"
-          component={AnalyticsScreen}
-          options={{ tabBarIcon: tabIcon("bar-chart-outline", "bar-chart"), tabBarLabel: tabLabel("Statistics"), title: "Statistics" }}
-        />
-        <Tab.Screen
-          name="More"
-          component={MoreHubScreen}
-          options={{ tabBarIcon: tabIcon("ellipsis-horizontal-circle-outline", "ellipsis-horizontal-circle"), tabBarLabel: tabLabel("More"), title: "More" }}
-        />
-      </Tab.Navigator>
-
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.primary }]}
-        onPress={() => navigation.navigate("Add")}
-        activeOpacity={0.85}
-      >
-        <Ionicons name="add" size={28} color="#fff" />
-      </TouchableOpacity>
-    </View>
+              <TouchableOpacity onPress={() => navigation.navigate("Add")} style={{ paddingHorizontal: 10 }}>
+                <Ionicons name="add-circle" size={26} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Analytics"
+        component={AnalyticsScreen}
+        options={{ tabBarIcon: tabIcon("bar-chart-outline", "bar-chart"), tabBarLabel: tabLabel("Statistics"), title: "Statistics" }}
+      />
+      <Tab.Screen
+        name="More"
+        component={MoreHubScreen}
+        options={{ tabBarIcon: tabIcon("ellipsis-horizontal-circle-outline", "ellipsis-horizontal-circle"), tabBarLabel: tabLabel("More"), title: "More" }}
+      />
+    </Tab.Navigator>
   );
 }
-
-const makeStyles = (c: ThemeColors) =>
-  StyleSheet.create({
-    flex: { flex: 1 },
-    fab: {
-      position: "absolute",
-      right: 20,
-      bottom: TAB_BAR_HEIGHT + TAB_BAR_BOTTOM_MARGIN + 14,
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      alignItems: "center",
-      justifyContent: "center",
-      elevation: 6,
-      shadowColor: "#000",
-      shadowOpacity: 0.25,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 3 },
-    },
-  });
 
 export default function RootNavigator() {
   const { loading, isAuthenticated } = useAuth();

@@ -14,6 +14,7 @@ import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { DashboardSummary } from "../types";
 import { formatCurrency } from "../utils/format";
 import DashboardWidgets from "./widgets/DashboardWidgets";
+import FloatingAddButton from "../components/FloatingAddButton";
 
 // A distinct color per account type -- used for the colored square icon on
 // the horizontal account-card row, matching the reference app's per-account
@@ -85,7 +86,9 @@ export default function DashboardScreen() {
   }
 
   return (
+    <View style={styles.flex}>
     <ScrollView
+      style={styles.flex}
       contentContainerStyle={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
@@ -177,6 +180,8 @@ export default function DashboardScreen() {
 
       <DashboardWidgets />
     </ScrollView>
+      <FloatingAddButton />
+    </View>
   );
 }
 
@@ -193,6 +198,7 @@ function Stat({ label, value, color }: { label: string; value: string; color: st
 
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
+    flex: { flex: 1, backgroundColor: c.background },
     center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
     container: { padding: 16, paddingBottom: 32, backgroundColor: c.background },
     header: {
