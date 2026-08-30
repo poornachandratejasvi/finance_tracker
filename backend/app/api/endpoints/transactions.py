@@ -957,11 +957,23 @@ def find_duplicates(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Find duplicate transactions based on EXACT match of description + amount + date.
-    Only returns groups where ALL three fields match exactly.
+    Find duplicate transactions two ways:
+    1. EXACT match of description + amount + date (unchanged from before).
+    2. FUZZY cross-source match: same bank/type, amount within a cent, date within
+       a few days, description IGNORED -- this is what actually catches the common
+       real-world case exact-match misses: the same purchase recorded once by a
+       real-time source (Gmail alert / SMS auto-detect / iOS-Shortcut ingest) and
+       again by a PDF statement or a different sync, where the two parsers produce
+       differently-formatted description text for the same transaction (extra bank
+       reference codes, truncation, punctuation). Restricted to groups with more
+       than one distinct (source, is_confirmed) combination, so two genuinely
+       separate same-amount purchases from the same source don't get flagged.
+    Both are report-only here -- nothing is deleted until the user reviews the
+    group in the frontend's dialog and confirms.
     """
     from sqlalchemy import func
-    
+    from app.services.transaction_hooks import _SOURCE_PRIORITY, _RECONCILE_WINDOW_DAYS, _AMOUNT_TOLERANCE
+
     # Find exact duplicates only (description + amount + date must ALL match)
     exact_matches = db.query(
         func.date(Transaction.transaction_date).label('transaction_date'),
@@ -976,14 +988,16 @@ def find_duplicates(
         Transaction.amount,
         func.lower(Transaction.description)
     ).having(func.count(Transaction.id) > 1).all()
-    
+
     result = []
-    
+    exact_matched_ids = set()
+
     # Convert to response format
     for dup in exact_matches:
         transaction_ids = dup.ids
         transactions = db.query(Transaction).filter(Transaction.id.in_(transaction_ids)).all()
-        
+        exact_matched_ids.update(transaction_ids)
+
         result.append({
             "date": dup.transaction_date.isoformat() if dup.transaction_date else None,
             "amount": float(dup.amount),
@@ -1001,7 +1015,69 @@ def find_duplicates(
                 for t in transactions
             ]
         })
-    
+
+    def _keeper_rank(t):
+        if t.is_confirmed:
+            return 1000
+        return _SOURCE_PRIORITY.get(t.source, 0)
+
+    all_txns = (
+        db.query(Transaction)
+        .filter(Transaction.user_id == current_user.id, Transaction.amount.isnot(None), Transaction.transaction_date.isnot(None))
+        .order_by(Transaction.bank_id, Transaction.transaction_type, Transaction.transaction_date)
+        .all()
+    )
+    buckets = {}
+    for t in all_txns:
+        buckets.setdefault((t.bank_id, t.transaction_type), []).append(t)
+
+    seen_in_fuzzy = set()
+    for txns in buckets.values():
+        n = len(txns)
+        for i in range(n):
+            a = txns[i]
+            if a.id in exact_matched_ids or a.id in seen_in_fuzzy:
+                continue
+            cluster = [a]
+            for j in range(i + 1, n):
+                b = txns[j]
+                if (b.transaction_date - a.transaction_date).days > _RECONCILE_WINDOW_DAYS:
+                    break
+                if b.id in exact_matched_ids or b.id in seen_in_fuzzy:
+                    continue
+                if abs(b.amount - a.amount) <= _AMOUNT_TOLERANCE:
+                    cluster.append(b)
+            if len(cluster) < 2:
+                continue
+            # Only the cross-source/cross-confirmation pattern this is meant to catch --
+            # a cluster where every row shares the same (source, is_confirmed) is more
+            # likely two genuinely separate same-amount purchases, not a duplicate.
+            if len({(t.source, t.is_confirmed) for t in cluster}) < 2:
+                continue
+            cluster.sort(key=lambda t: (-_keeper_rank(t), t.id))
+            for t in cluster:
+                seen_in_fuzzy.add(t.id)
+            result.append({
+                "date": cluster[0].transaction_date.date().isoformat() if cluster[0].transaction_date else None,
+                "amount": float(cluster[0].amount),
+                "description": cluster[0].description,
+                "count": len(cluster),
+                "fuzzy": True,
+                "transactions": [
+                    {
+                        "id": t.id,
+                        "date": t.transaction_date.isoformat() if t.transaction_date else None,
+                        "amount": float(t.amount),
+                        "description": t.description,
+                        "bank_name": t.bank.name if t.bank else None,
+                        "transaction_type": t.transaction_type.value if t.transaction_type else None,
+                        "is_confirmed": t.is_confirmed,
+                        "source": t.source,
+                    }
+                    for t in cluster
+                ],
+            })
+
     return {
         "duplicate_groups": len(result),
         "total_duplicates": sum(len(g['transactions']) - 1 for g in result),
