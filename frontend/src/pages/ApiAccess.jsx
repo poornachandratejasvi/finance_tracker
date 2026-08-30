@@ -502,9 +502,109 @@ export default function ApiAccess() {
           <li><Typography variant="body2"><b>Show Notification</b> "Saved ✓".</Typography></li>
           <li><Typography variant="body2">Name it "Add Transaction", add to Home Screen / Siri.</Typography></li>
         </Box>
-        <Typography variant="caption" color="text.secondary">
-          Full guide with a Share-Sheet recipe and troubleshooting: <code>docs/ios-shortcut.md</code> in the repo.
-          Bulk: <code>/api/ingest/transactions</code> with a JSON array (or {`{ "transactions": [...] }`}). Verify a token: <code>GET /api/ingest/ping</code>.
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          Bulk: <code>POST /api/ingest/transactions</code> with a JSON array (or {`{ "transactions": [...] }`}). Verify a token: <code>GET /api/ingest/ping</code>.
+        </Typography>
+
+        <Typography variant="subtitle2" sx={{ mt: 2, fontWeight: 600 }}>Share Sheet / quick-text version</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          Turn a copied SMS or any bit of text into a transaction from any app's Share menu:
+        </Typography>
+        <Box component="ol" sx={{ pl: 3, my: 1, '& li': { mb: 0.5 } }}>
+          <li><Typography variant="body2">In the shortcut's settings, enable <b>Show in Share Sheet</b> (accept <b>Text</b>).</Typography></li>
+          <li><Typography variant="body2">First action: <b>Get Text from Input</b> (the shared text) → <b>Raw</b>.</Typography></li>
+          <li><Typography variant="body2">
+            Either send it as the description with a fixed amount, or use <b>Match Text</b> (regex) to pull
+            the amount out, e.g. <code>[0-9][0-9,]*\.?[0-9]*</code>, then build the request body with{' '}
+            <code>amount</code> = the matched number and <code>description</code> = <b>Raw</b>.
+          </Typography></li>
+          <li><Typography variant="body2"><b>Get Contents of URL</b> — same POST as the interactive shortcut above.</Typography></li>
+        </Box>
+        <Typography variant="body2" color="text.secondary">
+          Now from any app: <b>Share → Add Transaction</b>.
+        </Typography>
+
+        <Typography variant="subtitle2" sx={{ mt: 2, fontWeight: 600 }}>Troubleshooting</Typography>
+        <Table size="small" sx={{ mt: 1 }}>
+          <TableHead>
+            <TableRow><TableCell>Symptom</TableCell><TableCell>Fix</TableCell></TableRow>
+          </TableHead>
+          <TableBody>
+            <TableRow>
+              <TableCell><code>401 Unauthorized</code></TableCell>
+              <TableCell>Missing/incorrect <code>X-API-Key</code> header, or the token was revoked. Recreate it above.</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell><code>422 missing/invalid fields</code></TableCell>
+              <TableCell><code>amount</code> and <code>description</code> are required — make sure the shortcut sends real values for both.</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell>Can't reach the server from the phone</TableCell>
+              <TableCell>Use the server's LAN IP or HTTPS domain, never <code>localhost</code> — phone and server must be on the same network, or the server must be publicly reachable.</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell>Transaction lands in "External" account</TableCell>
+              <TableCell>No account matched the <code>account</code> name sent. Use the exact account name from Settings → Banks, or omit it.</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell>Wrong/blank category</TableCell>
+              <TableCell>Add/adjust a keyword rule in Settings → Automatic Rules, or send <code>category</code> explicitly.</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell>Amount sign is wrong</TableCell>
+              <TableCell>Send <code>type: "income"</code> for money in — otherwise it's recorded as an expense.</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </Paper>
+
+      {/* External dashboards / monitoring */}
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h6" gutterBottom>External Dashboards & Monitoring</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Two read-only endpoints for homelab dashboards (e.g. <a href="https://gethomepage.dev/widgets/services/customapi/" target="_blank" rel="noreferrer">gethomepage.dev</a>'s
+          <code> customapi</code> widget) or monitoring tools (Prometheus/Grafana). Both accept the same
+          token as above, sent as either <code>X-API-Key: &lt;token&gt;</code> or{' '}
+          <code>Authorization: Bearer &lt;token&gt;</code> — use whichever header format your tool expects.
+        </Typography>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <Chip label="GET" color="primary" size="small" />
+          <code>{`${API_BASE}/api/summary`}</code>
+          <Tooltip title="Copy URL"><IconButton size="small" onClick={() => copy(`${API_BASE}/api/summary`)}><ContentCopy fontSize="small" /></IconButton></Tooltip>
+        </Box>
+        <Typography variant="body2" sx={{ mb: 1 }}>Compact flat JSON, ideal for a dashboard widget's field mapping:</Typography>
+        <Box component="pre" sx={{ bgcolor: 'action.hover', p: 2, borderRadius: 1, overflow: 'auto', fontSize: 13 }}>{`{
+  "total_balance": 693313.41,
+  "monthly_spend": 81181.51,
+  "net_worth": 693313.41,
+  "savings_total": 742443.36,
+  "credit_total": 49129.95,
+  "month_income": 171877.4,
+  "month_expense": 81181.51,
+  "month_net": 90695.89,
+  "pending_transactions": 57
+}`}</Box>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, mb: 1 }}>
+          <Chip label="GET" color="primary" size="small" />
+          <code>{`${API_BASE}/api/metrics`}</code>
+          <Tooltip title="Copy URL"><IconButton size="small" onClick={() => copy(`${API_BASE}/api/metrics`)}><ContentCopy fontSize="small" /></IconButton></Tooltip>
+        </Box>
+        <Typography variant="body2">Prometheus text-exposition format, for scraping into Grafana or Prometheus directly.</Typography>
+      </Paper>
+
+      {/* Full API reference */}
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h6" gutterBottom>Full API Reference</Typography>
+        <Typography variant="body2" color="text.secondary">
+          This app auto-generates interactive API docs for every endpoint (all of Transactions,
+          Banks, Categories, Analytics, etc. — not just ingestion) straight from the running
+          backend, so they're always in sync with this exact deployment:{' '}
+          <a href={`${API_BASE}/docs`} target="_blank" rel="noreferrer">{`${API_BASE}/docs`}</a>{' '}
+          (Swagger UI, try requests right in the browser) or{' '}
+          <a href={`${API_BASE}/redoc`} target="_blank" rel="noreferrer">{`${API_BASE}/redoc`}</a>{' '}
+          (read-only reference).
         </Typography>
       </Paper>
     </Container>
