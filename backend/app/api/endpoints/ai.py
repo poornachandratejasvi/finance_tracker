@@ -174,6 +174,7 @@ def ai_categorize_transactions(data: AICategorizeRequest, db: Session = Depends(
     # already runs) before ever falling through to here.
     updated = 0
     rules_created = 0
+    retroactively_fixed = 0
     for idx, cat in mapping.items():
         if idx < 0 or idx >= len(order) or not cat:
             continue
@@ -181,10 +182,15 @@ def ai_categorize_transactions(data: AICategorizeRequest, db: Session = Depends(
             if t.category != cat:
                 t.category = cat
                 updated += 1
-        if remember_category(db, current_user.id, order[idx], cat):
+        created, fixed = remember_category(db, current_user.id, order[idx], cat)
+        if created:
             rules_created += 1
+            retroactively_fixed += fixed
     db.commit()
-    return {"updated": updated, "considered": len(txns), "unique": len(rep_items), "rules_created": rules_created}
+    return {
+        "updated": updated, "considered": len(txns), "unique": len(rep_items),
+        "rules_created": rules_created, "retroactively_fixed": retroactively_fixed,
+    }
 
 
 class AIQuickAddRequest(BaseModel):

@@ -1,9 +1,13 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
 from typing import List, Optional
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 from app.core.database import get_db
 from app.core.time_utils import utcnow
@@ -689,7 +693,12 @@ def update_transaction(
         setattr(transaction, key, value)
 
     if was_uncategorized and new_category and new_category not in UNCATEGORIZED_VALUES:
-        remember_category(db, transaction.user_id, transaction.description, new_category)
+        _, retroactively_fixed = remember_category(db, transaction.user_id, transaction.description, new_category)
+        if retroactively_fixed:
+            logger.info(
+                "Manually categorizing transaction %s also retroactively fixed %d other transaction(s)",
+                transaction_id, retroactively_fixed,
+            )
 
     db.commit()
     db.refresh(transaction)
