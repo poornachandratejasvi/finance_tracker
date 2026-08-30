@@ -29,6 +29,69 @@ logger = logging.getLogger(__name__)
 _RECONCILE_WINDOW_DAYS = 3
 _AMOUNT_TOLERANCE = 0.01
 
+# Same real purchase often triggers more than one real-time source at once (most
+# Indian banks send both an SMS and an email for one transaction) -- Gmail's own
+# transactional alert email is the most trustworthy of the three (vs. a phone's
+# local SMS text parsing, or free-text a user typed into an iOS Shortcut), so it
+# always wins; between the other two, SMS auto-detect outranks a manual Shortcut
+# entry. Used by dedupe_incoming_pending() below.
+_SOURCE_PRIORITY = {"alert": 3, "sms": 2, "ingest": 1}
+
+
+def find_pending_match(db, user_id: int, bank_id: int, transaction_type, amount, txn_date, exclude_source=None):
+    """Fuzzy-match an existing pending (unconfirmed) transaction for this bank --
+    the same tolerance window create_or_reconcile_transaction uses against a later
+    PDF statement, but usable pre-insert to catch a duplicate BETWEEN two
+    real-time sources before it ever becomes two separate pending rows."""
+    from app.models.models import Transaction, TransactionType
+
+    ttype = transaction_type.value if hasattr(transaction_type, "value") else transaction_type
+    if amount is None or txn_date is None or ttype not in ("debit", "credit"):
+        return None
+    query = db.query(Transaction).filter(
+        Transaction.user_id == user_id,
+        Transaction.bank_id == bank_id,
+        Transaction.is_confirmed.is_(False),
+        Transaction.transaction_type == TransactionType(ttype),
+        Transaction.amount >= amount - _AMOUNT_TOLERANCE,
+        Transaction.amount <= amount + _AMOUNT_TOLERANCE,
+        Transaction.transaction_date >= txn_date - timedelta(days=_RECONCILE_WINDOW_DAYS),
+        Transaction.transaction_date <= txn_date + timedelta(days=_RECONCILE_WINDOW_DAYS),
+    )
+    if exclude_source:
+        query = query.filter(Transaction.source != exclude_source)
+    return query.order_by(Transaction.id.asc()).first()
+
+
+def dedupe_incoming_pending(db, user_id: int, bank_id: int, trans_data: dict, source: str):
+    """Cross-source duplicate guard for the real-time pending sources (Gmail
+    alert / SMS auto-detect / iOS-Shortcut ingest). Without this, the same
+    purchase reported by two of these lands as two separate pending rows --
+    and create_or_reconcile_transaction only ever matches the FIRST one when
+    the real statement arrives (`.first()`, no source filter), leaving the
+    other stuck pending forever.
+
+    Returns (transaction, True) if the caller should NOT create a new row --
+    either an equal-or-better-provenance pending row already covers this
+    purchase, or a lower-priority one was just updated in place with the
+    incoming (higher-priority) data and source. Returns (None, False) if
+    there's no match and the caller should create a new row as usual.
+    """
+    match = find_pending_match(
+        db, user_id, bank_id,
+        trans_data.get("transaction_type"), trans_data.get("amount"), trans_data.get("transaction_date"),
+        exclude_source=source,
+    )
+    if not match:
+        return None, False
+    if _SOURCE_PRIORITY.get(match.source, 0) >= _SOURCE_PRIORITY.get(source, 0):
+        return match, True
+    for key in ("transaction_date", "amount", "transaction_type"):
+        if key in trans_data:
+            setattr(match, key, trans_data[key])
+    match.source = source
+    return match, True
+
 
 def create_or_reconcile_transaction(db, user_id: int, bank_id: int, trans_data: dict, pdf_statement_id=None, source=None):
     """Either updates an existing unconfirmed ('alert') transaction that matches
@@ -36,29 +99,13 @@ def create_or_reconcile_transaction(db, user_id: int, bank_id: int, trans_data: 
     marks it confirmed, or creates a brand-new Transaction. Returns
     (transaction, was_reconciled). The caller still owns db.add() for the
     brand-new case — nothing here commits or flushes on its own."""
-    from app.models.models import Transaction, TransactionType
+    from app.models.models import Transaction
     from app.core.time_utils import utcnow
 
-    amount = trans_data.get("amount")
-    txn_date = trans_data.get("transaction_date")
-    ttype = trans_data.get("transaction_type")
-
-    pending = None
-    if amount is not None and txn_date is not None and ttype in ("debit", "credit"):
-        pending = (
-            db.query(Transaction)
-            .filter(
-                Transaction.user_id == user_id,
-                Transaction.bank_id == bank_id,
-                Transaction.is_confirmed.is_(False),
-                Transaction.transaction_type == TransactionType(ttype),
-                Transaction.amount >= amount - _AMOUNT_TOLERANCE,
-                Transaction.amount <= amount + _AMOUNT_TOLERANCE,
-                Transaction.transaction_date >= txn_date - timedelta(days=_RECONCILE_WINDOW_DAYS),
-                Transaction.transaction_date <= txn_date + timedelta(days=_RECONCILE_WINDOW_DAYS),
-            )
-            .first()
-        )
+    pending = find_pending_match(
+        db, user_id, bank_id,
+        trans_data.get("transaction_type"), trans_data.get("amount"), trans_data.get("transaction_date"),
+    )
 
     if pending:
         for key, value in trans_data.items():

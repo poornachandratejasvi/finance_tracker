@@ -22,6 +22,7 @@ from app.models.models import User, Bank, Category, Transaction, IngestMapping, 
 from app.services.transaction_service import TransactionService
 from app.services import shortcut_service
 from app.services import ai_sms_extraction
+from app.services.transaction_hooks import dedupe_incoming_pending
 
 router = APIRouter()
 
@@ -227,6 +228,24 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
         ).first()
         if existing:
             return {"created": False, "skipped_duplicate": True, "transaction_id": existing[0]}
+
+        # Cross-source duplicate check: the same purchase often also triggers a
+        # Gmail alert email (or, for the /ingest/sms endpoint, an SMS reported
+        # via a different route) -- a fuzzy match (amount/type/date, description
+        # ignored) against any other still-pending source, not just an exact one.
+        # Gmail always wins; see transaction_hooks._SOURCE_PRIORITY. Absorbing
+        # this into the existing row (or dropping the incoming one, if the
+        # existing row already outranks it) instead of creating a second pending
+        # row is what lets a later PDF statement reconcile a single row instead
+        # of leaving a duplicate stuck pending forever.
+        dup, deduped = dedupe_incoming_pending(
+            db, user.id, default_bank_id,
+            {"transaction_date": txn_date, "amount": amount, "transaction_type": ttype},
+            source=source,
+        )
+        if deduped:
+            db.commit()
+            return {"created": False, "skipped_duplicate": True, "transaction_id": dup.id, "merged_source": dup.source}
 
     notes = str(target["notes"]) if target.get("notes") is not None else None
     if unmatched_account_name:

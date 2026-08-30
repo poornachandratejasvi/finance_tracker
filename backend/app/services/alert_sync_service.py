@@ -16,7 +16,10 @@ from typing import List
 from app.models.models import Bank, BankEmail, GmailAccount, Transaction, TransactionType
 from app.services.gmail_service import GmailService, credentials_from_dict
 from app.services.alert_email_service import parse_alert_email
-from app.services.transaction_hooks import apply_auto_rules_and_notify
+from app.services.transaction_hooks import (
+    apply_auto_rules_and_notify, dedupe_incoming_pending,
+    _RECONCILE_WINDOW_DAYS, _AMOUNT_TOLERANCE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +43,6 @@ ALERT_KEYWORDS_QUERY = (
     'OR "card swipe" OR spent OR "debit by transfer" OR "credit by transfer")) '
     'OR (from:alerts.in@sc.com (credited OR debited OR credit OR debit))'
 )
-
-_RECONCILE_WINDOW_DAYS = 3
-_AMOUNT_TOLERANCE = 0.01
 
 
 def _bank_domains(bank: Bank) -> set:
@@ -150,22 +150,36 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
             ))
 
             if parsed and not _already_confirmed(db, bank.user_id, bank.id, parsed):
-                transaction = Transaction(
-                    user_id=bank.user_id, bank_id=bank.id,
-                    transaction_date=parsed["transaction_date"], description=parsed["description"],
-                    amount=parsed["amount"], transaction_type=parsed["transaction_type"],
-                    source="alert", is_confirmed=False,
+                # Gmail is the highest-priority real-time source (see
+                # transaction_hooks._SOURCE_PRIORITY) -- if an SMS/Shortcut-ingest
+                # pending row already covers this same purchase, absorb it into
+                # this Gmail data in place instead of creating a second pending row.
+                _, deduped = dedupe_incoming_pending(
+                    db, bank.user_id, bank.id,
+                    {
+                        "transaction_date": parsed["transaction_date"],
+                        "amount": parsed["amount"],
+                        "transaction_type": parsed["transaction_type"],
+                    },
+                    source="alert",
                 )
-                db.add(transaction)
+                if not deduped:
+                    transaction = Transaction(
+                        user_id=bank.user_id, bank_id=bank.id,
+                        transaction_date=parsed["transaction_date"], description=parsed["description"],
+                        amount=parsed["amount"], transaction_type=parsed["transaction_type"],
+                        source="alert", is_confirmed=False,
+                    )
+                    db.add(transaction)
 
-                try:
-                    from app.services.balance_service import adjust_credit_balance_for_new_transaction
-                    adjust_credit_balance_for_new_transaction(bank, transaction)
-                except Exception:
-                    logger.warning("Post-statement balance adjustment failed for bank %s", bank.id, exc_info=True)
+                    try:
+                        from app.services.balance_service import adjust_credit_balance_for_new_transaction
+                        adjust_credit_balance_for_new_transaction(bank, transaction)
+                    except Exception:
+                        logger.warning("Post-statement balance adjustment failed for bank %s", bank.id, exc_info=True)
 
-                apply_auto_rules_and_notify(db, bank.user_id, transaction)
-                created += 1
+                    apply_auto_rules_and_notify(db, bank.user_id, transaction)
+                    created += 1
 
             db.commit()
         except Exception:
