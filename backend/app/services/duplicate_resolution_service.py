@@ -50,6 +50,11 @@ def find_duplicate_groups(db, user_id: int) -> list:
     from sqlalchemy import func
     from app.models.models import Transaction
 
+    # Excludes already soft-deleted rows throughout -- without this, a pair
+    # resolved by a previous run keeps getting "re-resolved" by every later
+    # sweep (nothing here is a no-op against an already-merged loser: the
+    # merge unconditionally overwrites deleted_at to *now*), indefinitely
+    # postponing its actual Recycle Bin purge date.
     exact_rows = db.query(
         func.date(Transaction.transaction_date).label("d"),
         Transaction.amount,
@@ -57,6 +62,7 @@ def find_duplicate_groups(db, user_id: int) -> list:
         func.array_agg(Transaction.id).label("ids"),
     ).filter(
         Transaction.user_id == user_id,
+        Transaction.deleted_at.is_(None),
     ).group_by(
         func.date(Transaction.transaction_date), Transaction.amount, func.lower(Transaction.description),
     ).having(func.count(Transaction.id) > 1).all()
@@ -71,7 +77,10 @@ def find_duplicate_groups(db, user_id: int) -> list:
 
     all_txns = (
         db.query(Transaction)
-        .filter(Transaction.user_id == user_id, Transaction.amount.isnot(None), Transaction.transaction_date.isnot(None))
+        .filter(
+            Transaction.user_id == user_id, Transaction.amount.isnot(None), Transaction.transaction_date.isnot(None),
+            Transaction.deleted_at.is_(None),
+        )
         .order_by(Transaction.bank_id, Transaction.transaction_type, Transaction.transaction_date)
         .all()
     )
