@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
 from app.models.models import TransactionType
@@ -26,6 +26,18 @@ class TransactionCreate(TransactionBase):
     # creating a duplicate. Never set by any other client (web, ingest paths).
     client_uuid: Optional[str] = None
 
+    # Sign is carried by transaction_type, never by amount itself (every other
+    # ingestion path -- ingest.py's _coerce_amount, PDF parsing -- already
+    # enforces this). A client can still hand back a signed value (e.g. the
+    # iOS "Add Transaction" Shortcut's offline-queue fallback forwarding
+    # Shortcuts' own signed "Amount" variable as-is), which would otherwise
+    # store a negative amount that breaks every downstream sum and the
+    # cross-source duplicate matcher's amount comparison.
+    @field_validator("amount")
+    @classmethod
+    def _normalize_amount_sign(cls, v):
+        return abs(v)
+
 
 class TransactionUpdate(BaseModel):
     description: Optional[str] = None
@@ -36,6 +48,11 @@ class TransactionUpdate(BaseModel):
     to_account: Optional[str] = None
     notes: Optional[str] = None
     transaction_date: Optional[datetime] = None
+
+    @field_validator("amount")
+    @classmethod
+    def _normalize_amount_sign(cls, v):
+        return abs(v) if v is not None else v
 
 
 class TransactionResponse(TransactionBase):

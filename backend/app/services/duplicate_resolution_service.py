@@ -28,9 +28,18 @@ logger = logging.getLogger(__name__)
 
 
 def _keeper_rank(t) -> int:
-    # A confirmed row (real statement, or already reconciled) always outranks
-    # any still-pending real-time source, regardless of _SOURCE_PRIORITY.
-    if t.is_confirmed:
+    # A confirmed row (real statement, or already reconciled -- see
+    # create_or_reconcile_transaction, which always sets source="pdf" on
+    # reconciliation) always outranks any still-pending real-time source,
+    # regardless of _SOURCE_PRIORITY. A manually-created row is excluded from
+    # this boost even though it's *born* confirmed (transactions.py's
+    # create_transaction always sets is_confirmed=True for source="manual") --
+    # that flag carries no real signal there, since it was never cross-checked
+    # against anything. Without this carve-out a stray manual re-entry (e.g.
+    # the iOS "Add Transaction" Shortcut's offline-queue fallback re-submitting
+    # something a Gmail alert already caught) would always win the merge, the
+    # opposite of the intended Gmail-wins-first priority below.
+    if t.is_confirmed and t.source != "manual":
         return 1000
     return _SOURCE_PRIORITY.get(t.source, 0)
 

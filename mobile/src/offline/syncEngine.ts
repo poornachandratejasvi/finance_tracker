@@ -238,7 +238,12 @@ async function drainNativeIntentQueue(): Promise<void> {
       bank_id: bankId,
       transaction_date: entry.transaction_date,
       description: entry.description,
-      amount: entry.amount,
+      // Sign is carried by transaction_type, never by amount -- Shortcuts'
+      // own "Amount" variable can come through signed (negative for an
+      // expense) depending on how the Automation/Shortcut built it, unlike
+      // the live AddTransactionIntent.swift path which posts straight to
+      // /api/ingest/transaction and gets normalized there by _coerce_amount.
+      amount: Math.abs(entry.amount),
       transaction_type: entry.type === "income" ? "credit" : "debit",
       category: entry.category,
       notes: note,
