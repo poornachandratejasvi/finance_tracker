@@ -6,6 +6,8 @@
 All money is converted to the user's BASE currency using per-currency rates, so
 mixed-currency accounts aggregate correctly.
 """
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
@@ -155,6 +157,49 @@ def comparison(
         "base_currency": {"code": base.code if base else "INR", "symbol": base.symbol if base else "₹"},
         "period_a": {"label": label_a, **a},
         "period_b": {"label": label_b, **b},
+    }
+
+
+@router.get("/comparison-multi")
+def comparison_multi(
+    periods: str,  # JSON-encoded [{"start": "...", "end": "...", "label": "..."}, ...]
+    bank_id: Optional[str] = None, category: Optional[str] = None, label_id: Optional[str] = None,
+    transaction_type: Optional[str] = None, min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None, search: Optional[str] = None,
+    currency: Optional[str] = None, include_transfers: bool = True,
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user),
+):
+    """N-period income/expense report -- generalizes /comparison's fixed
+    two-period shape for the Incomes & Expenses Report tab's "Number of
+    columns" option (2-6 periods side by side). /comparison itself is left
+    untouched since the Dashboard widget and the mobile Analytics screen
+    both only ever need exactly two periods."""
+    try:
+        period_list = json.loads(periods)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="periods must be a JSON array")
+    if not isinstance(period_list, list) or not period_list:
+        raise HTTPException(status_code=400, detail="periods must be a non-empty array")
+    if len(period_list) > 12:
+        raise HTTPException(status_code=400, detail="Too many periods (max 12)")
+
+    rate_map = get_rate_map(db, current_user.id)
+    base = get_base_currency(db, current_user.id)
+    filters = dict(bank_id=bank_id, category=category, label_id=label_id,
+                   transaction_type=transaction_type, min_amount=min_amount,
+                   max_amount=max_amount, search=search, currency=currency,
+                   include_transfers=include_transfers)
+    results = []
+    for p in period_list:
+        if not isinstance(p, dict):
+            raise HTTPException(status_code=400, detail="each period must be an object")
+        breakdown = _period_breakdown(
+            db, current_user.id, _dt(p.get("start")), _dt(p.get("end"), True), rate_map, **filters
+        )
+        results.append({"label": p.get("label") or "", **breakdown})
+    return {
+        "base_currency": {"code": base.code if base else "INR", "symbol": base.symbol if base else "₹"},
+        "periods": results,
     }
 
 

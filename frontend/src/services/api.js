@@ -798,6 +798,14 @@ export const getAnalyticsComparison = async (params = {}) => {
   const response = await api.get('/api/analytics/comparison', { params });
   return response.data;
 };
+// periodsArray: [{ start, end, label }, ...] -- N periods (2-6) side by side,
+// for the Incomes & Expenses Report's "Number of columns" option.
+export const getAnalyticsComparisonMulti = async (periodsArray, params = {}) => {
+  const response = await api.get('/api/analytics/comparison-multi', {
+    params: { ...params, periods: JSON.stringify(periodsArray) },
+  });
+  return response.data;
+};
 export const getAnalyticsCashflow = async (params = {}) => {
   const response = await api.get('/api/analytics/cashflow', { params });
   return response.data;

@@ -2,9 +2,25 @@ import React from 'react';
 import {
   Box, Paper, Typography, TextField, InputAdornment, IconButton, Button,
   FormControl, InputLabel, Select, MenuItem, Autocomplete,
-  Slider, Chip, Tooltip, Divider,
+  Slider, Chip, Tooltip, Divider, Popover, Checkbox, FormControlLabel, FormGroup,
 } from '@mui/material';
-import { Search, RestartAlt, Tune } from '@mui/icons-material';
+import { Search, RestartAlt, Tune, VisibilityOutlined } from '@mui/icons-material';
+
+// Human-readable label for each toggleable `show` section, used by the
+// "Show/Hide" popover below.
+const FIELD_LABELS = {
+  search: 'Search',
+  accounts: 'Accounts',
+  categories: 'Categories',
+  labels: 'Labels',
+  currencies: 'Currencies',
+  recordTypes: 'Record types',
+  amount: 'Amount range',
+  transfers: 'Transfers',
+  recordStates: 'Record states',
+  paymentTypes: 'Payment types',
+  confirmationStatus: 'Confirmation status',
+};
 
 export const DEFAULT_FILTERS = {
   search: '',
@@ -65,8 +81,36 @@ export default function FilterSidebar({
 }) {
   const v = { ...DEFAULT_FILTERS, ...(value || {}) };
   const set = (patch) => onChange({ ...v, ...patch });
-  const has = (k) => show.includes(k);
   const isDefault = JSON.stringify({ ...v, amountMin: v.amountMin, amountMax: v.amountMax }) === JSON.stringify(DEFAULT_FILTERS);
+
+  // "Show/Hide" -- which of the `show`-eligible sections the user has chosen to
+  // hide, persisted per page (keyed by `title`, so Records and Analytics keep
+  // independent preferences). `show` is still the outer eligibility list set by
+  // the page; this is a user-chosen subset of it.
+  const storageKey = `filterSidebar:hidden:${title}`;
+  const [hidden, setHidden] = React.useState(() => {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const [hideAnchor, setHideAnchor] = React.useState(null);
+  const persistHidden = (nextSet) => {
+    setHidden(nextSet);
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify([...nextSet]));
+    } catch {
+      // Best-effort -- a failed save just means the preference doesn't survive reload.
+    }
+  };
+  const toggleHidden = (key) => {
+    const next = new Set(hidden);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    persistHidden(next);
+  };
+  const has = (k) => show.includes(k) && !hidden.has(k);
 
   // Categories grouped by parent (sub-categories under their parent's name), so the
   // searchable dropdown shows structure instead of a flat alphabetical wall.
@@ -139,13 +183,49 @@ export default function FilterSidebar({
         <Typography variant="h6" fontWeight={700} display="flex" alignItems="center" gap={0.5}>
           <Tune fontSize="small" /> {title}
         </Typography>
-        <Tooltip title="Reset filters">
-          <span>
-            <IconButton size="small" disabled={isDefault} onClick={() => onChange({ ...DEFAULT_FILTERS })}>
-              <RestartAlt fontSize="small" />
+        <Box display="flex" alignItems="center">
+          <Tooltip title="Show/Hide fields">
+            <IconButton size="small" onClick={(e) => setHideAnchor(e.currentTarget)}>
+              <VisibilityOutlined fontSize="small" />
             </IconButton>
-          </span>
-        </Tooltip>
+          </Tooltip>
+          <Tooltip title="Reset filters">
+            <span>
+              <IconButton size="small" disabled={isDefault} onClick={() => onChange({ ...DEFAULT_FILTERS })}>
+                <RestartAlt fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+        <Popover
+          open={Boolean(hideAnchor)}
+          anchorEl={hideAnchor}
+          onClose={() => setHideAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <Box sx={{ p: 2, width: 240 }}>
+            <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+              <Typography variant="subtitle2" fontWeight={700}>Show / Hide</Typography>
+              <Button
+                size="small"
+                onClick={() => persistHidden(new Set(show))}
+                disabled={show.every((k) => hidden.has(k))}
+              >
+                Deselect all
+              </Button>
+            </Box>
+            <FormGroup>
+              {show.map((key) => (
+                <FormControlLabel
+                  key={key}
+                  control={<Checkbox size="small" checked={!hidden.has(key)} onChange={() => toggleHidden(key)} />}
+                  label={FIELD_LABELS[key] || key}
+                />
+              ))}
+            </FormGroup>
+          </Box>
+        </Popover>
       </Box>
 
       {myFilterSlot && <Box mb={2}>{myFilterSlot}</Box>}
