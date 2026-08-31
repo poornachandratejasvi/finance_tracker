@@ -332,6 +332,18 @@ def create_transaction(
         user_id=owner_id,
         is_manual=True,  # Mark as manually created
         source="manual",
+        # Pending like every other real-time source (alert/SMS/ingest), not
+        # born-confirmed -- a manual entry is just as unverified against the
+        # actual bank statement as any of those, and treating it as already
+        # final meant the eventual real statement transaction couldn't
+        # reconcile INTO it (create_or_reconcile_transaction only ever
+        # matches Pending rows), instead creating a separate row that only
+        # the next day's duplicate sweep would clean up. Doesn't affect any
+        # totals/balances -- those already sum every transaction regardless
+        # of is_confirmed; this only changes the reconciliation/"Pending"
+        # badge status, and it'll auto-confirm after 45 days on its own if
+        # nothing ever matches it (see stale_pending_tasks.py).
+        is_confirmed=False,
         **trans_data.dict()
     )
 
