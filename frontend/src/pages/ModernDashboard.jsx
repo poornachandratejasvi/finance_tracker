@@ -35,6 +35,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  Fade,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -62,6 +63,7 @@ import {
 import FilterSidebar, { DEFAULT_FILTERS } from '../components/FilterSidebar.jsx';
 import MonthPager, { currentMonthPeriod } from '../components/MonthPager.jsx';
 import CategoryIcon from '../components/CategoryIcon.jsx';
+import { useCategoryMeta } from '../utils/categories';
 import { formatCurrency, signedAccountBalance } from '../utils/format';
 import {
   getBanks,
@@ -151,6 +153,7 @@ const dateTick = (gran) => (d) => {
 
 const ModernDashboard = () => {
   const theme = useTheme();
+  const { getMeta: getCategoryMeta } = useCategoryMeta();
 
   // Reference data (loaded once).
   const [banks, setBanks] = useState([]);
@@ -438,21 +441,86 @@ const ModernDashboard = () => {
     background: theme.palette.background.paper,
   };
 
-  // Small colored (green/red) up/down % change badge vs. the next-older column --
-  // literal sign-based coloring (positive=green/up, negative=red/down), matching
-  // the reference app rather than an income/expense-aware "good vs bad" read.
+  // Colored filled pill (not just tinted text+arrow) for a period-over-period
+  // % change -- matches the reference app's percent-change badge component.
+  // Literal sign-based coloring (positive=green/up, negative=red/down), not an
+  // income/expense-aware "good vs bad" read.
+  const pctPill = (pct, size = 'normal') => {
+    if (pct == null || !isFinite(pct) || pct === 0) return null;
+    const up = pct > 0;
+    const small = size === 'small';
+    return (
+      <Box
+        component="span"
+        sx={{
+          display: 'inline-flex', alignItems: 'center', gap: 0.25,
+          px: small ? 0.65 : 0.85, py: small ? 0.1 : 0.2, borderRadius: 5,
+          bgcolor: up ? 'success.main' : 'error.main', color: '#fff',
+          fontSize: small ? 11 : 12, fontWeight: 700, lineHeight: 1.6,
+          verticalAlign: 'middle', whiteSpace: 'nowrap',
+        }}
+      >
+        {up ? <TrendingUp sx={{ fontSize: small ? 12 : 13 }} /> : <TrendingDown sx={{ fontSize: small ? 12 : 13 }} />}
+        {Math.abs(pct).toFixed(0)}%
+      </Box>
+    );
+  };
   const pctBadge = (amounts, idx) => {
     if (!showPctDiff || idx >= amounts.length - 1) return null;
     const cur = amounts[idx] || 0;
     const prev = amounts[idx + 1] || 0;
     if (!prev) return null;
     const pct = ((cur - prev) / Math.abs(prev)) * 100;
-    if (!isFinite(pct) || pct === 0) return null;
-    const up = pct > 0;
+    return pct ? <Box component="span" sx={{ ml: 0.75 }}>{pctPill(pct, 'small')}</Box> : null;
+  };
+
+  // Hero stat row above the report table: Total Income / Total Expense / Net,
+  // each with a real (not decorative) mini sparkline built from the same N
+  // comparison columns already fetched, oldest-to-newest -- and a % change
+  // pill vs the immediately-preceding column, same as the reference app's
+  // per-card trend preview.
+  const renderHeroStats = (cols) => {
+    const series = (key) => cols.map((p) => p[key] || 0).slice().reverse();
+    const card = (label, key, mode) => {
+      const vals = series(key);
+      const cur = vals[vals.length - 1] || 0;
+      const prev = vals.length > 1 ? vals[vals.length - 2] : null;
+      const pct = prev ? ((cur - prev) / Math.abs(prev)) * 100 : null;
+      const valueColor = mode === 'expense' ? theme.palette.error.main
+        : mode === 'net' ? (cur >= 0 ? theme.palette.success.main : theme.palette.error.main)
+        : theme.palette.success.main;
+      const sparkColor = mode === 'net' ? theme.palette.primary.main : valueColor;
+      const sparkData = vals.map((v, i) => ({ i, v }));
+      return (
+        <Paper variant="outlined" sx={{ p: 2, flex: '1 1 200px', minWidth: 200, borderRadius: 3 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, fontSize: 11 }}>
+            {label}
+          </Typography>
+          <Box display="flex" alignItems="flex-end" justifyContent="space-between" mt={0.5} gap={1}>
+            <Box>
+              <Typography variant="h5" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', color: valueColor, lineHeight: 1.2 }}>
+                {mode === 'expense' ? money(-Math.abs(cur)) : money(cur)}
+              </Typography>
+              {pct != null && <Box mt={0.75}>{pctPill(pct)}</Box>}
+            </Box>
+            {vals.length > 1 && (
+              <Box sx={{ width: 72, height: 34, flexShrink: 0 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={sparkData}>
+                    <Line type="monotone" dataKey="v" stroke={sparkColor} strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </Box>
+            )}
+          </Box>
+        </Paper>
+      );
+    };
     return (
-      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, ml: 0.75, color: up ? 'success.main' : 'error.main', fontSize: 12, fontWeight: 600, verticalAlign: 'middle' }}>
-        {up ? <TrendingUp sx={{ fontSize: 14 }} /> : <TrendingDown sx={{ fontSize: 14 }} />}
-        {Math.abs(pct).toFixed(0)}%
+      <Box display="flex" gap={2} flexWrap="wrap" mb={2.5}>
+        {card('Total Income', 'income_total', 'income')}
+        {card('Total Expense', 'expense_total', 'expense')}
+        {card('Net', 'net', 'net')}
       </Box>
     );
   };
@@ -472,6 +540,7 @@ const ModernDashboard = () => {
         sx={{
           color: negative ? 'error.main' : 'text.primary', whiteSpace: 'nowrap',
           fontWeight: bold ? 600 : undefined,
+          fontVariantNumeric: 'tabular-nums',
           cursor: category != null ? 'pointer' : undefined,
           '&:hover': category != null ? { textDecoration: 'underline' } : undefined,
         }}
@@ -487,19 +556,34 @@ const ModernDashboard = () => {
       </TableRow>
     );
     // indent => child row (extra left padding); isParent => bold parent/subtotal row.
-    const catRow = (row, negative = false, indent = false, isParent = false) => (
-      <TableRow key={`${negative ? 'e' : 'i'}-${isParent ? 'p' : indent ? 'c' : 's'}-${row.category}`} hover>
-        <TableCell sx={indent ? { pl: 5 } : undefined}>
-          <Box display="flex" alignItems="center" gap={1.25}>
-            <CategoryIcon name={row.category} size={28} />
-            <Typography variant="body2" sx={{ fontWeight: isParent ? 600 : 400 }}>
-              {row.category || 'Uncategorized'}
-            </Typography>
-          </Box>
-        </TableCell>
-        {row.amounts.map((_, idx) => amtCell(row.amounts, idx, negative, isParent, row.category))}
-      </TableRow>
-    );
+    // maxMag => the largest top-level magnitude in this section, so the ranked
+    // proportion bar (only drawn on top-level rows, matching the reference
+    // app's "By Category" ranked-bar list) scales relative to its siblings.
+    const catRow = (row, negative = false, indent = false, isParent = false, maxMag = 0) => {
+      const meta = getCategoryMeta(row.category);
+      const mag = Math.abs(row.amounts[0] || 0);
+      const barPct = maxMag > 0 ? Math.min(100, (mag / maxMag) * 100) : 0;
+      return (
+        <TableRow key={`${negative ? 'e' : 'i'}-${isParent ? 'p' : indent ? 'c' : 's'}-${row.category}`} hover>
+          <TableCell sx={indent ? { pl: 5 } : undefined}>
+            <Box display="flex" alignItems="center" gap={1.25}>
+              <CategoryIcon name={row.category} size={28} meta={meta} />
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: isParent ? 600 : 400 }}>
+                  {row.category || 'Uncategorized'}
+                </Typography>
+                {!indent && (
+                  <Box sx={{ mt: 0.5, height: 4, borderRadius: 2, maxWidth: 160, bgcolor: theme.palette.action.hover, overflow: 'hidden' }}>
+                    <Box sx={{ height: '100%', width: `${barPct}%`, borderRadius: 2, bgcolor: meta.color || (negative ? theme.palette.error.main : theme.palette.success.main) }} />
+                  </Box>
+                )}
+              </Box>
+            </Box>
+          </TableCell>
+          {row.amounts.map((_, idx) => amtCell(row.amounts, idx, negative, isParent, row.category))}
+        </TableRow>
+      );
+    };
 
     // Group merged {category, amounts[]} rows into a parent -> children hierarchy
     // using categoryParentName. A group's parent subtotal = its own amount plus
@@ -533,13 +617,19 @@ const ModernDashboard = () => {
         .sort((x, y) => cmp(x.parent, y.parent));
     };
     const renderGrouped = (rows, negative) => {
+      const groups = groupRows(rows);
+      const maxMag = Math.max(0, ...groups.map((g) => Math.abs(g.parent.amounts[0] || 0)));
       const out = [];
-      groupRows(rows).forEach((g) => {
+      groups.forEach((g) => {
         const isParent = g.children.length > 0;
-        out.push(catRow(g.parent, negative, false, isParent));
+        out.push(catRow(g.parent, negative, false, isParent, maxMag));
         g.children.forEach((c) => out.push(catRow(c, negative, true, false)));
       });
       return out;
+    };
+    const renderFlat = (rows, negative) => {
+      const maxMag = Math.max(0, ...rows.map((r) => Math.abs(r.amounts[0] || 0)));
+      return rows.map((r) => catRow(r, negative, false, false, maxMag));
     };
 
     // Fall back to flat rendering when category metadata has not loaded.
@@ -549,7 +639,9 @@ const ModernDashboard = () => {
     const netTotals = cols.map((p) => p.net || 0);
 
     return (
-      <Table size="small">
+      <Box>
+        {renderHeroStats(cols)}
+        <Table size="small">
         <TableHead>
           <TableRow>
             <TableCell sx={{ fontWeight: 700 }}>Category</TableCell>
@@ -560,18 +652,19 @@ const ModernDashboard = () => {
         </TableHead>
         <TableBody>
           {sectionRow('Total Income', incomeTotals)}
-          {hasCats ? renderGrouped(incomeRows, false) : incomeRows.map((r) => catRow(r, false))}
+          {hasCats ? renderGrouped(incomeRows, false) : renderFlat(incomeRows, false)}
           {incomeRows.length === 0 && (
             <TableRow><TableCell colSpan={cols.length + 1}><Typography variant="body2" color="text.secondary">No income in any shown period.</Typography></TableCell></TableRow>
           )}
           {sectionRow('Total Expense', expenseTotals, true)}
-          {hasCats ? renderGrouped(expenseRows, true) : expenseRows.map((r) => catRow(r, true))}
+          {hasCats ? renderGrouped(expenseRows, true) : renderFlat(expenseRows, true)}
           {expenseRows.length === 0 && (
             <TableRow><TableCell colSpan={cols.length + 1}><Typography variant="body2" color="text.secondary">No expenses in any shown period.</Typography></TableCell></TableRow>
           )}
           {sectionRow('Net', netTotals)}
         </TableBody>
-      </Table>
+        </Table>
+      </Box>
     );
   };
 
@@ -907,7 +1000,9 @@ const ModernDashboard = () => {
               <CircularProgress />
             </Box>
           ) : (
-            renderActiveTab()
+            <Fade in key={`${tab}-${period.label}-${numColumns}`} timeout={220}>
+              <Box>{renderActiveTab()}</Box>
+            </Fade>
           )}
         </Paper>
       </Box>
