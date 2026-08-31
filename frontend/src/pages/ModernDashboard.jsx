@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { alpha } from '@mui/material/styles';
 import {
   Box,
   Paper,
@@ -44,6 +45,9 @@ import {
   DeleteOutline,
   TuneOutlined,
   Close,
+  AccountBalanceWallet,
+  Savings,
+  DonutLarge,
 } from '@mui/icons-material';
 import {
   ResponsiveContainer,
@@ -51,6 +55,9 @@ import {
   AreaChart,
   LineChart,
   BarChart,
+  PieChart,
+  Pie,
+  Cell,
   Area,
   Bar,
   Line,
@@ -445,7 +452,7 @@ const ModernDashboard = () => {
   // % change -- matches the reference app's percent-change badge component.
   // Literal sign-based coloring (positive=green/up, negative=red/down), not an
   // income/expense-aware "good vs bad" read.
-  const pctPill = (pct, size = 'normal') => {
+  const pctPill = (pct, size = 'normal', unit = '%') => {
     if (pct == null || !isFinite(pct) || pct === 0) return null;
     const up = pct > 0;
     const small = size === 'small';
@@ -461,7 +468,7 @@ const ModernDashboard = () => {
         }}
       >
         {up ? <TrendingUp sx={{ fontSize: small ? 12 : 13 }} /> : <TrendingDown sx={{ fontSize: small ? 12 : 13 }} />}
-        {Math.abs(pct).toFixed(0)}%
+        {Math.abs(pct).toFixed(0)}{unit}
       </Box>
     );
   };
@@ -481,33 +488,59 @@ const ModernDashboard = () => {
   // per-card trend preview.
   const renderHeroStats = (cols) => {
     const series = (key) => cols.map((p) => p[key] || 0).slice().reverse();
-    const card = (label, key, mode) => {
-      const vals = series(key);
+    const card = (label, vals, mode, Icon) => {
       const cur = vals[vals.length - 1] || 0;
       const prev = vals.length > 1 ? vals[vals.length - 2] : null;
-      const pct = prev ? ((cur - prev) / Math.abs(prev)) * 100 : null;
+      // Savings Rate is already a %, so "% change of a %" is both confusing
+      // and numerically unstable near zero/sign flips (e.g. -4% -> 49% would
+      // read as a nonsensical "+1300%") -- show the plain percentage-POINT
+      // difference instead, same convention finance dashboards use for
+      // rate-type metrics.
+      const pct = prev == null ? null
+        : mode === 'rate' ? (cur - prev)
+        : prev ? ((cur - prev) / Math.abs(prev)) * 100
+        : null;
+      const pctUnit = mode === 'rate' ? 'pp' : '%';
       const valueColor = mode === 'expense' ? theme.palette.error.main
         : mode === 'net' ? (cur >= 0 ? theme.palette.success.main : theme.palette.error.main)
+        : mode === 'rate' ? theme.palette.primary.main
         : theme.palette.success.main;
       const sparkColor = mode === 'net' ? theme.palette.primary.main : valueColor;
       const sparkData = vals.map((v, i) => ({ i, v }));
+      const gradFrom = alpha(valueColor, theme.palette.mode === 'dark' ? 0.22 : 0.14);
+      const gradTo = alpha(valueColor, 0);
       return (
-        <Paper variant="outlined" sx={{ p: 2, flex: '1 1 200px', minWidth: 200, borderRadius: 3 }}>
-          <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, fontSize: 11 }}>
-            {label}
-          </Typography>
-          <Box display="flex" alignItems="flex-end" justifyContent="space-between" mt={0.5} gap={1}>
-            <Box>
-              <Typography variant="h5" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', color: valueColor, lineHeight: 1.2 }}>
-                {mode === 'expense' ? money(-Math.abs(cur)) : money(cur)}
-              </Typography>
-              {pct != null && <Box mt={0.75}>{pctPill(pct)}</Box>}
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2.75, flex: '1 1 230px', minWidth: 230, borderRadius: 4,
+            position: 'relative', overflow: 'hidden',
+            backgroundImage: `linear-gradient(135deg, ${gradFrom}, ${gradTo} 65%)`,
+          }}
+        >
+          <Box display="flex" alignItems="center" gap={1.25} mb={1.5}>
+            <Box sx={{
+              width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              bgcolor: valueColor, color: '#fff', flexShrink: 0,
+            }}>
+              <Icon sx={{ fontSize: 20 }} />
             </Box>
-            {vals.length > 1 && (
-              <Box sx={{ width: 72, height: 34, flexShrink: 0 }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 800, fontSize: 11.5 }}>
+              {label}
+            </Typography>
+          </Box>
+          <Box display="flex" alignItems="flex-end" justifyContent="space-between" gap={1}>
+            <Box>
+              <Typography variant="h4" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', color: valueColor, lineHeight: 1.15 }}>
+                {mode === 'expense' ? money(-Math.abs(cur)) : mode === 'rate' ? `${cur.toFixed(0)}%` : money(cur)}
+              </Typography>
+              {pct != null && <Box mt={1}>{pctPill(pct, 'normal', pctUnit)}</Box>}
+            </Box>
+            {vals.length > 1 && mode !== 'rate' && (
+              <Box sx={{ width: 88, height: 42, flexShrink: 0 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={sparkData}>
-                    <Line type="monotone" dataKey="v" stroke={sparkColor} strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="v" stroke={sparkColor} strokeWidth={2.5} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </Box>
@@ -516,11 +549,20 @@ const ModernDashboard = () => {
         </Paper>
       );
     };
+    // Savings rate: how much of income was kept as net -- a genuinely new
+    // metric (not just a repeat of Income/Expense/Net), matching the
+    // reference app's habit of surfacing a derived "health" figure, not just
+    // raw totals.
+    const rateVals = series('income_total').map((inc, i) => {
+      const net = series('net')[i] || 0;
+      return inc ? (net / inc) * 100 : 0;
+    });
     return (
-      <Box display="flex" gap={2} flexWrap="wrap" mb={2.5}>
-        {card('Total Income', 'income_total', 'income')}
-        {card('Total Expense', 'expense_total', 'expense')}
-        {card('Net', 'net', 'net')}
+      <Box display="flex" gap={2} flexWrap="wrap" mb={3}>
+        {card('Total Income', series('income_total'), 'income', TrendingUp)}
+        {card('Total Expense', series('expense_total'), 'expense', TrendingDown)}
+        {card('Net', series('net'), 'net', AccountBalanceWallet)}
+        {(cols[0]?.income_total || 0) !== 0 && card('Savings Rate', rateVals, 'rate', Savings)}
       </Box>
     );
   };
@@ -638,9 +680,70 @@ const ModernDashboard = () => {
     const expenseTotals = cols.map((p) => p.expense_total || 0);
     const netTotals = cols.map((p) => p.net || 0);
 
+    // Donut hero visualization for the most-recent column's expense
+    // breakdown (top-level categories, same rolled-up amounts the table's
+    // parent rows show) -- the reference app's signature "ring with a
+    // centered total" pattern, reused for the top N categories + an "Other"
+    // slice for the long tail so the ring stays legible.
+    const renderExpenseDonut = () => {
+      const topLevel = hasCats ? groupRows(expenseRows).map((g) => g.parent) : expenseRows;
+      const slices = topLevel
+        .map((r) => ({ name: r.category || 'Uncategorized', value: Math.abs(r.amounts[0] || 0), color: getCategoryMeta(r.category).color || theme.palette.grey[500] }))
+        .filter((d) => d.value > 0)
+        .sort((a, b) => b.value - a.value);
+      if (slices.length === 0) return null;
+      const DONUT_TOP_N = 6;
+      const shown = slices.slice(0, DONUT_TOP_N);
+      const otherTotal = slices.slice(DONUT_TOP_N).reduce((s, d) => s + d.value, 0);
+      const data = otherTotal > 0 ? [...shown, { name: 'Other', value: otherTotal, color: theme.palette.grey[500] }] : shown;
+      const total = data.reduce((s, d) => s + d.value, 0);
+      return (
+        <Paper variant="outlined" sx={{ p: 3, borderRadius: 4, mb: 2.5 }}>
+          <Box display="flex" alignItems="center" gap={1} mb={2}>
+            <DonutLarge color="primary" />
+            <Box>
+              <Typography variant="h6" fontWeight={800}>Where it went</Typography>
+              <Typography variant="body2" color="text.secondary">Expense breakdown for {cols[0]?.label}</Typography>
+            </Box>
+          </Box>
+          <Box display="flex" flexWrap="wrap" alignItems="center" gap={4}>
+            <Box sx={{ width: 230, height: 230, position: 'relative', flexShrink: 0, mx: 'auto' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={data} dataKey="value" nameKey="name" innerRadius="68%" outerRadius="100%" paddingAngle={2} startAngle={90} endAngle={-270} isAnimationActive stroke="none">
+                    {data.map((d, i) => <Cell key={i} fill={d.color} />)}
+                  </Pie>
+                  <ReTooltip formatter={(v) => money(v)} contentStyle={chartTooltipStyle} />
+                </PieChart>
+              </ResponsiveContainer>
+              <Box sx={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: 700, fontSize: 11 }}>Total</Typography>
+                <Typography variant="h6" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums' }}>{money(total)}</Typography>
+              </Box>
+            </Box>
+            <Box sx={{ flex: '1 1 260px', minWidth: 240, display: 'flex', flexDirection: 'column', gap: 1.1 }}>
+              {data.map((d, i) => {
+                const pct = total > 0 ? (d.value / total) * 100 : 0;
+                return (
+                  <Box key={i} display="flex" alignItems="center" gap={1.5}>
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: d.color, flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ flex: 1 }} noWrap>{d.name}</Typography>
+                    <Typography variant="body2" fontWeight={700} sx={{ fontVariantNumeric: 'tabular-nums', minWidth: 42, textAlign: 'right' }}>{pct.toFixed(0)}%</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 100, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(d.value)}</Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        </Paper>
+      );
+    };
+
     return (
       <Box>
         {renderHeroStats(cols)}
+        {renderExpenseDonut()}
+        <Typography variant="h6" fontWeight={800} sx={{ mb: 1.5 }}>Category Breakdown</Typography>
         <Table size="small">
         <TableHead>
           <TableRow>
@@ -668,6 +771,12 @@ const ModernDashboard = () => {
     );
   };
 
+  // Fixed color cycle for accounts -- banks don't carry a category-style
+  // color, so each gets a stable hue by index (matches the reference app's
+  // "one flat color per account" convention closely enough without needing
+  // a new per-bank color field).
+  const ACCOUNT_COLORS = ['#1aa565', '#3f78de', '#e08a2a', '#d666c4', '#2ab6c9', '#c94f4f', '#7c5cd6', '#9aa32a'];
+
   const renderBalanceTrend = () => {
     if (!balance) return null;
     const series = balance.series || [];
@@ -677,21 +786,31 @@ const ModernDashboard = () => {
     // accounts, so they're excluded here, same as the main Dashboard's Accounts widget.
     const visibleBanks = banks.filter((bk) => bk.bank_type !== 'investment');
     const accountTotal = visibleBanks.reduce((s, bk) => s + signedAccountBalance(bk), 0);
+    const maxAccountMag = Math.max(0, ...visibleBanks.map((bk) => Math.abs(signedAccountBalance(bk))));
+
     return (
       <Box>
-        <Stack direction="row" spacing={4} alignItems="baseline" flexWrap="wrap" sx={{ mb: 2 }}>
-          <Box>
-            <Typography variant="caption" color="text.secondary">Ending balance</Typography>
-            <Typography variant="h4" fontWeight={700}>{money(balance.ending_balance || 0)}</Typography>
-          </Box>
-          <Box display="flex" alignItems="center" gap={0.5} sx={{ color: up ? 'success.main' : 'error.main' }}>
-            {up ? <TrendingUp /> : <TrendingDown />}
-            <Typography variant="h6" fontWeight={600}>
-              {up ? '+' : ''}{money(balance.net_change || 0)}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">net change</Typography>
-          </Box>
-        </Stack>
+        <Box display="flex" gap={2} flexWrap="wrap" mb={3}>
+          <Paper variant="outlined" sx={{
+            p: 2.75, flex: '1 1 260px', minWidth: 260, borderRadius: 4,
+            backgroundImage: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.22 : 0.14)}, ${alpha(theme.palette.primary.main, 0)} 65%)`,
+          }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 800, fontSize: 11.5 }}>Ending Balance</Typography>
+            <Typography variant="h4" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', mt: 0.5 }}>{money(balance.ending_balance || 0)}</Typography>
+          </Paper>
+          <Paper variant="outlined" sx={{
+            p: 2.75, flex: '1 1 260px', minWidth: 260, borderRadius: 4,
+            backgroundImage: `linear-gradient(135deg, ${alpha(up ? theme.palette.success.main : theme.palette.error.main, theme.palette.mode === 'dark' ? 0.22 : 0.14)}, transparent 65%)`,
+          }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 800, fontSize: 11.5 }}>Net Change</Typography>
+            <Box display="flex" alignItems="center" gap={0.75} mt={0.5}>
+              {up ? <TrendingUp sx={{ color: 'success.main' }} /> : <TrendingDown sx={{ color: 'error.main' }} />}
+              <Typography variant="h4" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', color: up ? 'success.main' : 'error.main' }}>
+                {up ? '+' : ''}{money(balance.net_change || 0)}
+              </Typography>
+            </Box>
+          </Paper>
+        </Box>
 
         <ResponsiveContainer width="100%" height={320}>
           <AreaChart data={series} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -709,22 +828,32 @@ const ModernDashboard = () => {
           </AreaChart>
         </ResponsiveContainer>
 
-        <Divider sx={{ my: 2 }} />
-        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Accounts</Typography>
+        <Divider sx={{ my: 3 }} />
+        <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>Accounts</Typography>
         <Box>
-          {visibleBanks.map((bk) => {
+          {visibleBanks.map((bk, idx) => {
             const signed = signedAccountBalance(bk);
+            const barColor = ACCOUNT_COLORS[idx % ACCOUNT_COLORS.length];
+            const barPct = maxAccountMag > 0 ? Math.min(100, (Math.abs(signed) / maxAccountMag) * 100) : 0;
             return (
-              <Box key={bk.id} display="flex" alignItems="center" justifyContent="space-between" sx={{ py: 0.75, borderBottom: `1px solid ${theme.palette.divider}` }}>
-                <Box>
-                  <Typography variant="body2" fontWeight={600}>{bk.name}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
-                    {bk.bank_type || 'account'}
+              <Box key={bk.id} sx={{ py: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                <Box display="flex" alignItems="center" justifyContent="space-between">
+                  <Box display="flex" alignItems="center" gap={1.25} sx={{ minWidth: 0, flex: 1 }}>
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: barColor, flexShrink: 0 }} />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600} noWrap>{bk.name}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
+                        {bk.bank_type || 'account'}
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Typography variant="body2" fontWeight={700} sx={{ fontVariantNumeric: 'tabular-nums', color: signed < 0 ? 'error.main' : 'text.primary' }}>
+                    {formatCurrency(signed, { currency: bk.currency_code })}
                   </Typography>
                 </Box>
-                <Typography variant="body2" fontWeight={600} sx={{ color: signed < 0 ? 'error.main' : 'text.primary' }}>
-                  {formatCurrency(signed, { currency: bk.currency_code })}
-                </Typography>
+                <Box sx={{ mt: 0.75, height: 4, borderRadius: 2, bgcolor: theme.palette.action.hover, overflow: 'hidden' }}>
+                  <Box sx={{ height: '100%', width: `${barPct}%`, borderRadius: 2, bgcolor: barColor }} />
+                </Box>
               </Box>
             );
           })}
@@ -732,9 +861,9 @@ const ModernDashboard = () => {
             <Typography variant="body2" color="text.secondary">No accounts to display.</Typography>
           )}
           {visibleBanks.length > 0 && (
-            <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ pt: 1 }}>
+            <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ pt: 1.5 }}>
               <Typography variant="subtitle2" fontWeight={700}>Total</Typography>
-              <Typography variant="subtitle2" fontWeight={700} sx={{ color: accountTotal < 0 ? 'error.main' : 'text.primary' }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ fontVariantNumeric: 'tabular-nums', color: accountTotal < 0 ? 'error.main' : 'text.primary' }}>
                 {money(accountTotal)}
               </Typography>
             </Box>
@@ -885,7 +1014,14 @@ const ModernDashboard = () => {
   };
 
   return (
-    <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start', flexDirection: { xs: 'column', md: 'row' }, p: { xs: 2, md: 3 } }}>
+    <Box>
+      <Box sx={{ px: { xs: 2, md: 3 }, pt: { xs: 2, md: 3 } }}>
+        <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5, mb: 0.25 }}>Analytics</Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
+          See how your money moves, spot trends, and drill into any number.
+        </Typography>
+      </Box>
+      <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start', flexDirection: { xs: 'column', md: 'row' }, p: { xs: 2, md: 3 } }}>
       {/* LEFT: My filter + FilterSidebar */}
       <Box sx={{ width: { xs: '100%', md: 'auto' }, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
@@ -1047,6 +1183,7 @@ const ModernDashboard = () => {
           )}
         </DialogContent>
       </Dialog>
+      </Box>
     </Box>
   );
 };
