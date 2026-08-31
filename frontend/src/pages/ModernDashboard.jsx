@@ -25,14 +25,24 @@ import {
   TableRow,
   TableCell,
   useTheme,
+  Popover,
+  RadioGroup,
+  Radio,
+  FormControlLabel,
+  FormLabel,
+  Switch,
+  Slider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
 } from '@mui/material';
 import {
-  ChevronLeft,
-  ChevronRight,
   TrendingUp,
   TrendingDown,
   BookmarkAdd,
   DeleteOutline,
+  TuneOutlined,
+  Close,
 } from '@mui/icons-material';
 import {
   ResponsiveContainer,
@@ -50,6 +60,7 @@ import {
   Legend,
 } from 'recharts';
 import FilterSidebar, { DEFAULT_FILTERS } from '../components/FilterSidebar.jsx';
+import MonthPager, { currentMonthPeriod } from '../components/MonthPager.jsx';
 import CategoryIcon from '../components/CategoryIcon.jsx';
 import { formatCurrency, signedAccountBalance } from '../utils/format';
 import {
@@ -57,12 +68,13 @@ import {
   getLabels,
   getCategories,
   getCurrencies,
-  getAnalyticsComparison,
+  getAnalyticsComparisonMulti,
   getAnalyticsCashflow,
   getAnalyticsBalanceTrend,
   getSavedFilters,
   createSavedFilter,
   deleteSavedFilter,
+  getTransactions,
 } from '../services/api';
 
 const MONTHS = [
@@ -101,20 +113,30 @@ const filtersToParams = (f) => {
   return p;
 };
 
-// Align two per-category breakdowns by category name; missing side becomes 0.
-const mergeCategories = (aList = [], bList = []) => {
+// Align N per-category breakdowns (one per comparison column) by category
+// name; a category missing from a given column's breakdown becomes 0 there.
+const mergeCategoriesMulti = (periodBreakdowns, key) => {
+  const n = periodBreakdowns.length;
   const map = new Map();
-  (aList || []).forEach(({ category, amount }) => {
-    map.set(category, { category, a: amount || 0, b: 0 });
+  periodBreakdowns.forEach((p, idx) => {
+    (p?.[key] || []).forEach(({ category, amount }) => {
+      const e = map.get(category) || { category, amounts: new Array(n).fill(0) };
+      e.amounts[idx] = amount || 0;
+      map.set(category, e);
+    });
   });
-  (bList || []).forEach(({ category, amount }) => {
-    const e = map.get(category) || { category, a: 0, b: 0 };
-    e.b = amount || 0;
-    map.set(category, e);
-  });
-  return [...map.values()].sort(
-    (x, y) => (Math.abs(y.a) + Math.abs(y.b)) - (Math.abs(x.a) + Math.abs(x.b))
-  );
+  return [...map.values()];
+};
+
+const magnitudeSum = (amounts) => amounts.reduce((s, v) => s + Math.abs(v || 0), 0);
+
+// sortBy: 'default' (combined magnitude across all shown columns, highest
+// first) | 'amount_asc' | 'amount_desc' (both based on the first/most-recent
+// column only, matching the reference app's "Amount (lowest/highest first)").
+const sortComparator = (sortBy) => (x, y) => {
+  if (sortBy === 'amount_asc') return (x.amounts[0] || 0) - (y.amounts[0] || 0);
+  if (sortBy === 'amount_desc') return (y.amounts[0] || 0) - (x.amounts[0] || 0);
+  return magnitudeSum(y.amounts) - magnitudeSum(x.amounts);
 };
 
 const dateTick = (gran) => (d) => {
@@ -142,15 +164,27 @@ const ModernDashboard = () => {
   const [savedFilters, setSavedFilters] = useState([]);
   const [selectedSavedId, setSelectedSavedId] = useState('');
 
-  // Period (first day of the selected month).
-  const now = new Date();
-  const [monthDate, setMonthDate] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
+  // Period -- { start_date, end_date, label, _year?, _month? }, same shape
+  // MonthPager uses on the Records page, so the picker there and here (its
+  // Custom range/Weeks/Months/Years popover) behave identically.
+  const [period, setPeriod] = useState(() => currentMonthPeriod());
 
   // Active tab + advanced-report config.
   const [tab, setTab] = useState(0);
   const [advType, setAdvType] = useState('Expense'); // Balance | Income | Expense | Cash flow
   const [advGraph, setAdvGraph] = useState('Bar');   // Line | Bar
   const [advGran, setAdvGran] = useState('day');     // day | week | month
+
+  // Incomes & Expenses Report display options (gear icon on that tab).
+  const [numColumns, setNumColumns] = useState(2);       // 1-6 periods side by side
+  const [sortBy, setSortBy] = useState('default');       // default | amount_asc | amount_desc
+  const [showPctDiff, setShowPctDiff] = useState(false); // colored % change vs the next-older column
+  const [reportOptionsAnchor, setReportOptionsAnchor] = useState(null);
+
+  // Drill-down: clicking a category amount cell shows the transactions behind it.
+  const [drillDown, setDrillDown] = useState(null); // { category, label, start, end } | null
+  const [drillDownRows, setDrillDownRows] = useState([]);
+  const [drillDownLoading, setDrillDownLoading] = useState(false);
 
   // Per-tab data.
   const [comparison, setComparison] = useState(null);
@@ -209,23 +243,81 @@ const ModernDashboard = () => {
   );
   const moneyC = useCallback((v) => money(v, { compact: true }), [money]);
 
-  // Derived period boundaries + labels.
+  // Derived period boundaries + labels. "Previous period" (used by the
+  // Incomes & Expenses comparison table) is the literal previous calendar
+  // month for a whole-month selection (the common case, and what that
+  // table's "vs last month" framing is built around) -- or, for any other
+  // MonthPager granularity (a week, a year, a custom range), an equal-length
+  // window immediately before it, so the comparison still means something.
   const periods = useMemo(() => {
-    const y = monthDate.getFullYear();
-    const m = monthDate.getMonth();
-    const curStart = new Date(y, m, 1);
-    const curEnd = new Date(y, m + 1, 0);
-    const prevStart = new Date(y, m - 1, 1);
-    const prevEnd = new Date(y, m, 0);
+    if (!period.start_date || !period.end_date) {
+      // "All time" -- no well-defined "previous period" to compare against.
+      return { curStart: null, curEnd: null, prevStart: null, prevEnd: null, curLabel: period.label, prevLabel: null };
+    }
+    if (period._year != null && period._month != null) {
+      const y = period._year;
+      const m = period._month;
+      const prevStart = new Date(y, m - 1, 1);
+      const prevEnd = new Date(y, m, 0);
+      return {
+        curStart: period.start_date,
+        curEnd: period.end_date,
+        prevStart: toISO(prevStart),
+        prevEnd: toISO(prevEnd),
+        curLabel: period.label,
+        prevLabel: `${MONTHS[(m + 11) % 12]} ${prevStart.getFullYear()}`,
+      };
+    }
+    const curStart = new Date(period.start_date);
+    const curEnd = new Date(period.end_date);
+    const spanDays = Math.round((curEnd - curStart) / 86400000) + 1;
+    const prevEnd = new Date(curStart);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate() - spanDays + 1);
     return {
-      curStart: toISO(curStart),
-      curEnd: toISO(curEnd),
+      curStart: period.start_date,
+      curEnd: period.end_date,
       prevStart: toISO(prevStart),
       prevEnd: toISO(prevEnd),
-      curLabel: `${MONTHS[m]} ${y}`,
-      prevLabel: `${MONTHS[(m + 11) % 12]} ${prevStart.getFullYear()}`,
+      curLabel: period.label,
+      prevLabel: `${toISO(prevStart)} – ${toISO(prevEnd)}`,
     };
-  }, [monthDate]);
+  }, [period]);
+
+  // N periods (most-recent-first) for the Incomes & Expenses Report's
+  // "Number of columns" option -- same step rule as the single "previous
+  // period" above (calendar month back for a whole-month selection, an
+  // equal-length window back otherwise), just repeated numColumns times.
+  const columnPeriods = useMemo(() => {
+    if (!period.start_date || !period.end_date) {
+      return [{ start: null, end: null, label: period.label }];
+    }
+    const isMonth = period._year != null && period._month != null;
+    const out = [];
+    if (isMonth) {
+      let y = period._year;
+      let m = period._month;
+      for (let i = 0; i < numColumns; i += 1) {
+        const s = new Date(y, m, 1);
+        const e = new Date(y, m + 1, 0);
+        out.push({ start: toISO(s), end: toISO(e), label: i === 0 ? period.label : `${MONTHS[m]} ${y}` });
+        m -= 1;
+        if (m < 0) { m = 11; y -= 1; }
+      }
+    } else {
+      let curStart = new Date(period.start_date);
+      let curEnd = new Date(period.end_date);
+      const spanDays = Math.round((curEnd - curStart) / 86400000) + 1;
+      for (let i = 0; i < numColumns; i += 1) {
+        out.push({ start: toISO(curStart), end: toISO(curEnd), label: i === 0 ? period.label : `${toISO(curStart)} – ${toISO(curEnd)}` });
+        const nextEnd = new Date(curStart); nextEnd.setDate(nextEnd.getDate() - 1);
+        const nextStart = new Date(nextEnd); nextStart.setDate(nextStart.getDate() - spanDays + 1);
+        curStart = nextStart; curEnd = nextEnd;
+      }
+    }
+    return out;
+  }, [period, numColumns]);
 
   // Category name -> immediate parent category name (via parent_id -> parent's name).
   // Top-level categories are simply absent from the map. Used to nest sub-category
@@ -249,15 +341,7 @@ const ModernDashboard = () => {
     try {
       const base = { ...apiParams };
       if (tab === 0) {
-        const res = await getAnalyticsComparison({
-          start_a: periods.curStart,
-          end_a: periods.curEnd,
-          start_b: periods.prevStart,
-          end_b: periods.prevEnd,
-          label_a: periods.curLabel,
-          label_b: periods.prevLabel,
-          ...base,
-        });
+        const res = await getAnalyticsComparisonMulti(columnPeriods, base);
         setComparison(res);
       } else if (tab === 1) {
         const res = await getAnalyticsBalanceTrend({
@@ -287,9 +371,35 @@ const ModernDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [tab, apiParams, periods, advType, advGran]);
+  }, [tab, apiParams, periods, columnPeriods, advType, advGran]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Click-through drill-down: a category amount cell in the Incomes & Expenses
+  // Report opens this, fetching the individual transactions that sum to it
+  // (same filters as the report itself, plus that cell's category and column).
+  const openDrillDown = async (category, colIdx) => {
+    const col = columnPeriods[colIdx];
+    if (!col) return;
+    setDrillDown({ category, label: col.label, start: col.start, end: col.end });
+    setDrillDownLoading(true);
+    setDrillDownRows([]);
+    try {
+      const res = await getTransactions({
+        ...apiParams,
+        category,
+        start_date: col.start || undefined,
+        end_date: col.end || undefined,
+        limit: 200,
+      });
+      setDrillDownRows(res?.items || []);
+    } catch (_) {
+      setDrillDownRows([]);
+    } finally {
+      setDrillDownLoading(false);
+    }
+  };
+  const closeDrillDown = () => setDrillDown(null);
 
   // ── Saved filter handlers (defensive: page keeps working if these fail) ──
   const applySavedFilter = (id) => {
@@ -320,9 +430,6 @@ const ModernDashboard = () => {
     }
   };
 
-  const shiftMonth = (delta) =>
-    setMonthDate((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
-
   // ── Renderers ──
   const chartTooltipStyle = {
     borderRadius: 8,
@@ -331,26 +438,52 @@ const ModernDashboard = () => {
     background: theme.palette.background.paper,
   };
 
+  // Small colored (green/red) up/down % change badge vs. the next-older column --
+  // literal sign-based coloring (positive=green/up, negative=red/down), matching
+  // the reference app rather than an income/expense-aware "good vs bad" read.
+  const pctBadge = (amounts, idx) => {
+    if (!showPctDiff || idx >= amounts.length - 1) return null;
+    const cur = amounts[idx] || 0;
+    const prev = amounts[idx + 1] || 0;
+    if (!prev) return null;
+    const pct = ((cur - prev) / Math.abs(prev)) * 100;
+    if (!isFinite(pct) || pct === 0) return null;
+    const up = pct > 0;
+    return (
+      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, ml: 0.75, color: up ? 'success.main' : 'error.main', fontSize: 12, fontWeight: 600, verticalAlign: 'middle' }}>
+        {up ? <TrendingUp sx={{ fontSize: 14 }} /> : <TrendingDown sx={{ fontSize: 14 }} />}
+        {Math.abs(pct).toFixed(0)}%
+      </Box>
+    );
+  };
+
   const renderComparison = () => {
     if (!comparison) return null;
-    const a = comparison.period_a || {};
-    const b = comparison.period_b || {};
-    const incomeRows = mergeCategories(a.income_by_category, b.income_by_category);
-    const expenseRows = mergeCategories(a.expense_by_category, b.expense_by_category);
-    const amtCell = (v, negative = false, bold = false) => (
-      <TableCell align="right" sx={{ color: negative ? 'error.main' : 'text.primary', whiteSpace: 'nowrap', fontWeight: bold ? 600 : undefined }}>
-        {negative ? money(-Math.abs(v)) : money(v)}
+    const cols = comparison.periods || [];
+    const cmp = sortComparator(sortBy);
+    const incomeRows = mergeCategoriesMulti(cols, 'income_by_category').sort(cmp);
+    const expenseRows = mergeCategoriesMulti(cols, 'expense_by_category').sort(cmp);
+    // category === null => a total/subtotal row, not click-through-able.
+    const amtCell = (amounts, idx, negative = false, bold = false, category = null) => (
+      <TableCell
+        key={idx}
+        align="right"
+        onClick={category != null ? () => openDrillDown(category, idx) : undefined}
+        sx={{
+          color: negative ? 'error.main' : 'text.primary', whiteSpace: 'nowrap',
+          fontWeight: bold ? 600 : undefined,
+          cursor: category != null ? 'pointer' : undefined,
+          '&:hover': category != null ? { textDecoration: 'underline' } : undefined,
+        }}
+      >
+        {negative ? money(-Math.abs(amounts[idx] || 0)) : money(amounts[idx] || 0)}
+        {pctBadge(amounts, idx)}
       </TableCell>
     );
-    const sectionRow = (title, av, bv, negative = false) => (
+    const sectionRow = (title, amounts, negative = false) => (
       <TableRow sx={{ bgcolor: theme.palette.action.hover }}>
         <TableCell sx={{ fontWeight: 700 }}>{title}</TableCell>
-        <TableCell align="right" sx={{ fontWeight: 700, color: negative ? 'error.main' : 'text.primary', whiteSpace: 'nowrap' }}>
-          {negative ? money(-Math.abs(av)) : money(av)}
-        </TableCell>
-        <TableCell align="right" sx={{ fontWeight: 700, color: negative ? 'error.main' : 'text.primary', whiteSpace: 'nowrap' }}>
-          {negative ? money(-Math.abs(bv)) : money(bv)}
-        </TableCell>
+        {amounts.map((_, idx) => amtCell(amounts, idx, negative, true))}
       </TableRow>
     );
     // indent => child row (extra left padding); isParent => bold parent/subtotal row.
@@ -364,21 +497,20 @@ const ModernDashboard = () => {
             </Typography>
           </Box>
         </TableCell>
-        {amtCell(row.a, negative, isParent)}
-        {amtCell(row.b, negative, isParent)}
+        {row.amounts.map((_, idx) => amtCell(row.amounts, idx, negative, isParent, row.category))}
       </TableRow>
     );
 
-    // Group merged {category,a,b} rows into a parent -> children hierarchy using
-    // categoryParentName. A group's parent subtotal = the parent's own amount plus
-    // the sum of its children's amounts (per period). Groups without children stay
-    // as a single flat row. Ordered by combined magnitude, like the flat view.
+    // Group merged {category, amounts[]} rows into a parent -> children hierarchy
+    // using categoryParentName. A group's parent subtotal = its own amount plus
+    // the sum of its children's amounts, per column. Groups without children stay
+    // as a single flat row. Ordered by sortComparator, like the flat view.
     const groupRows = (rows) => {
-      const groups = new Map(); // groupName -> { name, ownA, ownB, children: [] }
+      const groups = new Map(); // groupName -> { name, own: number[], children: [] }
       const order = [];
       const groupFor = (name) => {
         let g = groups.get(name);
-        if (!g) { g = { name, ownA: 0, ownB: 0, children: [] }; groups.set(name, g); order.push(name); }
+        if (!g) { g = { name, own: new Array(cols.length).fill(0), children: [] }; groups.set(name, g); order.push(name); }
         return g;
       };
       (rows || []).forEach((r) => {
@@ -386,24 +518,19 @@ const ModernDashboard = () => {
         if (parent) {
           groupFor(parent).children.push(r);
         } else {
-          const g = groupFor(r.category);
-          g.ownA = r.a || 0;
-          g.ownB = r.b || 0;
+          groupFor(r.category).own = r.amounts;
         }
       });
       return order
         .map((name) => {
           const g = groups.get(name);
           if (g.children.length === 0) {
-            return { parent: { category: name, a: g.ownA, b: g.ownB }, children: [] };
+            return { parent: { category: name, amounts: g.own }, children: [] };
           }
-          const a = g.children.reduce((s, c) => s + (c.a || 0), g.ownA);
-          const b = g.children.reduce((s, c) => s + (c.b || 0), g.ownB);
-          return { parent: { category: name, a, b }, children: g.children };
+          const amounts = g.own.map((v, i) => v + g.children.reduce((s, c) => s + (c.amounts[i] || 0), 0));
+          return { parent: { category: name, amounts }, children: g.children };
         })
-        .sort((x, y) =>
-          (Math.abs(y.parent.a) + Math.abs(y.parent.b)) - (Math.abs(x.parent.a) + Math.abs(x.parent.b))
-        );
+        .sort((x, y) => cmp(x.parent, y.parent));
     };
     const renderGrouped = (rows, negative) => {
       const out = [];
@@ -417,28 +544,32 @@ const ModernDashboard = () => {
 
     // Fall back to flat rendering when category metadata has not loaded.
     const hasCats = (categories?.length || 0) > 0;
+    const incomeTotals = cols.map((p) => p.income_total || 0);
+    const expenseTotals = cols.map((p) => p.expense_total || 0);
+    const netTotals = cols.map((p) => p.net || 0);
 
     return (
       <Table size="small">
         <TableHead>
           <TableRow>
             <TableCell sx={{ fontWeight: 700 }}>Category</TableCell>
-            <TableCell align="right" sx={{ fontWeight: 700 }}>{a.label}</TableCell>
-            <TableCell align="right" sx={{ fontWeight: 700 }}>{b.label}</TableCell>
+            {cols.map((p, idx) => (
+              <TableCell key={idx} align="right" sx={{ fontWeight: 700 }}>{p.label}</TableCell>
+            ))}
           </TableRow>
         </TableHead>
         <TableBody>
-          {sectionRow('Total Income', a.income_total || 0, b.income_total || 0)}
+          {sectionRow('Total Income', incomeTotals)}
           {hasCats ? renderGrouped(incomeRows, false) : incomeRows.map((r) => catRow(r, false))}
           {incomeRows.length === 0 && (
-            <TableRow><TableCell colSpan={3}><Typography variant="body2" color="text.secondary">No income in either period.</Typography></TableCell></TableRow>
+            <TableRow><TableCell colSpan={cols.length + 1}><Typography variant="body2" color="text.secondary">No income in any shown period.</Typography></TableCell></TableRow>
           )}
-          {sectionRow('Total Expense', a.expense_total || 0, b.expense_total || 0, true)}
+          {sectionRow('Total Expense', expenseTotals, true)}
           {hasCats ? renderGrouped(expenseRows, true) : expenseRows.map((r) => catRow(r, true))}
           {expenseRows.length === 0 && (
-            <TableRow><TableCell colSpan={3}><Typography variant="body2" color="text.secondary">No expenses in either period.</Typography></TableCell></TableRow>
+            <TableRow><TableCell colSpan={cols.length + 1}><Typography variant="body2" color="text.secondary">No expenses in any shown period.</Typography></TableCell></TableRow>
           )}
-          {sectionRow('Net', a.net || 0, b.net || 0)}
+          {sectionRow('Net', netTotals)}
         </TableBody>
       </Table>
     );
@@ -710,17 +841,7 @@ const ModernDashboard = () => {
       {/* RIGHT: period selector + tabs + content */}
       <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
         <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderRadius: 2 }}>
-          <Box display="flex" alignItems="center" justifyContent="center" gap={1} sx={{ mb: 1 }}>
-            <IconButton size="small" onClick={() => shiftMonth(-1)} aria-label="Previous month">
-              <ChevronLeft />
-            </IconButton>
-            <Typography variant="h6" fontWeight={700} sx={{ minWidth: 160, textAlign: 'center' }}>
-              {periods.curLabel}
-            </Typography>
-            <IconButton size="small" onClick={() => shiftMonth(1)} aria-label="Next month">
-              <ChevronRight />
-            </IconButton>
-          </Box>
+          <MonthPager period={period} onChange={setPeriod} />
           <Tabs
             value={tab}
             onChange={(_, v) => setTab(v)}
@@ -735,6 +856,52 @@ const ModernDashboard = () => {
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
         <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 }, borderRadius: 2, minHeight: 400 }}>
+          {tab === 0 && (
+            <Box display="flex" justifyContent="flex-end" mb={1}>
+              <MuiTooltip title="Report options">
+                <IconButton size="small" onClick={(e) => setReportOptionsAnchor(e.currentTarget)}>
+                  <TuneOutlined fontSize="small" />
+                </IconButton>
+              </MuiTooltip>
+              <Popover
+                open={Boolean(reportOptionsAnchor)}
+                anchorEl={reportOptionsAnchor}
+                onClose={() => setReportOptionsAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              >
+                <Box sx={{ p: 2.5, width: 280 }}>
+                  <FormControl component="fieldset" sx={{ mb: 2.5 }}>
+                    <FormLabel component="legend" sx={{ fontSize: 13, fontWeight: 700, mb: 0.5 }}>Sort by</FormLabel>
+                    <RadioGroup value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                      <FormControlLabel value="default" control={<Radio size="small" />} label="Default" />
+                      <FormControlLabel value="amount_asc" control={<Radio size="small" />} label="Amount (lowest first)" />
+                      <FormControlLabel value="amount_desc" control={<Radio size="small" />} label="Amount (highest first)" />
+                    </RadioGroup>
+                  </FormControl>
+
+                  <Typography variant="subtitle2" fontWeight={700} sx={{ fontSize: 13, mb: 0.5 }}>
+                    Number of columns: {numColumns}
+                  </Typography>
+                  <Slider
+                    size="small"
+                    value={numColumns}
+                    min={1}
+                    max={6}
+                    step={1}
+                    marks
+                    onChange={(_, v) => setNumColumns(v)}
+                    sx={{ mb: 2 }}
+                  />
+
+                  <FormControlLabel
+                    control={<Switch size="small" checked={showPctDiff} onChange={(e) => setShowPctDiff(e.target.checked)} />}
+                    label="Show percentage difference"
+                  />
+                </Box>
+              </Popover>
+            </Box>
+          )}
           {loading ? (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight={360}>
               <CircularProgress />
@@ -744,6 +911,47 @@ const ModernDashboard = () => {
           )}
         </Paper>
       </Box>
+
+      <Dialog open={Boolean(drillDown)} onClose={closeDrillDown} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+          <Box>
+            <Typography variant="subtitle1" fontWeight={700}>{drillDown?.category || 'Uncategorized'}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {drillDownLoading ? 'Loading…' : `${drillDownRows.length} record${drillDownRows.length === 1 ? '' : 's'}`} — {drillDown?.label}
+            </Typography>
+          </Box>
+          <IconButton size="small" onClick={closeDrillDown}><Close fontSize="small" /></IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          {drillDownLoading ? (
+            <Box display="flex" justifyContent="center" py={4}><CircularProgress size={28} /></Box>
+          ) : drillDownRows.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>No transactions found.</Typography>
+          ) : (
+            <Stack divider={<Divider />} spacing={0}>
+              {drillDownRows.map((t) => (
+                <Box key={t.id} sx={{ py: 1.25, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <CategoryIcon name={t.category} size={32} />
+                  <Box flex={1} minWidth={0}>
+                    <Typography variant="body2" fontWeight={600} noWrap>{t.description || 'Uncategorized'}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {t.bank_name || 'External'}{t.source ? ` · ${t.source}` : ''}
+                    </Typography>
+                  </Box>
+                  <Box textAlign="right">
+                    <Typography variant="body2" fontWeight={600} sx={{ color: t.transaction_type === 'debit' ? 'error.main' : 'success.main' }}>
+                      {t.transaction_type === 'debit' ? '-' : '+'}{money(t.amount)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {new Date(t.transaction_date).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                    </Typography>
+                  </Box>
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 };
