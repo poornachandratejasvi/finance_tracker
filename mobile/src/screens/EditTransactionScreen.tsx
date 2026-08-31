@@ -22,6 +22,8 @@ import { createAutoRule } from "../api/autoRules";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { Category, Label, TransactionType } from "../types";
 import { getCachedCategories, deleteCachedTransaction, upsertTransactions } from "../offline/db";
+import { useOffline } from "../offline/OfflineProvider";
+import { queueOfflineUpdate, queueOfflineDelete } from "../offline/syncEngine";
 import { RootStackParamList } from "../navigation/RootNavigator";
 import TypeSegmentedControl, { TxnMode } from "../components/TypeSegmentedControl";
 import { FormGroup, FormSectionHeader } from "../components/FormGroup";
@@ -38,6 +40,7 @@ export default function EditTransactionScreen() {
   const route = useRoute<EditRouteProp>();
   const navigation = useNavigation();
   const { transaction } = route.params;
+  const { isOnline } = useOffline();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [mode, setMode] = useState<TxnMode>(
@@ -168,22 +171,42 @@ export default function EditTransactionScreen() {
       return;
     }
 
+    const payload = {
+      description: description.trim(),
+      amount: parsedAmount,
+      transaction_type: type,
+      category: category || undefined,
+      notes: notes.trim() || undefined,
+      transaction_date: `${date}T12:00:00`,
+      from_account: mode === "transfer" ? fromAccount.trim() || undefined : undefined,
+    };
+
     setSubmitting(true);
     try {
-      const updated = await updateTransaction(numericId, {
-        description: description.trim(),
-        amount: parsedAmount,
-        transaction_type: type,
-        category: category || undefined,
-        notes: notes.trim() || undefined,
-        transaction_date: `${date}T12:00:00`,
-        from_account: mode === "transfer" ? fromAccount.trim() || undefined : undefined,
-      });
+      // Skip the network attempt entirely when already known offline --
+      // avoids hanging on a flaky-but-technically-online axios timeout.
+      if (!isOnline) {
+        await queueOfflineUpdate(numericId, payload);
+        await syncLabels(numericId).catch(() => {});
+        Alert.alert("Saved offline", "Will sync once you're back online.");
+        navigation.goBack();
+        return;
+      }
+      const updated = await updateTransaction(numericId, payload);
       await syncLabels(numericId).catch(() => {});
       upsertTransactions([updated]).catch(() => {});
       navigation.goBack();
     } catch (err: any) {
-      const detail = err?.response?.data?.detail;
+      if (!err?.response) {
+        // No server response at all -- a genuine network failure (not a
+        // validation rejection), so it's safe to queue and retry later.
+        await queueOfflineUpdate(numericId, payload);
+        await syncLabels(numericId).catch(() => {});
+        Alert.alert("Saved offline", "Will sync once you're back online.");
+        navigation.goBack();
+        return;
+      }
+      const detail = err.response?.data?.detail;
       Alert.alert("Couldn't save", typeof detail === "string" ? detail : "Please try again.");
     } finally {
       setSubmitting(false);
@@ -203,10 +226,22 @@ export default function EditTransactionScreen() {
         onPress: async () => {
           setDeleting(true);
           try {
+            if (!isOnline) {
+              await queueOfflineDelete(numericId);
+              Alert.alert("Deleted offline", "Will sync once you're back online.");
+              navigation.goBack();
+              return;
+            }
             await deleteTransaction(numericId);
             deleteCachedTransaction(transaction.id).catch(() => {});
             navigation.goBack();
           } catch (err: any) {
+            if (!err?.response) {
+              await queueOfflineDelete(numericId);
+              Alert.alert("Deleted offline", "Will sync once you're back online.");
+              navigation.goBack();
+              return;
+            }
             const detail = err?.response?.data?.detail;
             Alert.alert("Couldn't delete", typeof detail === "string" ? detail : "Please try again.");
           } finally {

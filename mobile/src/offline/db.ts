@@ -136,6 +136,24 @@ export async function deleteCachedTransaction(id: number | string): Promise<void
   await db.runAsync("DELETE FROM transactions WHERE id = ?", [String(id)]);
 }
 
+// Optimistically applies an edit made while offline to the local mirror (so
+// the Transactions list reflects it immediately, tagged "Sync pending") ahead
+// of the matching pending_writes row actually reaching the server.
+export async function applyPendingTransactionUpdate(id: number | string, patch: Partial<Transaction>): Promise<void> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ json: string }>("SELECT json FROM transactions WHERE id = ?", [String(id)]);
+  if (!row) return;
+  const merged: Transaction = { ...JSON.parse(row.json), ...patch, is_pending_sync: true, updated_at: new Date().toISOString() };
+  await db.runAsync(
+    `UPDATE transactions SET transaction_date = ?, description = ?, amount = ?, transaction_type = ?,
+      category = ?, notes = ?, is_pending_sync = 1, updated_at = ?, json = ? WHERE id = ?`,
+    [
+      merged.transaction_date, merged.description, merged.amount, merged.transaction_type,
+      merged.category ?? null, merged.notes ?? null, merged.updated_at, JSON.stringify(merged), String(id),
+    ]
+  );
+}
+
 export async function getCachedTransactions(limit = 500): Promise<Transaction[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ json: string }>(

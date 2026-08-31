@@ -1,7 +1,10 @@
 import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 
-import { listTransactions, createTransaction, CreateTransactionPayload } from "../api/transactions";
+import {
+  listTransactions, createTransaction, updateTransaction, deleteTransaction,
+  CreateTransactionPayload, UpdateTransactionPayload,
+} from "../api/transactions";
 import { listBanks, getExternalBank } from "../api/banks";
 import { listCategories } from "../api/categories";
 import { listLabels } from "../api/labels";
@@ -10,7 +13,7 @@ import {
   upsertTransactions, upsertBanks, upsertCategories, upsertLabels,
   getLastTransactionSyncAt, setLastTransactionSyncAt,
   getCachedBanks,
-  insertPendingTransaction, replacePendingTransaction,
+  insertPendingTransaction, replacePendingTransaction, applyPendingTransactionUpdate, deleteCachedTransaction,
   enqueuePendingWrite, getPendingWrites, markPendingWriteDone,
   markPendingWriteRetried, markPendingWriteFailed,
 } from "./db";
@@ -59,18 +62,49 @@ export async function queueOfflineTransaction(
   return shadow;
 }
 
+// Queue an edit made while offline (or whose request failed with no server
+// response). Only ever called for an already-synced transaction (numeric id)
+// -- a not-yet-synced local-<uuid> row has no server row to edit yet, so
+// EditTransactionScreen blocks editing until that create has flushed.
+export async function queueOfflineUpdate(id: number, payload: UpdateTransactionPayload): Promise<void> {
+  await applyPendingTransactionUpdate(id, payload);
+  await enqueuePendingWrite(Crypto.randomUUID(), "transaction", "update", { id, ...payload });
+}
+
+// Queue a delete made while offline. Removes the local row immediately (the
+// confirm dialog already told the user "This can't be undone") and lets the
+// queued write make it permanent server-side once reconnected.
+export async function queueOfflineDelete(id: number): Promise<void> {
+  await deleteCachedTransaction(id);
+  await enqueuePendingWrite(Crypto.randomUUID(), "transaction", "delete", { id });
+}
+
 async function flushPendingWrites(): Promise<void> {
   const writes = await getPendingWrites();
   for (const write of writes) {
-    if (write.entity_type !== "transaction" || write.op !== "create") continue;
-    const payload: CreateTransactionPayload = JSON.parse(write.payload_json);
-    const localId = `local-${write.client_uuid}`;
+    if (write.entity_type !== "transaction") continue;
     try {
-      const created = await createTransaction(payload);
-      await replacePendingTransaction(localId, created);
+      if (write.op === "create") {
+        const payload: CreateTransactionPayload = JSON.parse(write.payload_json);
+        const localId = `local-${write.client_uuid}`;
+        const created = await createTransaction(payload);
+        await replacePendingTransaction(localId, created);
+      } else if (write.op === "update") {
+        const { id, ...payload } = JSON.parse(write.payload_json);
+        const updated = await updateTransaction(id, payload);
+        await upsertTransactions([updated]);
+      } else if (write.op === "delete") {
+        const { id } = JSON.parse(write.payload_json);
+        await deleteTransaction(id);
+      } else {
+        continue;
+      }
       await markPendingWriteDone(write.id);
     } catch (err: any) {
-      if (err?.response) {
+      if (write.op === "delete" && err?.response?.status === 404) {
+        // Already gone server-side -- the delete already achieved its goal.
+        await markPendingWriteDone(write.id);
+      } else if (err?.response) {
         // The server responded (even with an error) -- this request is
         // resolved, just not successfully. Retrying it won't help.
         await markPendingWriteFailed(write.id, String(err.response.status));
