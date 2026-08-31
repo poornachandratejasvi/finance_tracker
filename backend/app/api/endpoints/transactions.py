@@ -24,7 +24,7 @@ from app.schemas.transaction import (
 from app.services.transaction_service import TransactionService
 from app.services import audit_service
 from app.services.autorules import remember_category, UNCATEGORIZED_VALUES
-from app.services.transaction_hooks import dedupe_incoming_pending, find_confirmed_match
+from app.services.transaction_hooks import dedupe_incoming_pending, dedupe_against_confirmed
 from app.utils.parsing import parse_csv_list as _parse_csv_list
 from app.core.household import visible_user_ids
 
@@ -304,21 +304,20 @@ def create_transaction(
     # never lets a manual entry win over a real-time capture -- it only ever
     # absorbs into the existing row or is silently treated as already covered.
     ttype_value = trans_data.transaction_type.value if hasattr(trans_data.transaction_type, "value") else trans_data.transaction_type
-    dup, deduped = dedupe_incoming_pending(
-        db, owner_id, trans_data.bank_id,
-        {
-            "transaction_date": trans_data.transaction_date,
-            "amount": trans_data.amount,
-            "transaction_type": ttype_value,
-            "description": trans_data.description,
-        },
-        source="manual",
-    )
+    dedupe_payload = {
+        "transaction_date": trans_data.transaction_date,
+        "amount": trans_data.amount,
+        "transaction_type": ttype_value,
+        "description": trans_data.description,
+        "notes": trans_data.notes,
+    }
+    dup, deduped = dedupe_incoming_pending(db, owner_id, trans_data.bank_id, dedupe_payload, source="manual")
     if deduped:
         db.commit()
         return _response_for(dup)
-    confirmed_match = find_confirmed_match(db, owner_id, trans_data.bank_id, ttype_value, trans_data.amount, trans_data.transaction_date)
-    if confirmed_match:
+    confirmed_match, confirmed_hit = dedupe_against_confirmed(db, owner_id, trans_data.bank_id, dedupe_payload, source="manual")
+    if confirmed_hit:
+        db.commit()
         return _response_for(confirmed_match)
 
     # Auto-categorize if not provided: user keyword rules first, then the built-in heuristic.

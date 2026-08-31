@@ -85,6 +85,21 @@ def find_confirmed_match(db, user_id: int, bank_id: int, transaction_type, amoun
     ).first()
 
 
+def _merge_notes(match, incoming_notes) -> None:
+    """Union-merge, never overwrite -- an absorbed duplicate's notes (e.g. a
+    manual "split with roommate" typed alongside a re-entry of something a
+    Gmail alert already caught) would otherwise be silently discarded: the
+    real-time guards below only ever return the EXISTING row, so a caller
+    that skips creating a new row never gets a place to keep what the user
+    just typed unless this runs first."""
+    if not incoming_notes:
+        return
+    if not match.notes:
+        match.notes = incoming_notes
+    elif incoming_notes not in match.notes:
+        match.notes = f"{match.notes}\n{incoming_notes}"
+
+
 def dedupe_incoming_pending(db, user_id: int, bank_id: int, trans_data: dict, source: str):
     """Cross-source duplicate guard for the real-time pending sources (Gmail
     alert / SMS auto-detect / iOS-Shortcut ingest). Without this, the same
@@ -102,9 +117,11 @@ def dedupe_incoming_pending(db, user_id: int, bank_id: int, trans_data: dict, so
     The merge on upgrade adopts the higher-priority source's identifying
     fields (date/amount/type/description -- e.g. Gmail's own transactional
     text is more trustworthy than a Shortcut's free-typed description) while
-    leaving the existing row's category/notes/labels alone, so whatever a
-    matching AutoRule already attached to the lower-priority row survives
-    the merge instead of being wiped by re-running rules on the new source.
+    leaving the existing row's category/labels alone, so whatever a matching
+    AutoRule already attached to the lower-priority row survives the merge
+    instead of being wiped by re-running rules on the new source. `notes` is
+    union-merged (see _merge_notes) in EITHER direction, since it's user-
+    authored free text, not an identifying field either source "wins" on.
     """
     match = find_pending_match(
         db, user_id, bank_id,
@@ -114,11 +131,59 @@ def dedupe_incoming_pending(db, user_id: int, bank_id: int, trans_data: dict, so
     if not match:
         return None, False
     if _SOURCE_PRIORITY.get(match.source, 0) >= _SOURCE_PRIORITY.get(source, 0):
+        _merge_notes(match, trans_data.get("notes"))
         return match, True
     for key in ("transaction_date", "amount", "transaction_type", "description"):
         if trans_data.get(key) is not None:
             setattr(match, key, trans_data[key])
+    _merge_notes(match, trans_data.get("notes"))
     match.source = source
+    return match, True
+
+
+def dedupe_against_confirmed(db, user_id: int, bank_id: int, trans_data: dict, source: str):
+    """Same idea as dedupe_incoming_pending, but for a CONFIRMED row already
+    covering this purchase (e.g. a PDF statement processed before this
+    alert/SMS/Shortcut/manual report arrived).
+
+    A row confirmed because it was genuinely reconciled (source="pdf", or an
+    alert/sms/ingest row a real statement already matched) is left untouched
+    -- that data is as trustworthy as it gets. But a row confirmed only
+    because it's a manually-typed entry (born-confirmed, never actually
+    cross-checked against anything -- see duplicate_resolution_service's
+    _keeper_rank for the same distinction) shouldn't get to silently block a
+    higher-priority real-time source forever: a manual "UPI_TAAZA VEGETABLES"
+    entered before the Gmail alert for the same purchase arrives would
+    otherwise permanently keep the rough manual description, and the later
+    real PDF statement would never reconcile into it either (it's not
+    Pending anymore) -- creating a THIRD row the next day's sweep has to
+    clean up. Instead, the incoming source takes over in place: adopts its
+    own identifying fields, reverts to Pending (source=<incoming>,
+    is_confirmed=False) so the real statement can still reconcile into it
+    later, same as any other pending row. A manual source can never trigger
+    this upgrade itself (_SOURCE_PRIORITY has no entry for it) -- it only
+    ever absorbs quietly, same as before.
+
+    Returns (transaction, True) if the caller should NOT create a new row
+    (whether or not an upgrade happened), or (None, False) if there's no
+    confirmed match at all.
+    """
+    match = find_confirmed_match(
+        db, user_id, bank_id,
+        trans_data.get("transaction_type"), trans_data.get("amount"), trans_data.get("transaction_date"),
+    )
+    if not match:
+        return None, False
+    if match.source == "manual" and _SOURCE_PRIORITY.get(source, 0) > 0:
+        for key in ("transaction_date", "amount", "transaction_type", "description"):
+            if trans_data.get(key) is not None:
+                setattr(match, key, trans_data[key])
+        _merge_notes(match, trans_data.get("notes"))
+        match.source = source
+        match.is_confirmed = False
+        match.confirmed_at = None
+        return match, True
+    _merge_notes(match, trans_data.get("notes"))
     return match, True
 
 

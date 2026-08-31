@@ -22,7 +22,7 @@ from app.models.models import User, Bank, Category, Transaction, IngestMapping, 
 from app.services.transaction_service import TransactionService
 from app.services import shortcut_service
 from app.services import ai_sms_extraction
-from app.services.transaction_hooks import dedupe_incoming_pending, find_confirmed_match
+from app.services.transaction_hooks import dedupe_incoming_pending, dedupe_against_confirmed
 
 router = APIRouter()
 
@@ -218,6 +218,11 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
     from app.services.categorization import resolve_category
     category = target.get("category") or resolve_category(db, user.id, description)
 
+    notes = str(target["notes"]) if target.get("notes") is not None else None
+    if unmatched_account_name:
+        miss_note = f"Account '{unmatched_account_name}' didn't match any bank — filed under the default account for review."
+        notes = f"{notes}\n{miss_note}" if notes else miss_note
+
     # Duplicate check (exact match), unless the caller opts to allow duplicates.
     if not allow_duplicates:
         existing = db.query(Transaction.id).filter(
@@ -239,26 +244,23 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
         # existing row already outranks it) instead of creating a second pending
         # row is what lets a later PDF statement reconcile a single row instead
         # of leaving a duplicate stuck pending forever.
-        dup, deduped = dedupe_incoming_pending(
-            db, user.id, default_bank_id,
-            {"transaction_date": txn_date, "amount": amount, "transaction_type": ttype, "description": description},
-            source=source,
-        )
+        dedupe_payload = {
+            "transaction_date": txn_date, "amount": amount, "transaction_type": ttype,
+            "description": description, "notes": notes,
+        }
+        dup, deduped = dedupe_incoming_pending(db, user.id, default_bank_id, dedupe_payload, source=source)
         if deduped:
             db.commit()
             return {"created": False, "skipped_duplicate": True, "transaction_id": dup.id, "merged_source": dup.source}
 
         # Also check against already-CONFIRMED transactions -- e.g. a statement
-        # already recorded this purchase before this SMS/Shortcut report arrived.
-        # dedupe_incoming_pending above only ever looks at other PENDING rows.
-        confirmed_match = find_confirmed_match(db, user.id, default_bank_id, ttype, amount, txn_date)
-        if confirmed_match:
+        # already recorded this purchase before this SMS/Shortcut report arrived,
+        # or a manual entry a higher-priority real-time source should take over
+        # (see dedupe_against_confirmed).
+        confirmed_match, confirmed_hit = dedupe_against_confirmed(db, user.id, default_bank_id, dedupe_payload, source=source)
+        if confirmed_hit:
+            db.commit()
             return {"created": False, "skipped_duplicate": True, "transaction_id": confirmed_match.id, "already_confirmed": True}
-
-    notes = str(target["notes"]) if target.get("notes") is not None else None
-    if unmatched_account_name:
-        miss_note = f"Account '{unmatched_account_name}' didn't match any bank — filed under the default account for review."
-        notes = f"{notes}\n{miss_note}" if notes else miss_note
 
     txn = Transaction(
         user_id=user.id,

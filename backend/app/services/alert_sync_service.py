@@ -54,14 +54,23 @@ def _bank_domains(bank: Bank) -> set:
 
 
 def _already_confirmed(db, user_id: int, bank_id: int, parsed: dict) -> bool:
-    """True if a CONFIRMED transaction already covers this real-world spend
-    (e.g. the statement was processed before this alert got around to being
-    synced) — in which case creating a pending duplicate would be wrong."""
-    from app.services.transaction_hooks import find_confirmed_match
+    """True if a CONFIRMED transaction already covers this real-world spend --
+    in which case a new pending row would be wrong. Uses dedupe_against_confirmed
+    (not a bare find_confirmed_match) so a manually-typed entry that beat this
+    alert to the punch gets taken over (adopts Gmail's own data, reverts to
+    Pending so a later real statement can still reconcile into it) instead of
+    permanently blocking Gmail's higher-priority, more detailed data forever."""
+    from app.services.transaction_hooks import dedupe_against_confirmed
 
-    return find_confirmed_match(
-        db, user_id, bank_id, parsed["transaction_type"], parsed["amount"], parsed["transaction_date"],
-    ) is not None
+    _, hit = dedupe_against_confirmed(
+        db, user_id, bank_id,
+        {
+            "transaction_type": parsed["transaction_type"], "amount": parsed["amount"],
+            "transaction_date": parsed["transaction_date"], "description": parsed["description"],
+        },
+        source="alert",
+    )
+    return hit
 
 
 def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_date=None) -> int:
