@@ -3,12 +3,47 @@ package com.poornachandratejasvi.financetracker
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.provider.Telephony
 import android.util.Log
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+
+// Same encrypted store FinancetrackerNativeModule.kt writes to (see that file
+// for the full rationale) -- duplicated here rather than shared because this
+// file is copied straight into the app module's own java source at prebuild
+// time (see withSmsReceiver.js), a separate Gradle compilation unit from the
+// financetracker-native library module.
+private const val LEGACY_PREFS_NAME = "ft_sms_config"
+private const val SECURE_PREFS_NAME = "ft_sms_config_secure"
+private const val KEY_SERVER_URL = "server_url"
+private const val KEY_API_KEY = "api_key"
+
+private fun securePrefs(context: Context): SharedPreferences {
+    val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+    return EncryptedSharedPreferences.create(
+        context,
+        SECURE_PREFS_NAME,
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
+}
+
+private fun migrateLegacyCredentials(context: Context, secure: SharedPreferences) {
+    if (secure.contains(KEY_API_KEY)) return
+    val legacy = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+    val legacyKey = legacy.getString(KEY_API_KEY, null) ?: return
+    secure.edit()
+        .putString(KEY_SERVER_URL, legacy.getString(KEY_SERVER_URL, null))
+        .putString(KEY_API_KEY, legacyKey)
+        .apply()
+    legacy.edit().clear().apply()
+}
 
 // Android can read the SMS inbox directly (iOS can't -- Apple gives no app any access to
 // SMS content, hence the Shortcuts-forwarding approach on that platform instead). This
@@ -56,9 +91,10 @@ class SmsReceiver : BroadcastReceiver() {
     // existed and never opened it -- so an existing working setup doesn't
     // silently break on upgrade.
     private fun credentials(context: Context): Pair<String, String> {
-        val prefs = context.getSharedPreferences("ft_sms_config", Context.MODE_PRIVATE)
-        val serverUrl = prefs.getString("server_url", null) ?: ApiConfig.SERVER_URL
-        val apiKey = prefs.getString("api_key", null) ?: ApiConfig.API_KEY
+        val secure = securePrefs(context)
+        migrateLegacyCredentials(context, secure)
+        val serverUrl = secure.getString(KEY_SERVER_URL, null) ?: ApiConfig.SERVER_URL
+        val apiKey = secure.getString(KEY_API_KEY, null) ?: ApiConfig.API_KEY
         return Pair(serverUrl, apiKey)
     }
 

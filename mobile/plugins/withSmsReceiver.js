@@ -1,4 +1,4 @@
-const { withDangerousMod, withAndroidManifest, AndroidConfig } = require("@expo/config-plugins");
+const { withDangerousMod, withAndroidManifest, withAppBuildGradle, AndroidConfig } = require("@expo/config-plugins");
 const fs = require("fs");
 const path = require("path");
 
@@ -81,8 +81,30 @@ function withSmsReceiverManifest(config) {
   });
 }
 
+// SmsReceiver.kt (copied straight into the app module's java source by
+// withSmsReceiverFiles above, not compiled as part of the separate
+// financetracker-native library module) uses EncryptedSharedPreferences to
+// read its SMS-forwarding credentials, so the app's own build.gradle needs
+// the dependency too -- declaring it only in the library module's build.gradle
+// wouldn't make it visible here, since these are two separate compilation units.
+function withSmsReceiverBuildGradle(config) {
+  return withAppBuildGradle(config, (config) => {
+    if (config.modResults.language !== "groovy") {
+      throw new Error("withSmsReceiver: expected a Groovy android/app/build.gradle");
+    }
+    if (!config.modResults.contents.includes("androidx.security:security-crypto")) {
+      config.modResults.contents = config.modResults.contents.replace(
+        /dependencies\s*{/,
+        `dependencies {\n    implementation("androidx.security:security-crypto:1.1.0")`
+      );
+    }
+    return config;
+  });
+}
+
 module.exports = function withSmsReceiver(config) {
   config = withSmsReceiverFiles(config);
   config = withSmsReceiverManifest(config);
+  config = withSmsReceiverBuildGradle(config);
   return config;
 };

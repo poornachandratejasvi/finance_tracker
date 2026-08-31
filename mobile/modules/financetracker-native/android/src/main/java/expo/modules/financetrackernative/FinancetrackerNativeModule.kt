@@ -1,7 +1,10 @@
 package expo.modules.financetrackernative
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.provider.Telephony
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -10,21 +13,45 @@ import expo.modules.kotlin.modules.ModuleDefinition
 //    (mobile/android-native/SmsReceiver.kt) -- previously baked into the APK
 //    at CI build time as a compile-time constant, which could silently go
 //    stale (server URL changed, token rotated) with zero visibility to the
-//    user. Stored here in a plain SharedPreferences file that any class in
-//    this same app process/package can read, including the separately
-//    registered SmsReceiver. (Not EncryptedSharedPreferences for now -- this
-//    token only grants SMS-ingest access and is regenerable/revocable from
-//    the app at any time, same exposure as the old compile-time-baked
-//    approach; upgrading the storage is a safe later improvement, not a
-//    correctness requirement.)
+//    user. Stored in an Android-Keystore-backed EncryptedSharedPreferences
+//    file that any class in this same app process/package can read,
+//    including the separately registered SmsReceiver. A one-time migration
+//    (see migrateLegacyCredentials below) moves over anything already saved
+//    in the original plain-text file from before this upgrade.
 // 2. Browsing the phone's EXISTING SMS inbox (querySmsInbox) -- the
 //    BroadcastReceiver only ever reacts to NEW incoming SMS in real time and
 //    has no way to expose anything back to JS; this is this app's first
 //    capability to read the inbox on demand, for the in-app "Import SMS"
 //    picker screen.
-private const val PREFS_NAME = "ft_sms_config"
+private const val LEGACY_PREFS_NAME = "ft_sms_config"
+private const val SECURE_PREFS_NAME = "ft_sms_config_secure"
 private const val KEY_SERVER_URL = "server_url"
 private const val KEY_API_KEY = "api_key"
+
+internal fun securePrefs(context: Context): SharedPreferences {
+  val masterKey = MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+  return EncryptedSharedPreferences.create(
+    context,
+    SECURE_PREFS_NAME,
+    masterKey,
+    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+  )
+}
+
+// Runs on every read so a device that already had SMS Auto-Detect configured
+// before this upgrade keeps working with no re-setup needed. No-ops once the
+// secure store has a value (the legacy file is cleared right after migrating).
+internal fun migrateLegacyCredentials(context: Context, secure: SharedPreferences) {
+  if (secure.contains(KEY_API_KEY)) return
+  val legacy = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+  val legacyKey = legacy.getString(KEY_API_KEY, null) ?: return
+  secure.edit()
+    .putString(KEY_SERVER_URL, legacy.getString(KEY_SERVER_URL, null))
+    .putString(KEY_API_KEY, legacyKey)
+    .apply()
+  legacy.edit().clear().apply()
+}
 
 class FinancetrackerNativeModule : Module() {
   private val context: Context
@@ -34,21 +61,21 @@ class FinancetrackerNativeModule : Module() {
     Name("FinancetrackerNative")
 
     Function("setSmsCredentials") { serverUrl: String, apiKey: String ->
-      val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-      prefs.edit().putString(KEY_SERVER_URL, serverUrl).putString(KEY_API_KEY, apiKey).apply()
+      securePrefs(context).edit().putString(KEY_SERVER_URL, serverUrl).putString(KEY_API_KEY, apiKey).apply()
     }
 
     Function("getSmsCredentials") {
-      val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      val secure = securePrefs(context)
+      migrateLegacyCredentials(context, secure)
       mapOf(
-        "serverUrl" to prefs.getString(KEY_SERVER_URL, null),
-        "apiKey" to prefs.getString(KEY_API_KEY, null),
+        "serverUrl" to secure.getString(KEY_SERVER_URL, null),
+        "apiKey" to secure.getString(KEY_API_KEY, null),
       )
     }
 
     Function("clearSmsCredentials") {
-      val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-      prefs.edit().clear().apply()
+      securePrefs(context).edit().clear().apply()
+      context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE).edit().clear().apply()
     }
 
     // sinceMillis: only messages newer than this (0 = no lower bound).
