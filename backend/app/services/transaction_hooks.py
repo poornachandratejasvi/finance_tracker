@@ -173,6 +173,23 @@ def apply_auto_rules_and_notify(db, user_id: int, transaction) -> None:
     if transaction.id is None:
         db.flush()
 
+    # The older, simpler keyword->single-label rules (Settings -> Auto Labels,
+    # AutoLabelRule/TransactionService.apply_auto_labels) were only ever wired
+    # into the manual-create and API-key-ingest paths (transactions.py,
+    # ingest.py), each of which duplicates this function's AutoRule logic
+    # inline instead of calling it -- so a Gmail alert, PDF statement, bank
+    # sync, or CSV import (every caller of this shared hook) never applied
+    # them at all, even though a matching AutoRule (below) can beat an
+    # AutoLabelRule to a transaction and prevent it from ever being
+    # reconsidered otherwise. Idempotent (apply_auto_labels only adds a label
+    # if it isn't already there), so this is safe even for a caller that also
+    # applies it separately.
+    try:
+        from app.services.transaction_service import TransactionService
+        TransactionService.apply_auto_labels(db, transaction.id, transaction.description)
+    except Exception:
+        logger.warning("AutoLabelRule apply failed for a transaction", exc_info=True)
+
     ttype = (
         transaction.transaction_type.value
         if hasattr(transaction.transaction_type, "value")

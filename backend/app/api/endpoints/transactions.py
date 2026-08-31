@@ -24,6 +24,7 @@ from app.schemas.transaction import (
 from app.services.transaction_service import TransactionService
 from app.services import audit_service
 from app.services.autorules import remember_category, UNCATEGORIZED_VALUES
+from app.services.transaction_hooks import dedupe_incoming_pending, find_confirmed_match
 from app.utils.parsing import parse_csv_list as _parse_csv_list
 from app.core.household import visible_user_ids
 
@@ -275,6 +276,12 @@ def create_transaction(
         )
     owner_id = bank.user_id
 
+    def _response_for(t: Transaction) -> dict:
+        d = TransactionResponse.from_orm(t).dict()
+        d['bank_name'] = t.bank.name if t.bank else None
+        d['labels'] = [tl.label.name for tl in t.transaction_labels]
+        return d
+
     # Idempotent replay: the mobile app's offline write queue may retry a
     # submission whose response was lost (e.g. connectivity dropped after the
     # server committed but before the reply arrived). Returning the existing
@@ -285,10 +292,34 @@ def create_transaction(
             Transaction.user_id.in_(visible_user_ids(db, current_user)),
         ).first()
         if existing:
-            trans_dict = TransactionResponse.from_orm(existing).dict()
-            trans_dict['bank_name'] = existing.bank.name if existing.bank else None
-            trans_dict['labels'] = [tl.label.name for tl in existing.transaction_labels]
-            return trans_dict
+            return _response_for(existing)
+
+    # Cross-source duplicate guard: unlike ingest.py's API-key paths (Gmail
+    # alert/SMS/Shortcut), a manual "Add Transaction" never checked for an
+    # existing pending or confirmed row covering the same purchase -- so a
+    # manual re-entry of something a Gmail alert already caught sat as two
+    # permanent rows until the next day's duplicate-resolution sweep, instead
+    # of being caught the moment it's added like every other source already
+    # is. Manual has no _SOURCE_PRIORITY entry (rank 0, the lowest), so this
+    # never lets a manual entry win over a real-time capture -- it only ever
+    # absorbs into the existing row or is silently treated as already covered.
+    ttype_value = trans_data.transaction_type.value if hasattr(trans_data.transaction_type, "value") else trans_data.transaction_type
+    dup, deduped = dedupe_incoming_pending(
+        db, owner_id, trans_data.bank_id,
+        {
+            "transaction_date": trans_data.transaction_date,
+            "amount": trans_data.amount,
+            "transaction_type": ttype_value,
+            "description": trans_data.description,
+        },
+        source="manual",
+    )
+    if deduped:
+        db.commit()
+        return _response_for(dup)
+    confirmed_match = find_confirmed_match(db, owner_id, trans_data.bank_id, ttype_value, trans_data.amount, trans_data.transaction_date)
+    if confirmed_match:
+        return _response_for(confirmed_match)
 
     # Auto-categorize if not provided: user keyword rules first, then the built-in heuristic.
     if not trans_data.category:
