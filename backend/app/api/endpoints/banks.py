@@ -687,12 +687,11 @@ async def upload_bank_pdf(
         # Add transactions
         transactions_added = 0
         for trans_data in parse_result['transactions']:
-            # Auto-categorize if no category
+            # Auto-categorize if no category -- user's own CategoryRule keywords first
             if not trans_data.get('category'):
-                trans_data['category'] = TransactionService.categorize_transaction(
-                    trans_data['description']
-                )
-            
+                from app.services.categorization import resolve_category
+                trans_data['category'] = resolve_category(db, owner_id, trans_data['description'])
+
             transaction, _reconciled = create_or_reconcile_transaction(
                 db, owner_id, bank.id, trans_data, pdf_statement_id=pdf_statement.id
             )

@@ -156,10 +156,21 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
                     source="alert",
                 )
                 if not deduped:
+                    # Unlike every other creation path, this one never assigned a
+                    # category at all -- relying entirely on a matching AutoRule
+                    # (apply_auto_rules_and_notify below) to ever set one. A
+                    # merchant with no AutoRule but a plain CategoryRule keyword,
+                    # or nothing but the built-in heuristic, stayed permanently
+                    # "Uncategorized" even though the exact same description would
+                    # categorize fine via manual entry or a PDF statement.
+                    from app.services.categorization import resolve_category
+                    category = resolve_category(db, bank.user_id, parsed["description"])
+
                     transaction = Transaction(
                         user_id=bank.user_id, bank_id=bank.id,
                         transaction_date=parsed["transaction_date"], description=parsed["description"],
                         amount=parsed["amount"], transaction_type=parsed["transaction_type"],
+                        category=category,
                         source="alert", is_confirmed=False,
                     )
                     db.add(transaction)

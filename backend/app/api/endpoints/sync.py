@@ -160,9 +160,8 @@ def _process_pdf_task(
         transactions_added = 0
         for trans_data in parse_result["transactions"]:
             if not trans_data.get("category"):
-                trans_data["category"] = TransactionService.categorize_transaction(
-                    trans_data["description"]
-                )
+                from app.services.categorization import resolve_category
+                trans_data["category"] = resolve_category(db, user_id, trans_data["description"])
             transaction, _reconciled = create_or_reconcile_transaction(
                 db, user_id, bank.id, trans_data, pdf_statement_id=pdf_statement.id, source="pdf"
             )
@@ -1025,11 +1024,10 @@ def resync_pdfs(
 
                 # Add transactions
                 for trans_data in parse_result['transactions']:
-                    # Auto-categorize
+                    # Auto-categorize -- user's own CategoryRule keywords first
                     if not trans_data.get('category'):
-                        trans_data['category'] = TransactionService.categorize_transaction(
-                            trans_data['description']
-                        )
+                        from app.services.categorization import resolve_category
+                        trans_data['category'] = resolve_category(db, current_user.id, trans_data['description'])
 
                     transaction, _reconciled = create_or_reconcile_transaction(
                         db, current_user.id, bank.id, trans_data, pdf_statement_id=pdf_statement.id
@@ -1265,7 +1263,8 @@ def update_pdf_password(
     transactions_added = 0
     for trans_data in parse_result["transactions"]:
         if not trans_data.get("category"):
-            trans_data["category"] = TransactionService.categorize_transaction(trans_data["description"])
+            from app.services.categorization import resolve_category
+            trans_data["category"] = resolve_category(db, current_user.id, trans_data["description"])
         transaction, _reconciled = create_or_reconcile_transaction(
             db, current_user.id, bank.id, trans_data, pdf_statement_id=pdf_statement.id, source="pdf"
         )

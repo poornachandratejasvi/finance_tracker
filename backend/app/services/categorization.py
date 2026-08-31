@@ -26,3 +26,15 @@ def match_category(description: Optional[str], rules: List[CategoryRule]) -> Opt
         if kw and kw in d and len(kw) > best_len:
             best, best_len = r.category, len(kw)
     return best
+
+
+def resolve_category(db: Session, user_id: int, description: Optional[str]) -> Optional[str]:
+    """The one place every transaction-creation path should get a fallback
+    category from, instead of calling TransactionService.categorize_transaction
+    directly -- tries the user's own CategoryRule keywords first, THEN the
+    built-in heuristic. Manual create already did this; ingest.py, the Gmail
+    alert sync, and every PDF/statement/CSV-import path didn't, so a user's
+    custom category keyword only applied when they typed a transaction by
+    hand, not when the same merchant arrived through any other source."""
+    from app.services.transaction_service import TransactionService
+    return match_category(description, get_active_rules(db, user_id)) or TransactionService.categorize_transaction(description)

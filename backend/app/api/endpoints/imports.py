@@ -246,12 +246,13 @@ def commit_import(
             category_raw = (_cell(row, payload.mapping.category) or "").strip()
             notes_raw = (_cell(row, payload.mapping.notes) or "").strip()
 
+            from app.services.categorization import resolve_category
             trans_data = {
                 "transaction_date": txn_date,
                 "description": description,
                 "amount": amount,
                 "transaction_type": txn_type,
-                "category": category_raw or TransactionService.categorize_transaction(description),
+                "category": category_raw or resolve_category(db, current_user.id, description),
                 "notes": notes_raw or None,
             }
             transaction, _reconciled = create_or_reconcile_transaction(

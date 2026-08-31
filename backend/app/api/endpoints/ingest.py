@@ -215,7 +215,8 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
     if ttype is None:
         ttype = (mapping.default_type if mapping and mapping.default_type else "debit")
 
-    category = target.get("category") or TransactionService.categorize_transaction(description)
+    from app.services.categorization import resolve_category
+    category = target.get("category") or resolve_category(db, user.id, description)
 
     # Duplicate check (exact match), unless the caller opts to allow duplicates.
     if not allow_duplicates:
