@@ -83,3 +83,56 @@ def get_user_from_api_key(
             headers={"WWW-Authenticate": "X-API-Key"},
         )
     return user
+
+
+def get_current_user_flexible(
+    api_key: Optional[str] = Security(api_key_header),
+    bearer: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    """Accept EITHER a long-lived API token (``X-API-Key`` / ``Bearer ft_...``,
+    see get_user_from_api_key) OR a normal browser-session JWT access token
+    (``Bearer eyJ...``, see auth.get_current_user) on the same endpoint.
+
+    Use this on endpoints an external/unattended integration (a webhook, an
+    automation tool, a second app) needs to call directly with its own minted
+    API token from Settings -> API Access, while the in-app frontend keeps
+    working unchanged with its normal login session -- no separate endpoint
+    or client-side branching needed for the two credential types.
+    """
+    presented = api_key or (bearer.credentials if bearer else None)
+    if presented:
+        user = _resolve_token(db, presented)
+        if user:
+            return user
+
+    if bearer and bearer.credentials:
+        from app.core.security import verify_token
+
+        try:
+            payload = verify_token(bearer.credentials, expected_type="access")
+        except HTTPException:
+            payload = None
+        if payload:
+            user = db.query(User).filter(User.id == int(payload.get("sub", 0))).first()
+            if user and user.is_active:
+                return user
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or missing credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def require_write_access_flexible(current_user: User = Depends(get_current_user_flexible)) -> User:
+    """Same VIEWER-blocking rule as auth.require_write_access, for endpoints
+    that accept either an API token or a session JWT (see get_current_user_flexible)."""
+    from app.models.models import UserRole
+
+    if current_user.role == UserRole.VIEWER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has read-only access",
+        )
+    return current_user

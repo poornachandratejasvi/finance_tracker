@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.api.endpoints.auth import get_current_active_user
+from app.core.api_auth import get_current_user_flexible
 from app.models.models import User
 from app.services.calendar_service import get_upcoming_items
 
@@ -16,7 +16,7 @@ router = APIRouter()
 def get_calendar(
     days_ahead: int = Query(60, ge=1, le=365),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_user_flexible),
 ):
     items = get_upcoming_items(db, current_user.id, days_ahead)
     return [

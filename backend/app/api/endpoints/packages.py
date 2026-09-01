@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.time_utils import utcnow
-from app.api.endpoints.auth import get_current_active_user, require_write_access
+from app.core.api_auth import get_current_user_flexible, require_write_access_flexible
 from app.models.models import User, Package
 
 router = APIRouter()
@@ -97,7 +97,7 @@ def list_carriers():
 
 
 @router.get("/")
-def list_packages(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def list_packages(db: Session = Depends(get_db), current_user: User = Depends(get_current_user_flexible)):
     rows = (
         db.query(Package)
         .filter(Package.user_id == current_user.id)
@@ -108,7 +108,7 @@ def list_packages(db: Session = Depends(get_db), current_user: User = Depends(ge
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def create_package(payload: PackageCreate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
+def create_package(payload: PackageCreate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access_flexible)):
     p = Package(
         user_id=current_user.id,
         source="manual",
@@ -129,7 +129,7 @@ def create_package(payload: PackageCreate, db: Session = Depends(get_db), curren
 
 
 @router.put("/{package_id}")
-def update_package(package_id: int, payload: PackageUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
+def update_package(package_id: int, payload: PackageUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access_flexible)):
     p = _get_package(db, package_id, current_user.id)
     data = payload.dict(exclude_unset=True)
     for field in ("carrier", "tracking_number", "merchant", "order_id", "item_description", "status", "tracking_url", "notes"):
@@ -146,14 +146,14 @@ def update_package(package_id: int, payload: PackageUpdate, db: Session = Depend
 
 
 @router.delete("/{package_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_package(package_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
+def delete_package(package_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access_flexible)):
     p = _get_package(db, package_id, current_user.id)
     db.delete(p)
     db.commit()
 
 
 @router.post("/{package_id}/refresh-now")
-def refresh_package_now(package_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
+def refresh_package_now(package_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access_flexible)):
     from app.services.courier_trackers import track_package, CARRIER_TRACKERS
 
     p = _get_package(db, package_id, current_user.id)

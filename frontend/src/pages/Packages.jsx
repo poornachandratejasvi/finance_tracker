@@ -15,10 +15,20 @@ import {
 } from '../services/api';
 
 const blank = {
-  carrier: 'amazon', tracking_number: '', merchant: '', order_id: '',
+  carrier: 'amazon', customCarrierName: '', tracking_number: '', merchant: '', order_id: '',
   item_description: '', status: 'ordered', expected_delivery_date: '',
   tracking_url: '', notes: '',
 };
+
+// Turns a free-typed courier name ("Shree Maruti Courier") into a stable
+// storage key ("shree_maruti_courier") -- consistent with the fixed carriers'
+// own key style (india_post, ecom_express) so custom couriers group/sort the
+// same way instead of colliding on the single generic "other" bucket.
+const slugifyCarrier = (name) =>
+  name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'other';
+
+const carrierDisplayLabel = (key) =>
+  (key || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 const STATUS_META = {
   ordered: { label: 'Ordered', color: 'default' },
@@ -55,11 +65,16 @@ export default function Packages() {
   };
   useEffect(() => { load(); }, []);
 
+  const knownCarrierKeys = carriers.map((c) => c.key);
+
   const openNew = () => { setEditing(null); setForm(blank); setOpen(true); };
   const openEdit = (p) => {
     setEditing(p.id);
+    const isKnown = knownCarrierKeys.length === 0 || knownCarrierKeys.includes(p.carrier);
     setForm({
-      carrier: p.carrier, tracking_number: p.tracking_number || '', merchant: p.merchant || '',
+      carrier: isKnown ? p.carrier : 'custom',
+      customCarrierName: isKnown ? '' : carrierDisplayLabel(p.carrier),
+      tracking_number: p.tracking_number || '', merchant: p.merchant || '',
       order_id: p.order_id || '', item_description: p.item_description || '', status: p.status,
       expected_delivery_date: p.expected_delivery_date ? p.expected_delivery_date.slice(0, 10) : '',
       tracking_url: p.tracking_url || '', notes: p.notes || '',
@@ -70,8 +85,14 @@ export default function Packages() {
   const save = async () => {
     setErr(''); setMsg('');
     if (!form.carrier) { setErr('Carrier is required.'); return; }
+    if (form.carrier === 'custom' && !form.customCarrierName.trim()) {
+      setErr('Enter the courier service name.'); return;
+    }
+    const { customCarrierName, ...rest } = form;
     const payload = {
-      ...form,
+      ...rest,
+      carrier: form.carrier === 'custom' ? slugifyCarrier(customCarrierName) : form.carrier,
+      merchant: form.carrier === 'custom' && !form.merchant ? customCarrierName.trim() : form.merchant,
       expected_delivery_date: form.expected_delivery_date || null,
     };
     try {
@@ -127,7 +148,7 @@ export default function Packages() {
     </Paper>
   );
 
-  const carrierMeta = (key) => carriers.find((c) => c.key === key) || {};
+  const carrierMeta = (key) => carriers.find((c) => c.key === key) || { label: carrierDisplayLabel(key), has_live_tracking: false };
 
   return (
     <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
@@ -244,7 +265,16 @@ export default function Packages() {
             {(carriers.length ? carriers : [{ key: 'amazon', label: 'Amazon.in' }, { key: 'other', label: 'Other' }]).map((c) => (
               <MenuItem key={c.key} value={c.key}>{c.label}</MenuItem>
             ))}
+            <MenuItem value="custom">Custom courier…</MenuItem>
           </TextField>
+          {form.carrier === 'custom' && (
+            <TextField
+              label="Courier service name" value={form.customCarrierName} fullWidth autoFocus
+              placeholder="e.g. Shree Maruti Courier"
+              helperText="Any Indian (or other) courier not in the list above."
+              onChange={(e) => setForm({ ...form, customCarrierName: e.target.value })}
+            />
+          )}
           <TextField label="Merchant" value={form.merchant} fullWidth onChange={(e) => setForm({ ...form, merchant: e.target.value })} />
           <TextField label="Item description" value={form.item_description} fullWidth onChange={(e) => setForm({ ...form, item_description: e.target.value })} />
           <TextField label="Tracking number" value={form.tracking_number} fullWidth onChange={(e) => setForm({ ...form, tracking_number: e.target.value })} />

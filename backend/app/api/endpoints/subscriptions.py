@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.time_utils import utcnow
-from app.api.endpoints.auth import get_current_active_user, require_write_access
+from app.core.api_auth import get_current_user_flexible, require_write_access_flexible
 from app.models.models import User, Subscription
 
 router = APIRouter()
@@ -90,13 +90,13 @@ def _get_subscription(db: Session, subscription_id: int, user_id: int) -> Subscr
 
 
 @router.get("/")
-def list_subscriptions(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+def list_subscriptions(db: Session = Depends(get_db), current_user: User = Depends(get_current_user_flexible)):
     rows = db.query(Subscription).filter(Subscription.user_id == current_user.id).order_by(Subscription.due_date.asc()).all()
     return [_subscription_dict(s) for s in rows]
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def create_subscription(payload: SubscriptionCreate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
+def create_subscription(payload: SubscriptionCreate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access_flexible)):
     due_date = _parse_date(payload.due_date)
     if not due_date:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid due_date is required.")
@@ -117,7 +117,7 @@ def create_subscription(payload: SubscriptionCreate, db: Session = Depends(get_d
 
 
 @router.put("/{subscription_id}")
-def update_subscription(subscription_id: int, payload: SubscriptionUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
+def update_subscription(subscription_id: int, payload: SubscriptionUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access_flexible)):
     s = _get_subscription(db, subscription_id, current_user.id)
     data = payload.dict(exclude_unset=True)
     for field in ("name", "item_type", "amount", "recurrence", "notes", "is_active"):
@@ -134,14 +134,14 @@ def update_subscription(subscription_id: int, payload: SubscriptionUpdate, db: S
 
 
 @router.delete("/{subscription_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_subscription(subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
+def delete_subscription(subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access_flexible)):
     s = _get_subscription(db, subscription_id, current_user.id)
     db.delete(s)
     db.commit()
 
 
 @router.post("/from-pattern", status_code=status.HTTP_201_CREATED)
-def create_subscription_from_pattern(payload: PatternInput, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
+def create_subscription_from_pattern(payload: PatternInput, db: Session = Depends(get_db), current_user: User = Depends(require_write_access_flexible)):
     """One-click 'Track as Subscription' from a detected recurring-transaction
     pattern -- same due-date math as recurring_detection.check_upcoming_renewals."""
     last_date = _parse_date(payload.last_date)
