@@ -21,7 +21,7 @@ def refresh_active_packages():
     from app.core.database import SessionLocal
     from app.core.time_utils import utcnow
     from app.models.models import Package
-    from app.services.courier_trackers import track_package, CARRIER_TRACKERS
+    from app.services.courier_trackers import track_package, LIVE_TRACKING_CARRIERS
 
     db = SessionLocal()
     refreshed = 0
@@ -31,7 +31,7 @@ def refresh_active_packages():
             db.query(Package)
             .filter(
                 Package.status != "delivered",
-                Package.carrier.in_(list(CARRIER_TRACKERS.keys())),
+                Package.carrier.in_(list(LIVE_TRACKING_CARRIERS)),
                 Package.tracking_number.isnot(None),
             )
             .all()

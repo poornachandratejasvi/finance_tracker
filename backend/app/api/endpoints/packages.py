@@ -15,19 +15,31 @@ from app.models.models import User, Package
 
 router = APIRouter()
 
-CARRIERS = [
-    {"key": "amazon", "label": "Amazon.in", "has_live_tracking": False},
-    {"key": "flipkart", "label": "Flipkart", "has_live_tracking": False},
-    {"key": "delhivery", "label": "Delhivery", "has_live_tracking": True},
-    {"key": "india_post", "label": "India Post", "has_live_tracking": True},
-    {"key": "bluedart", "label": "Bluedart", "has_live_tracking": False},
-    {"key": "dtdc", "label": "DTDC", "has_live_tracking": False},
-    {"key": "ekart", "label": "Ekart", "has_live_tracking": False},
-    {"key": "xpressbees", "label": "Xpressbees", "has_live_tracking": False},
-    {"key": "ecom_express", "label": "Ecom Express", "has_live_tracking": False},
-    {"key": "shadowfax", "label": "Shadowfax", "has_live_tracking": False},
-    {"key": "other", "label": "Other", "has_live_tracking": False},
-]
+_CARRIER_LABELS = {
+    "amazon": "Amazon.in",
+    "flipkart": "Flipkart",
+    "delhivery": "Delhivery",
+    "india_post": "India Post",
+    "bluedart": "Bluedart",
+    "dtdc": "DTDC",
+    "ekart": "Ekart",
+    "xpressbees": "Xpressbees",
+    "ecom_express": "Ecom Express",
+    "shadowfax": "Shadowfax",
+    "other": "Other",
+}
+
+
+def _carriers() -> list:
+    # has_live_tracking is derived from courier_trackers.LIVE_TRACKING_CARRIERS
+    # (not hand-duplicated here) so this list can never drift out of sync with
+    # which carriers actually have a working tracker function.
+    from app.services.courier_trackers import LIVE_TRACKING_CARRIERS
+
+    return [
+        {"key": key, "label": label, "has_live_tracking": key in LIVE_TRACKING_CARRIERS}
+        for key, label in _CARRIER_LABELS.items()
+    ]
 
 
 def _parse_date(s: Optional[str]) -> Optional[datetime]:
@@ -93,7 +105,7 @@ def _get_package(db: Session, package_id: int, user_id: int) -> Package:
 
 @router.get("/carriers")
 def list_carriers():
-    return CARRIERS
+    return _carriers()
 
 
 @router.get("/")
@@ -154,10 +166,10 @@ def delete_package(package_id: int, db: Session = Depends(get_db), current_user:
 
 @router.post("/{package_id}/refresh-now")
 def refresh_package_now(package_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access_flexible)):
-    from app.services.courier_trackers import track_package, CARRIER_TRACKERS
+    from app.services.courier_trackers import track_package, LIVE_TRACKING_CARRIERS
 
     p = _get_package(db, package_id, current_user.id)
-    if p.carrier not in CARRIER_TRACKERS or not p.tracking_number:
+    if p.carrier not in LIVE_TRACKING_CARRIERS or not p.tracking_number:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This carrier doesn't support live tracking, or no tracking number is set.")
 
     result = track_package(p.carrier, p.tracking_number)
