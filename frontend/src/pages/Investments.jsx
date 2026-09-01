@@ -4,9 +4,6 @@ import {
   Container,
   Typography,
   Paper,
-  Grid,
-  Card,
-  CardContent,
   Button,
   IconButton,
   Dialog,
@@ -22,7 +19,10 @@ import {
   TableBody,
   Alert,
   Collapse,
+  useTheme,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip as ReTooltip } from 'recharts';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -65,8 +65,11 @@ const ENTRY_TYPES = [
 
 const emptyAccountForm = { name: '', category: 'mutual_fund' };
 const emptyEntryForm = { entry_type: 'buy', amount: '', quantity: '', price_per_unit: '', description: '' };
+const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+const CAT_COLORS = ['#1aa565', '#3f78de', '#e08a2a', '#d666c4', '#2ab6c9', '#c94f4f', '#7c5cd6', '#9aa32a', '#e05a8a', '#5a9ae0'];
 
 export default function Investments() {
+  const theme = useTheme();
   const [data, setData] = useState(null);
   const [expanded, setExpanded] = useState({});
   const [entriesByAccount, setEntriesByAccount] = useState({});
@@ -166,28 +169,70 @@ export default function Investments() {
 
   const entryTypeMeta = ENTRY_TYPES.find((t) => t.value === entryForm.entry_type) || {};
 
+  const maxCatValue = data?.categories?.length ? Math.max(...data.categories.map((c) => c.total_value || 0)) : 0;
+  const donutData = (data?.categories || [])
+    .map((cat, idx) => ({
+      name: (CATEGORY_META[cat.category] || { label: cat.category }).label,
+      value: cat.total_value || 0,
+      color: CAT_COLORS[idx % CAT_COLORS.length],
+    }))
+    .filter((d) => d.value > 0);
+
   return (
-    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Investments</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => openAccountDialog()}>
+    <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+        <Box>
+          <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5, mb: 0.25 }}>Investments</Typography>
+          <Typography variant="body1" color="text.secondary">Every fund, stock, and asset in one place.</Typography>
+        </Box>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => openAccountDialog()} sx={{ flexShrink: 0 }}>
           Add Account
         </Button>
       </Box>
 
-      {err && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setErr('')}>{err}</Alert>}
-      {msg && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setMsg('')}>{msg}</Alert>}
+      {err && <Alert severity="error" sx={{ mb: 2, mt: 2 }} onClose={() => setErr('')}>{err}</Alert>}
+      {msg && <Alert severity="success" sx={{ mb: 2, mt: 2 }} onClose={() => setMsg('')}>{msg}</Alert>}
 
       {data && (
-        <Card variant="outlined" sx={{ mb: 3 }}>
-          <CardContent>
-            <Typography variant="caption" color="text.secondary">Total Investments Value</Typography>
-            <Typography variant="h4">{data.total_value.toLocaleString()}</Typography>
-            <Typography variant="caption" color="text.secondary">
-              Tracked separately from your bank accounts and net worth.
-            </Typography>
-          </CardContent>
-        </Card>
+        <Paper variant="outlined" sx={{
+          p: 2.75, mb: 3, mt: 2, borderRadius: 4, maxWidth: 320,
+          backgroundImage: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.22 : 0.14)}, ${alpha(theme.palette.primary.main, 0)} 65%)`,
+        }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 800, fontSize: 11.5 }}>Total Investments Value</Typography>
+          <Typography variant="h4" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', mt: 0.5 }}>{inr(data.total_value)}</Typography>
+          <Typography variant="caption" color="text.secondary">Tracked separately from your bank accounts and net worth.</Typography>
+        </Paper>
+      )}
+
+      {data && donutData.length > 0 && (
+        <Paper variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 4 }}>
+          <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>Asset Allocation</Typography>
+          <Box display="flex" flexWrap="wrap" alignItems="center" gap={4}>
+            <Box sx={{ width: 200, height: 200, position: 'relative', flexShrink: 0, mx: 'auto' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={donutData} dataKey="value" nameKey="name" innerRadius="68%" outerRadius="100%" paddingAngle={2} startAngle={90} endAngle={-270} isAnimationActive stroke="none">
+                    {donutData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                  </Pie>
+                  <ReTooltip formatter={(v) => inr(v)} />
+                </PieChart>
+              </ResponsiveContainer>
+            </Box>
+            <Box sx={{ flex: '1 1 240px', minWidth: 220, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {donutData.map((d, i) => {
+                const pct = data.total_value > 0 ? (d.value / data.total_value) * 100 : 0;
+                return (
+                  <Box key={i} display="flex" alignItems="center" gap={1.5}>
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: d.color, flexShrink: 0 }} />
+                    <Typography variant="body2" sx={{ flex: 1 }} noWrap>{d.name}</Typography>
+                    <Typography variant="body2" fontWeight={700} sx={{ minWidth: 42, textAlign: 'right' }}>{pct.toFixed(0)}%</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ minWidth: 90, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{inr(d.value)}</Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        </Paper>
       )}
 
       {data && data.categories.length === 0 && (
@@ -196,16 +241,21 @@ export default function Investments() {
         </Typography>
       )}
 
-      {data && data.categories.map((cat) => {
+      {data && data.categories.map((cat, catIdx) => {
         const meta = CATEGORY_META[cat.category] || { label: cat.category, icon: <SavingsIcon /> };
+        const barColor = CAT_COLORS[catIdx % CAT_COLORS.length];
+        const barPct = maxCatValue > 0 ? Math.min(100, (cat.total_value / maxCatValue) * 100) : 0;
         return (
-          <Paper key={cat.category} sx={{ p: 2, mb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <Paper variant="outlined" key={cat.category} sx={{ p: 2.5, mb: 2, borderRadius: 4 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
               {meta.icon}
-              <Typography variant="h6">{meta.label}</Typography>
+              <Typography variant="h6" fontWeight={800}>{meta.label}</Typography>
               <Box sx={{ flexGrow: 1 }} />
-              <Typography variant="h6">{cat.total_value.toLocaleString()}</Typography>
+              <Typography variant="h6" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums' }}>{inr(cat.total_value)}</Typography>
               <Button size="small" onClick={() => openAccountDialog(cat.category)}>+ Add</Button>
+            </Box>
+            <Box sx={{ mb: 1.5, height: 4, borderRadius: 2, bgcolor: theme.palette.action.hover, overflow: 'hidden' }}>
+              <Box sx={{ height: '100%', width: `${barPct}%`, borderRadius: 2, bgcolor: barColor }} />
             </Box>
             {cat.accounts.map((acc) => (
               <Box key={acc.id} sx={{ pl: 1 }}>
@@ -216,7 +266,7 @@ export default function Investments() {
                   <Typography sx={{ flexGrow: 1 }}>
                     {acc.name} {acc.source === 'auto' && <Typography component="span" variant="caption" color="text.secondary">(auto-detected)</Typography>}
                   </Typography>
-                  <Typography>{acc.current_value.toLocaleString()}</Typography>
+                  <Typography fontWeight={600} sx={{ fontVariantNumeric: 'tabular-nums' }}>{inr(acc.current_value)}</Typography>
                   <Button size="small" onClick={() => openEntryDialog(acc)}>+ Entry</Button>
                   <IconButton size="small" onClick={() => onDeleteAccount(acc.id)}>
                     <DeleteIcon fontSize="small" />

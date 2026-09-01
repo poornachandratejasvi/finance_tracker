@@ -174,7 +174,7 @@ const FieldMappingPage = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
+      <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5 }} gutterBottom>
         PDF Field Mapping
       </Typography>
 

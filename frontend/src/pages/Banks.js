@@ -680,7 +680,7 @@ function Banks() {
   return (
     <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">Bank Management</Typography>
+        <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5 }}>Bank Management</Typography>
         <Box display="flex" alignItems="center" gap={2}>
           <FormControlLabel
             control={

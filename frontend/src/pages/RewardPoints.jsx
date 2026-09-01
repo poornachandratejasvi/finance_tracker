@@ -5,8 +5,6 @@ import {
   Typography,
   Paper,
   Grid,
-  Card,
-  CardContent,
   Chip,
   Button,
   IconButton,
@@ -127,31 +125,35 @@ export default function RewardPoints() {
     });
 
   return (
-    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Reward Points</Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => openDialog()} disabled={banks.length === 0}>
+    <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+        <Box>
+          <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5, mb: 0.25 }}>Reward Points</Typography>
+          <Typography variant="body1" color="text.secondary">Balances and what's about to expire, per card.</Typography>
+        </Box>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => openDialog()} disabled={banks.length === 0} sx={{ flexShrink: 0 }}>
           Add Entry
         </Button>
       </Box>
 
-      {err && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setErr('')}>{err}</Alert>}
-      {msg && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setMsg('')}>{msg}</Alert>}
+      {err && <Alert severity="error" sx={{ mb: 2, mt: 2 }} onClose={() => setErr('')}>{err}</Alert>}
+      {msg && <Alert severity="success" sx={{ mb: 2, mt: 2 }} onClose={() => setMsg('')}>{msg}</Alert>}
 
       {summaries.length === 0 && (
-        <Typography color="text.secondary">No credit card accounts found. Add one under Banks first.</Typography>
+        <Typography color="text.secondary" sx={{ mt: 2 }}>No credit card accounts found. Add one under Banks first.</Typography>
       )}
 
-      <Grid container spacing={2} sx={{ mb: 3 }}>
+      <Grid container spacing={2} sx={{ mb: 3, mt: 0.5 }}>
         {summaries.map((s) => (
           <Grid item xs={12} sm={6} md={4} key={s.bank_id}>
-            <Card variant="outlined">
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <CardGiftcardIcon color="primary" fontSize="small" />
+            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 4, height: '100%' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.5 }}>
+                  <Box sx={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'primary.main', color: '#fff', flexShrink: 0 }}>
+                    <CardGiftcardIcon sx={{ fontSize: 18 }} />
+                  </Box>
                   <Typography variant="subtitle1" fontWeight={700}>{s.bank_name}</Typography>
                 </Box>
-                <Typography variant="h4">{s.balance.toLocaleString()}</Typography>
+                <Typography variant="h4" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums' }}>{s.balance.toLocaleString()}</Typography>
                 <Typography variant="caption" color="text.secondary">points</Typography>
                 {s.expiring.length > 0 ? (
                   <Box sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -172,8 +174,7 @@ export default function RewardPoints() {
                 <Button size="small" sx={{ mt: 1.5 }} onClick={() => openDialog(s.bank_id)}>
                   + Add entry
                 </Button>
-              </CardContent>
-            </Card>
+            </Paper>
           </Grid>
         ))}
       </Grid>

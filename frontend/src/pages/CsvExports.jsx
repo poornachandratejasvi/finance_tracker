@@ -148,7 +148,7 @@ const CsvExports = () => {
 
   return (
     <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
-      <Typography variant="h4" sx={{ mb: 3 }}>CSV Exports</Typography>
+      <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5, mb: 3 }}>CSV Exports</Typography>
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>{success}</Alert>}
 

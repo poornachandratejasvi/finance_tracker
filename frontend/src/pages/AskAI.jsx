@@ -55,7 +55,7 @@ export default function AskAI() {
     <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <AutoAwesomeIcon color="primary" />
-        <Typography variant="h4">Ask AI</Typography>
+        <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5 }}>Ask AI</Typography>
       </Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Ask questions about your transactions, spending, and finances in plain English.

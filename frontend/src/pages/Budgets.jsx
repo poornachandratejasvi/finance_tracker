@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   Container, Typography, Paper, Box, Button, TextField, IconButton, Alert,
-  LinearProgress, Grid, Divider, MenuItem, Chip,
+  Divider, MenuItem, Chip, useTheme,
 } from '@mui/material';
-import { Add, Delete, Save } from '@mui/icons-material';
+import { Add, Delete, Save, AccountBalanceWallet, TrendingDown, Savings } from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
 import { getBudgetSettings, saveBudgetSettings, getBudgetStatus } from '../services/api';
+import CategoryIcon from '../components/CategoryIcon.jsx';
+import { useCategoryMeta } from '../utils/categories';
 
 const CATEGORIES = [
   'Food & Dining', 'Shopping', 'Transportation', 'Bills & Utilities', 'Entertainment',
@@ -14,6 +17,8 @@ const CATEGORIES = [
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
 export default function Budgets() {
+  const theme = useTheme();
+  const { getMeta } = useCategoryMeta();
   const [rows, setRows] = useState([]);           // [{category, monthly_limit, alert_at_pct}]
   const [discordAlerts, setDiscordAlerts] = useState(true);
   const [status, setStatus] = useState(null);      // {period, budgets:[{category,spent,pct,over,...}]}
@@ -54,13 +59,35 @@ export default function Budgets() {
   };
 
   const statusFor = (cat) => (status?.budgets || []).find((b) => b.category === cat);
-  const barColor = (pct, over) => (over ? 'error' : pct >= 80 ? 'warning' : 'success');
+  const barColorFor = (pct, over) => (over ? theme.palette.error.main : pct >= 80 ? theme.palette.warning.main : theme.palette.success.main);
+
+  const totalSpent = status?.total_spent || 0;
+  const totalLimit = status?.total_limit || 0;
+  const remaining = totalLimit - totalSpent;
+
+  const heroCard = (label, value, mode, Icon) => {
+    const color = mode === 'over' ? theme.palette.error.main : mode === 'remaining' ? (remaining < 0 ? theme.palette.error.main : theme.palette.success.main) : theme.palette.primary.main;
+    return (
+      <Paper variant="outlined" sx={{
+        p: 2.75, flex: '1 1 220px', minWidth: 220, borderRadius: 4,
+        backgroundImage: `linear-gradient(135deg, ${alpha(color, theme.palette.mode === 'dark' ? 0.22 : 0.14)}, ${alpha(color, 0)} 65%)`,
+      }}>
+        <Box display="flex" alignItems="center" gap={1.25} mb={1.5}>
+          <Box sx={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: color, color: '#fff', flexShrink: 0 }}>
+            <Icon sx={{ fontSize: 20 }} />
+          </Box>
+          <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 800, fontSize: 11.5 }}>{label}</Typography>
+        </Box>
+        <Typography variant="h4" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', color, lineHeight: 1.15 }}>{inr(value)}</Typography>
+      </Paper>
+    );
+  };
 
   return (
-    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
-      <Typography variant="h4" gutterBottom>Budgets</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Set a monthly spend limit per category. {status?.period ? `Tracking ${status.period}.` : ''} Alerts are sent to Discord when a category crosses its threshold (configure the webhook in Settings).
+    <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
+      <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5, mb: 0.25 }}>Budgets</Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+        Set a monthly spend limit per category{status?.period ? ` — tracking ${status.period}` : ''}. Alerts go to Discord when a category crosses its threshold.
       </Typography>
 
       {msg && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setMsg('')}>{msg}</Alert>}
@@ -68,32 +95,43 @@ export default function Budgets() {
 
       {/* Current-month progress */}
       {status && (status.budgets || []).length > 0 && (
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="h6">This month</Typography>
-            <Typography variant="body2" color="text.secondary">
-              {inr(status.total_spent)} of {inr(status.total_limit)}
-            </Typography>
+        <>
+          <Box display="flex" gap={2} flexWrap="wrap" mb={3}>
+            {heroCard('Total Budgeted', totalLimit, 'limit', AccountBalanceWallet)}
+            {heroCard('Spent So Far', totalSpent, 'over', TrendingDown)}
+            {heroCard('Remaining', remaining, 'remaining', Savings)}
           </Box>
-          <Grid container spacing={2}>
-            {status.budgets.map((b) => (
-              <Grid item xs={12} sm={6} key={b.category}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                  <Typography variant="body2">{b.category}</Typography>
-                  <Typography variant="body2" color={b.over ? 'error' : 'text.secondary'}>
-                    {inr(b.spent)} / {inr(b.monthly_limit)} {b.over && <Chip label="over" size="small" color="error" sx={{ ml: 0.5, height: 18 }} />}
-                  </Typography>
+
+          <Paper variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 4 }}>
+            <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>This Month by Category</Typography>
+            {status.budgets.map((b) => {
+              const meta = getMeta(b.category);
+              const barColor = barColorFor(b.pct, b.over);
+              return (
+                <Box key={b.category} sx={{ py: 1.1, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                  <Box display="flex" alignItems="center" gap={1.25} mb={0.75}>
+                    <CategoryIcon name={b.category} size={30} meta={meta} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600} noWrap>{b.category}</Typography>
+                    </Box>
+                    <Typography variant="body2" fontWeight={700} sx={{ fontVariantNumeric: 'tabular-nums', color: b.over ? 'error.main' : 'text.primary' }}>
+                      {inr(b.spent)} <Typography component="span" variant="caption" color="text.secondary">/ {inr(b.monthly_limit)}</Typography>
+                    </Typography>
+                    {b.over && <Chip label="Over" size="small" color="error" sx={{ height: 20, fontWeight: 700 }} />}
+                  </Box>
+                  <Box sx={{ height: 6, borderRadius: 3, bgcolor: theme.palette.action.hover, overflow: 'hidden' }}>
+                    <Box sx={{ height: '100%', width: `${Math.min(100, b.pct)}%`, borderRadius: 3, bgcolor: barColor, transition: 'width 0.4s ease' }} />
+                  </Box>
                 </Box>
-                <LinearProgress variant="determinate" value={Math.min(100, b.pct)} color={barColor(b.pct, b.over)} sx={{ height: 8, borderRadius: 1 }} />
-              </Grid>
-            ))}
-          </Grid>
-        </Paper>
+              );
+            })}
+          </Paper>
+        </>
       )}
 
       {/* Config */}
-      <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>Configure budgets</Typography>
+      <Paper variant="outlined" sx={{ p: 3, borderRadius: 4 }}>
+        <Typography variant="h6" fontWeight={800} gutterBottom>Configure Budgets</Typography>
         {rows.map((row, i) => {
           const st = statusFor(row.category);
           return (

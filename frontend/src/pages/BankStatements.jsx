@@ -57,7 +57,7 @@ export default function BankStatements() {
     <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h4" gutterBottom>Bank Statement Dashboard</Typography>
+          <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5 }} gutterBottom>Bank Statement Dashboard</Typography>
           <Typography variant="body2" color="text.secondary">
             Track when each bank statement was last received and when the next one is expected.
           </Typography>

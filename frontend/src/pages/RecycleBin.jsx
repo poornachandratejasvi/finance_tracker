@@ -74,7 +74,7 @@ export default function RecycleBin() {
   return (
     <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-        <Typography variant="h4">Recycle Bin</Typography>
+        <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5 }}>Recycle Bin</Typography>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           <Chip label={`${items.length} deleted`} size="small" />
           <Tooltip title="Refresh"><span><IconButton onClick={load}><Refresh /></IconButton></span></Tooltip>

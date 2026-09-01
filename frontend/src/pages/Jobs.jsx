@@ -53,7 +53,7 @@ export default function Jobs() {
   return (
     <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-        <Typography variant="h4">Jobs & Activity</Typography>
+        <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5 }}>Jobs & Activity</Typography>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           <Chip label={`${runningCount || 0} running`} color={runningCount > 0 ? 'warning' : 'default'} size="small" />
           <Tooltip title="Refresh"><span><IconButton onClick={refresh}><Refresh /></IconButton></span></Tooltip>

@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import {
   Container, Typography, Paper, Box, Button, TextField, IconButton, Alert,
   LinearProgress, Grid, Dialog, DialogTitle, DialogContent, DialogActions, Chip,
-  FormControlLabel, Switch, MenuItem,
+  FormControlLabel, Switch, MenuItem, useTheme,
 } from '@mui/material';
-import { Add, Delete, Edit, Savings, CheckCircle, RadioButtonUnchecked } from '@mui/icons-material';
+import { Add, Delete, Edit, Savings, CheckCircle, RadioButtonUnchecked, AccountBalanceWallet, Flag } from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
 import { listGoals, createGoal, updateGoal, deleteGoal, sweepRoundups, contributeToGoal } from '../services/api';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -14,6 +15,7 @@ const blank = {
 };
 
 export default function Goals() {
+  const theme = useTheme();
   const [goals, setGoals] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -98,15 +100,45 @@ export default function Goals() {
     }
   };
 
+  const totalSaved = goals.reduce((s, g) => s + (g.current_amount || 0), 0);
+  const totalTarget = goals.reduce((s, g) => s + (g.target_amount || 0), 0);
+  const overallPct = totalTarget > 0 ? Math.round((totalSaved / totalTarget) * 100) : 0;
+
+  const heroCard = (label, value, color, Icon, isPct) => (
+    <Paper variant="outlined" sx={{
+      p: 2.75, flex: '1 1 220px', minWidth: 220, borderRadius: 4,
+      backgroundImage: `linear-gradient(135deg, ${alpha(color, theme.palette.mode === 'dark' ? 0.22 : 0.14)}, ${alpha(color, 0)} 65%)`,
+    }}>
+      <Box display="flex" alignItems="center" gap={1.25} mb={1.5}>
+        <Box sx={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: color, color: '#fff', flexShrink: 0 }}>
+          <Icon sx={{ fontSize: 20 }} />
+        </Box>
+        <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 800, fontSize: 11.5 }}>{label}</Typography>
+      </Box>
+      <Typography variant="h4" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', color, lineHeight: 1.15 }}>{isPct ? `${value}%` : inr(value)}</Typography>
+    </Paper>
+  );
+
   return (
-    <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h4">Savings Goals</Typography>
-        <Button variant="contained" startIcon={<Add />} onClick={openNew}>New Goal</Button>
+    <Container maxWidth={false} sx={{ mt: 3, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+        <Box>
+          <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5, mb: 0.25 }}>Savings Goals</Typography>
+          <Typography variant="body1" color="text.secondary">Track what you're saving for and how close you are.</Typography>
+        </Box>
+        <Button variant="contained" startIcon={<Add />} onClick={openNew} sx={{ flexShrink: 0 }}>New Goal</Button>
       </Box>
 
       {msg && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setMsg('')}>{msg}</Alert>}
       {err && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setErr('')}>{err}</Alert>}
+
+      {goals.length > 0 && (
+        <Box display="flex" gap={2} flexWrap="wrap" mb={3} mt={2}>
+          {heroCard('Total Saved', totalSaved, theme.palette.success.main, AccountBalanceWallet, false)}
+          {heroCard('Total Target', totalTarget, theme.palette.primary.main, Flag, false)}
+          {heroCard('Overall Progress', overallPct, theme.palette.primary.main, Savings, true)}
+        </Box>
+      )}
 
       {goals.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
@@ -116,22 +148,23 @@ export default function Goals() {
         <Grid container spacing={2}>
           {goals.map((g) => (
             <Grid item xs={12} sm={6} md={4} key={g.id}>
-              <Paper sx={{ p: 2.5, height: '100%' }}>
+              <Paper variant="outlined" sx={{ p: 2.5, height: '100%', borderRadius: 4 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: g.color }} />
-                    <Typography variant="subtitle1" fontWeight={600}>{g.name}</Typography>
+                    <Typography variant="subtitle1" fontWeight={700}>{g.name}</Typography>
                   </Box>
                   <Box>
                     <IconButton size="small" onClick={() => openEdit(g)}><Edit fontSize="small" /></IconButton>
                     <IconButton size="small" color="error" onClick={() => remove(g.id)}><Delete fontSize="small" /></IconButton>
                   </Box>
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1.5, mb: 0.5 }}>
-                  <Typography variant="body2" color="text.secondary">{inr(g.current_amount)} / {inr(g.target_amount)}</Typography>
-                  <Typography variant="body2" fontWeight={600}>{g.pct}%</Typography>
+                <Typography variant="h5" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', mt: 1.5 }}>{inr(g.current_amount)}</Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>of {inr(g.target_amount)} target</Typography>
+                  <Typography variant="body2" fontWeight={700} sx={{ color: g.color }}>{g.pct}%</Typography>
                 </Box>
-                <LinearProgress variant="determinate" value={Math.min(100, g.pct)} sx={{ height: 8, borderRadius: 1, '& .MuiLinearProgress-bar': { bgcolor: g.color } }} />
+                <LinearProgress variant="determinate" value={Math.min(100, g.pct)} sx={{ height: 8, borderRadius: 4, '& .MuiLinearProgress-bar': { bgcolor: g.color, borderRadius: 4 } }} />
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
                   <Typography variant="caption" color="text.secondary">{inr(g.remaining)} to go</Typography>
                   {g.target_date && <Chip label={`by ${g.target_date.slice(0, 10)}`} size="small" variant="outlined" />}

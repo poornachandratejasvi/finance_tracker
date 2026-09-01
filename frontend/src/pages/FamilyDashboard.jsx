@@ -40,7 +40,7 @@ export default function FamilyDashboard() {
     <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, sm: 3, md: 4 } }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
         <GroupsIcon color="primary" />
-        <Typography variant="h4">Family Dashboard</Typography>
+        <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5 }}>Family Dashboard</Typography>
       </Box>
 
       {err && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}

@@ -105,9 +105,12 @@ export default function Vehicles() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" fontWeight={700}>Vehicles</Typography>
-        <Button variant="contained" startIcon={<Add />} onClick={openNewVehicle}>Add Vehicle</Button>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+        <Box>
+          <Typography variant="h3" fontWeight={800} sx={{ letterSpacing: -0.5, mb: 0.25 }}>Vehicles</Typography>
+          <Typography variant="body1" color="text.secondary">Registrations, insurance, and what's expiring soon.</Typography>
+        </Box>
+        <Button variant="contained" startIcon={<Add />} onClick={openNewVehicle} sx={{ flexShrink: 0 }}>Add Vehicle</Button>
       </Box>
 
       {err && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setErr('')}>{err}</Alert>}
@@ -121,7 +124,7 @@ export default function Vehicles() {
       )}
 
       {vehicles.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
+        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: 4 }}>
           <DirectionsCar sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
           <Typography color="text.secondary">No vehicles added yet.</Typography>
         </Paper>
@@ -129,7 +132,7 @@ export default function Vehicles() {
         <Grid container spacing={2}>
           {vehicles.map((v) => (
             <Grid item xs={12} md={6} lg={4} key={v.id}>
-              <Paper sx={{ p: 2.5 }}>
+              <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 4, height: '100%' }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <Box>
                     <Typography fontWeight={700}>{v.nickname || v.registration_number}</Typography>
