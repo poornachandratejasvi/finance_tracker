@@ -3,8 +3,8 @@ import {
   Paper, Box, Typography, Table, TableHead, TableRow, TableCell, TableBody,
   TableContainer, IconButton, Tooltip, CircularProgress, Alert, Button, Snackbar,
 } from '@mui/material';
-import { AutoAwesome, Refresh, Add } from '@mui/icons-material';
-import { detectRecurringTransactions, createWatcher } from '../services/api';
+import { AutoAwesome, Refresh, Add, CalendarMonth } from '@mui/icons-material';
+import { detectRecurringTransactions, createWatcher, createSubscriptionFromPattern } from '../services/api';
 
 const apiError = (e, fallback) => {
   const detail = e?.response?.data?.detail;
@@ -18,6 +18,7 @@ export default function RecurringTransactionsCard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creatingIdx, setCreatingIdx] = useState(null);
+  const [trackingIdx, setTrackingIdx] = useState(null);
   const [success, setSuccess] = useState('');
 
   const load = useCallback(async () => {
@@ -51,6 +52,18 @@ export default function RecurringTransactionsCard() {
       setError(apiError(e, 'Failed to create watcher'));
     } finally {
       setCreatingIdx(null);
+    }
+  };
+
+  const handleTrackAsSubscription = async (pattern, idx) => {
+    setTrackingIdx(idx);
+    try {
+      await createSubscriptionFromPattern(pattern);
+      setSuccess(`"${pattern.sample_description || pattern.signature}" added to the Calendar page`);
+    } catch (e) {
+      setError(apiError(e, 'Failed to track as subscription'));
+    } finally {
+      setTrackingIdx(null);
     }
   };
 
@@ -114,6 +127,13 @@ export default function RecurringTransactionsCard() {
                       onClick={() => handleCreateWatcher(r, idx)}
                     >
                       Create Watcher
+                    </Button>
+                    <Button
+                      size="small" startIcon={trackingIdx === idx ? <CircularProgress size={14} /> : <CalendarMonth />}
+                      disabled={trackingIdx === idx}
+                      onClick={() => handleTrackAsSubscription(r, idx)}
+                    >
+                      Track as Subscription
                     </Button>
                   </TableCell>
                 </TableRow>

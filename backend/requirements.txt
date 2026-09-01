@@ -38,6 +38,7 @@ celery==5.3.4
 # Utilities
 python-dotenv==1.0.0
 httpx==0.26.0
+requests==2.31.0
 aiofiles==23.2.1
 apprise==1.9.0
 ofxparse==0.21

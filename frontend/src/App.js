@@ -31,6 +31,8 @@ import FamilyDashboard from './pages/FamilyDashboard.jsx';
 import Investments from './pages/Investments.jsx';
 import Vehicles from './pages/Vehicles.jsx';
 import DebtPayoff from './pages/DebtPayoff.jsx';
+import Packages from './pages/Packages.jsx';
+import CalendarPage from './pages/Calendar.jsx';
 
 const queryClient = new QueryClient();
 
@@ -65,6 +67,8 @@ function App() {
                 <Route path="/reward-points" element={<ProtectedRoute><Layout><RewardPoints /></Layout></ProtectedRoute>} />
                 <Route path="/family-dashboard" element={<ProtectedRoute><Layout><FamilyDashboard /></Layout></ProtectedRoute>} />
                 <Route path="/investments" element={<ProtectedRoute><Layout><Investments /></Layout></ProtectedRoute>} />
+                <Route path="/packages" element={<ProtectedRoute><Layout><Packages /></Layout></ProtectedRoute>} />
+                <Route path="/calendar" element={<ProtectedRoute><Layout><CalendarPage /></Layout></ProtectedRoute>} />
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </Router>

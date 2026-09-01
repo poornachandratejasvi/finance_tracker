@@ -20,6 +20,7 @@ celery_app = Celery(
         "app.tasks.budget_alert_tasks", "app.tasks.balance_alert_tasks", "app.tasks.recycle_bin_tasks",
         "app.tasks.dedupe_tasks", "app.tasks.paperless_tasks", "app.tasks.ai_categorize_tasks",
         "app.tasks.stale_pending_tasks", "app.tasks.goal_sweep_tasks",
+        "app.tasks.shipment_sync_tasks", "app.tasks.package_tracker_tasks", "app.tasks.calendar_reminder_tasks",
     ],
 )
 
@@ -164,6 +165,26 @@ celery_app.conf.beat_schedule = {
     # here -- see app.tasks.goal_sweep_tasks's docstring for why.
     "goals-auto-sweep-roundups": {
         "task": "goals.auto_sweep_roundups",
+        "schedule": 24 * 60 * 60.0,
+    },
+    # Shipment-tracking emails (Amazon.in/Flipkart/courier confirmations) -- not
+    # as latency-critical as bank alerts, so a lighter cadence than alert-email-sync.
+    "shipment-email-sync": {
+        "task": "shipments.sync_all",
+        "schedule": 30 * 60.0,
+    },
+    # Live carrier-tracker refresh (community/unofficial endpoints) -- polled
+    # gently to avoid drawing attention/rate-limits; email parsing already gives
+    # same-day status for most updates, this just fills gaps it can't cover
+    # (in-transit scan events with no corresponding email).
+    "package-tracker-refresh": {
+        "task": "packages.refresh_active",
+        "schedule": 6 * 60 * 60.0,
+    },
+    # Package/subscription due-date reminders -- daily is enough lead time
+    # without spamming; idempotent per item via last_reminder_sent_for.
+    "calendar-reminders-daily": {
+        "task": "calendar.check_upcoming",
         "schedule": 24 * 60 * 60.0,
     },
 }

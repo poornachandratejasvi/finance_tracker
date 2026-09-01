@@ -476,3 +476,155 @@ class TestParseCsvList:
 
     def test_empty_string_returns_empty(self):
         assert _parse_csv_list("") == []
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# shipment_email_service tests
+# ═════════════════════════════════════════════════════════════════════════════
+from app.services.shipment_email_service import parse_shipment_email
+
+
+# Fixtures below mirror the REAL structure of Amazon.in shipment emails
+# (verified against actual inbox samples -- see shipment_email_service.py's
+# module docstring), with item names genericized. Amazon never exposes a
+# raw carrier tracking number in these emails -- only an order id and a
+# link to its own progress-tracker page -- so tracking_number is always None.
+_AMAZON_SHIPPED_BODY = (
+    "Your Orders\nYour Account\nBuy Again\n"
+    "Your package was shipped!\nOrdered\nShipped\nOut for delivery\nDelivered\n\n\n"
+    "Arriving tomorrow\n\nPoorna – Mysore, KARNATAKA\nOrder #\n403-4826656-9069124\n\n"
+    "Track package\nhttps://www.amazon.in/progress-tracker/package?orderId=403-4826656-9069124&packageIndex=0\n"
+    "* Plastic Storage Box With Partitions (Pack of 2)\n  Quantity: 1\n  669 INR\n\nTotal\n658.77 INR\n"
+)
+_AMAZON_ORDERED_MULTI_BODY = (
+    "Thanks for your order!\nOrdered\nShipped\nOut for delivery\nDelivered\n\n\n"
+    "Arriving tomorrow 8 am – 12 pm\n\nPoorna – Mysore, KARNATAKA\nOrder #\n403-5851435-0121927\n\n"
+    "View or edit order\nhttps://www.amazon.in/your-orders/order-details?orderID=403-5851435-0121927\n"
+    "* Craft Storage Organizer With Dividers\n  Quantity: 1\n  399 INR\n\nTotal\n400.85 INR\n\n\n"
+    "Arriving Saturday\n\nPoorna – Mysore, KARNATAKA\nOrder #\n403-9586913-9674705\n\n"
+    "View or edit order\nhttps://www.amazon.in/your-orders/order-details?orderID=403-9586913-9674705\n"
+    "* Rubber Bands Pack, Elastic Ponytail Accessories\n  Quantity: 1\n  199 INR\n\nTotal\n199.15 INR\n"
+)
+_AMAZON_DELIVERED_BODY = (
+    "Your package was delivered!\n\n\n\n\n\nDelivered today\n"
+    "Package was handed to resident\nPoorna – Mysore, KARNATAKA\nOrder #\n403-5741252-8575545\n\n"
+    "Track package\nhttps://www.amazon.in/progress-tracker/package?orderId=403-5741252-8575545\n"
+    "* Hair Clips for Girls, Set of 10\n  Quantity: 1\n\n"
+    "Tell us how we did! Rate your delivery\n"
+)
+
+
+class TestParseShipmentEmail:
+    def test_amazon_shipped(self):
+        result = parse_shipment_email(
+            "shipment-tracking@amazon.in", 'Shipped: "Plastic Storage Box..."', _AMAZON_SHIPPED_BODY,
+        )
+        assert len(result) == 1
+        pkg = result[0]
+        assert pkg["carrier"] == "amazon"
+        assert pkg["status"] == "shipped"
+        assert pkg["order_id"] == "403-4826656-9069124"
+        assert pkg["tracking_number"] is None
+        assert pkg["item_description"] == "Plastic Storage Box With Partitions (Pack of 2)"
+        assert pkg["tracking_url"].startswith("https://www.amazon.in/progress-tracker/package")
+
+    def test_amazon_ordered_digest_covers_multiple_orders(self):
+        # Amazon's combined "Ordered" digest email bundles unrelated orders
+        # placed close together -- must yield one Package entry per order, not
+        # just the first one found.
+        result = parse_shipment_email(
+            "auto-confirm@amazon.in", 'Ordered: "Craft Storage..." and 1 more item', _AMAZON_ORDERED_MULTI_BODY,
+        )
+        assert len(result) == 2
+        assert {p["order_id"] for p in result} == {"403-5851435-0121927", "403-9586913-9674705"}
+        assert all(p["status"] == "ordered" for p in result)
+        first, second = result
+        assert first["item_description"] == "Craft Storage Organizer With Dividers"
+        assert second["item_description"] == "Rubber Bands Pack, Elastic Ponytail Accessories"
+
+    def test_amazon_delivered(self):
+        result = parse_shipment_email(
+            "order-update@amazon.in", 'Delivered: "Hair Clips..."', _AMAZON_DELIVERED_BODY,
+            received_date=datetime(2026, 9, 1, 6, 23, 50),
+        )
+        assert len(result) == 1
+        pkg = result[0]
+        assert pkg["status"] == "delivered"
+        assert pkg["actual_delivery_date"] == datetime(2026, 9, 1, 0, 0, 0)
+        assert pkg["expected_delivery_date"] is None
+
+    def test_amazon_subject_without_status_prefix_returns_empty(self):
+        # Confirmed-noisy real senders (diamonds/return/review-request mail
+        # from *.amazon.in) must never produce a Package just because the
+        # sender substring matches.
+        result = parse_shipment_email(
+            "no-reply@amazon.in", "Did your recent Amazon order meet your expectations?", "Please review your order.",
+        )
+        assert result == []
+
+    def test_flipkart_shipped(self):
+        body = "Order ID: OD123456789012345\nYour Wireless Mouse has been shipped and will arrive by Friday, 14 March."
+        result = parse_shipment_email("noreply@flipkart.com", "Shipped", body)
+        assert len(result) == 1
+        assert result[0]["carrier"] == "flipkart"
+        assert result[0]["status"] == "shipped"
+        assert result[0]["order_id"] == "OD123456789012345"
+
+    def test_unrecognized_sender_returns_empty_list(self):
+        assert parse_shipment_email("someone@example.com", "hello", "just a normal email") == []
+
+    def test_recognized_sender_unmatched_body_returns_empty_list(self):
+        assert parse_shipment_email("shipment-tracking@amazon.in", "Newsletter", "Check out our deals!") == []
+
+    def test_never_raises_on_garbage_body(self):
+        # Malformed/empty body must degrade to an empty list, not raise.
+        assert parse_shipment_email("shipment-tracking@amazon.in", "", "") == []
+        assert parse_shipment_email("delhivery.com", "", "") == []
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# calendar_service tests
+# ═════════════════════════════════════════════════════════════════════════════
+from app.services.calendar_service import expand_occurrences
+
+
+class TestExpandOccurrences:
+    def test_none_recurrence_in_window(self):
+        due = datetime(2026, 3, 15)
+        result = expand_occurrences(due, "none", datetime(2026, 3, 1), datetime(2026, 3, 31))
+        assert result == [due]
+
+    def test_none_recurrence_outside_window(self):
+        due = datetime(2026, 4, 15)
+        result = expand_occurrences(due, "none", datetime(2026, 3, 1), datetime(2026, 3, 31))
+        assert result == []
+
+    def test_none_recurrence_overdue_still_surfaces(self):
+        # An overdue one-off within the window (window_start is typically "now - 1 day")
+        due = datetime(2026, 3, 5)
+        result = expand_occurrences(due, "none", datetime(2026, 3, 4), datetime(2026, 3, 31))
+        assert result == [due]
+
+    def test_weekly_expands_multiple_occurrences(self):
+        due = datetime(2026, 3, 1)
+        result = expand_occurrences(due, "weekly", datetime(2026, 3, 1), datetime(2026, 3, 22))
+        assert result == [datetime(2026, 3, 1), datetime(2026, 3, 8), datetime(2026, 3, 15), datetime(2026, 3, 22)]
+
+    def test_monthly_handles_31st_across_short_months(self):
+        due = datetime(2026, 1, 31)
+        result = expand_occurrences(due, "monthly", datetime(2026, 1, 1), datetime(2026, 4, 30))
+        # February has no 31st -- clamps to the 28th (2026 is not a leap year).
+        assert result == [datetime(2026, 1, 31), datetime(2026, 2, 28), datetime(2026, 3, 31), datetime(2026, 4, 30)]
+
+    def test_yearly_steps_forward(self):
+        due = datetime(2024, 6, 1)
+        result = expand_occurrences(due, "yearly", datetime(2026, 1, 1), datetime(2026, 12, 31))
+        assert result == [datetime(2026, 6, 1)]
+
+    def test_window_boundary_inclusive(self):
+        due = datetime(2026, 3, 1)
+        result = expand_occurrences(due, "weekly", datetime(2026, 3, 8), datetime(2026, 3, 8))
+        assert result == [datetime(2026, 3, 8)]
+
+    def test_no_due_date_returns_empty(self):
+        assert expand_occurrences(None, "none", datetime(2026, 1, 1), datetime(2026, 12, 31)) == []

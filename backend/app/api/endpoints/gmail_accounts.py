@@ -98,6 +98,31 @@ def sync_alerts_now(
     return {"created": total_created}
 
 
+@router.post("/sync-shipments-now")
+def sync_shipments_now(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Manually check for new shipment-tracking emails right now, instead of
+    waiting for the next 30-minute beat tick -- creates/updates Package rows
+    from any new shipping emails found (see shipment_sync_service.py)."""
+    from datetime import timedelta
+    from app.core.time_utils import utcnow
+    from app.services.shipment_sync_service import sync_shipment_emails
+
+    accounts = db.query(GmailAccount).filter(GmailAccount.user_id == current_user.id).all()
+    if not accounts:
+        return {"touched": 0}
+
+    total_touched = 0
+    for account in accounts:
+        try:
+            total_touched += sync_shipment_emails(db, account, after_date=utcnow() - timedelta(days=3))
+        except Exception:
+            logger.warning("Manual shipment-email sync failed for account %s", account.id, exc_info=True)
+    return {"touched": total_touched}
+
+
 @router.post("/{account_id}/check-now", response_model=GmailAccountResponse)
 def check_gmail_account_now(
     account_id: int,

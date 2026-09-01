@@ -893,6 +893,88 @@ class VehicleInsurancePolicy(Base):
     user = relationship("User")
 
 
+class Package(Base):
+    """A tracked shipment -- auto-detected from a shipping-confirmation/out-for-
+    delivery email (source='email') or added by hand for any carrier (source=
+    'manual'). Matched/updated across its lifecycle by (user_id, carrier,
+    tracking_number) once a tracking number is known; an 'order placed' email
+    with no tracking number yet is matched by (user_id, merchant, order_id)
+    instead and gets tracking_number backfilled once a later email supplies it.
+    No status-history kept -- status/expected_delivery_date are overwritten in
+    place as newer emails or live-tracker polls arrive."""
+    __tablename__ = "packages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    gmail_account_id = Column(Integer, ForeignKey("gmail_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
+    source = Column(String(10), default="email")  # 'email' | 'manual'
+    carrier = Column(String(30), nullable=False, index=True)  # amazon|flipkart|delhivery|bluedart|dtdc|ekart|india_post|xpressbees|ecom_express|shadowfax|other
+    merchant = Column(String(100), nullable=True)
+    tracking_number = Column(String(100), nullable=True, index=True)
+    order_id = Column(String(100), nullable=True, index=True)
+    item_description = Column(Text, nullable=True)
+    status = Column(String(20), default="ordered")  # ordered|shipped|out_for_delivery|delivered|unknown
+    expected_delivery_date = Column(DateTime, nullable=True)
+    actual_delivery_date = Column(DateTime, nullable=True)
+    tracking_url = Column(String(500), nullable=True)
+    last_gmail_message_id = Column(String(255), nullable=True)
+    last_checked_at = Column(DateTime, nullable=True)
+    last_tracker_error = Column(Text, nullable=True)
+    last_reminder_sent_for = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")
+    gmail_account = relationship("GmailAccount")
+
+    __table_args__ = (
+        Index("ix_packages_user_carrier_tracking", "user_id", "carrier", "tracking_number", unique=True),
+    )
+
+
+class ShipmentEmail(Base):
+    """Dedup log for shipment-tracking emails, mirrors BankEmail."""
+    __tablename__ = "shipment_emails"
+
+    id = Column(Integer, primary_key=True, index=True)
+    gmail_account_id = Column(Integer, ForeignKey("gmail_accounts.id", ondelete="CASCADE"), nullable=False, index=True)
+    package_id = Column(Integer, ForeignKey("packages.id", ondelete="SET NULL"), nullable=True, index=True)
+    email_id = Column(String(255), unique=True, nullable=False)
+    subject = Column(String(500))
+    from_email = Column(String(255))
+    received_date = Column(DateTime)
+    carrier_detected = Column(String(30), nullable=True)
+    is_processed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=utcnow)
+
+    gmail_account = relationship("GmailAccount")
+    package = relationship("Package")
+
+
+class Subscription(Base):
+    """A manually-tracked recurring/one-off bill or subscription for the
+    Calendar page -- either hand-entered or pre-filled from a detect_recurring()
+    pattern via the 'Track as Subscription' action (source='suggested')."""
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(150), nullable=False)
+    item_type = Column(String(20), default="subscription")  # subscription|bill|custom
+    amount = Column(Float, nullable=True)
+    due_date = Column(DateTime, nullable=False)
+    recurrence = Column(String(10), default="none")  # none|weekly|monthly|yearly
+    notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    source = Column(String(10), default="manual")  # manual|suggested
+    last_reminder_sent_for = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")
+
+
 class TransactionAuditLog(Base):
     """Immutable record of every edit/delete made to a transaction, for tax/
     business-expense record-keeping. transaction_id is deliberately NOT a foreign

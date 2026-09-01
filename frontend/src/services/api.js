@@ -924,4 +924,22 @@ export const scanVehicleDocument = async (docType, file) => {
   })).data;
 };
 
+// Packages (shipment tracking)
+export const listPackages = async () => (await api.get('/api/packages/')).data;
+export const createPackage = async (data) => (await api.post('/api/packages/', data)).data;
+export const updatePackage = async (id, data) => (await api.put(`/api/packages/${id}`, data)).data;
+export const deletePackage = async (id) => (await api.delete(`/api/packages/${id}`)).data;
+export const refreshPackageNow = async (id) => (await api.post(`/api/packages/${id}/refresh-now`)).data;
+export const getPackageCarriers = async () => (await api.get('/api/packages/carriers')).data;
+export const syncShipmentsNow = async () => (await api.post('/api/gmail-accounts/sync-shipments-now')).data;
+
+// Subscriptions + Calendar
+export const listSubscriptions = async () => (await api.get('/api/subscriptions/')).data;
+export const createSubscription = async (data) => (await api.post('/api/subscriptions/', data)).data;
+export const updateSubscription = async (id, data) => (await api.put(`/api/subscriptions/${id}`, data)).data;
+export const deleteSubscription = async (id) => (await api.delete(`/api/subscriptions/${id}`)).data;
+export const createSubscriptionFromPattern = async (pattern) => (await api.post('/api/subscriptions/from-pattern', pattern)).data;
+export const getCalendar = async (daysAhead = 60) =>
+  (await api.get('/api/calendar/', { params: { days_ahead: daysAhead } })).data;
+
 export default api;

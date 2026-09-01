@@ -20,6 +20,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import SyncIcon from '@mui/icons-material/Sync';
 import MenuIcon from '@mui/icons-material/Menu';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import InsightsIcon from '@mui/icons-material/Insights';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
@@ -42,9 +44,13 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import EventIcon from '@mui/icons-material/Event';
 import GlobalSearch from './GlobalSearch.jsx';
 
 const DRAWER_WIDTH = 236;
+const COLLAPSED_WIDTH = 64;
+const SIDEBAR_COLLAPSED_KEY = 'sidebarCollapsed';
 
 const NAV_GROUPS = [
   { heading: 'Overview', items: [
@@ -60,6 +66,8 @@ const NAV_GROUPS = [
     { label: 'Investments', path: '/investments', icon: <TrendingUpIcon /> },
     { label: 'Vehicles', path: '/vehicles', icon: <DirectionsCarIcon /> },
     { label: 'Debt Payoff', path: '/debt-payoff', icon: <PaymentsIcon /> },
+    { label: 'Packages', path: '/packages', icon: <LocalShippingIcon /> },
+    { label: 'Calendar', path: '/calendar', icon: <EventIcon /> },
   ] },
   { heading: 'Accounts & Data', items: [
     { label: 'Banks', path: '/banks', icon: <AccountBalanceIcon /> },
@@ -120,6 +128,19 @@ const Layout = ({ children }) => {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [activityAnchor, setActivityAnchor] = React.useState(null);
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(() => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1');
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+      return next;
+    });
+  };
+
+  // Collapsing to icon-only never applies on mobile, where the drawer is a
+  // temporary overlay rather than a permanently-docked rail.
+  const drawerWidth = !isMobile && collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH;
 
   // Load "Hide decimals within amounts" once at app shell mount so it applies
   // everywhere formatCurrency is used, not just after visiting Settings.
@@ -147,29 +168,56 @@ const Layout = ({ children }) => {
     );
   }, [user?.role]);
 
+  const showLabels = isMobile || !collapsed;
+
   const drawer = (
-    <Box role="navigation" aria-label="Main navigation">
-      <Toolbar sx={{ px: 2 }}>
-        <AccountBalanceWalletIcon sx={{ mr: 1, color: 'primary.main' }} />
-        <Typography variant="h6" noWrap sx={{ fontWeight: 700 }}>Finance</Typography>
+    <Box role="navigation" aria-label="Main navigation" sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <Toolbar sx={{ px: 2, justifyContent: showLabels ? 'flex-start' : 'center' }}>
+        <AccountBalanceWalletIcon sx={{ mr: showLabels ? 1 : 0, color: 'primary.main' }} />
+        {showLabels && <Typography variant="h6" noWrap sx={{ fontWeight: 700 }}>Finance</Typography>}
       </Toolbar>
       <Divider />
-      {navGroups.map((group) => (
-        <List
-          key={group.heading}
-          dense
-          subheader={<ListSubheader disableSticky sx={{ bgcolor: 'transparent', lineHeight: '30px', fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase' }}>{group.heading}</ListSubheader>}
-        >
-          {group.items.map((item) => (
-            <ListItem key={item.path} disablePadding>
-              <ListItemButton selected={isActive(item.path)} onClick={() => go(item.path)} sx={{ borderRadius: 1, mx: 1 }}>
-                <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14 }} />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
-      ))}
+      <Box sx={{ flexGrow: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        {navGroups.map((group) => (
+          <List
+            key={group.heading}
+            dense
+            subheader={showLabels ? (
+              <ListSubheader disableSticky sx={{ bgcolor: 'transparent', lineHeight: '30px', fontSize: 11, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+                {group.heading}
+              </ListSubheader>
+            ) : null}
+          >
+            {!showLabels && <Divider sx={{ my: 0.5, mx: 1.5 }} />}
+            {group.items.map((item) => (
+              <ListItem key={item.path} disablePadding>
+                <Tooltip title={showLabels ? '' : item.label} placement="right">
+                  <ListItemButton
+                    selected={isActive(item.path)}
+                    onClick={() => go(item.path)}
+                    sx={{ borderRadius: 1, mx: 1, justifyContent: showLabels ? 'flex-start' : 'center' }}
+                  >
+                    <ListItemIcon sx={{ minWidth: showLabels ? 36 : 0, justifyContent: 'center' }}>{item.icon}</ListItemIcon>
+                    {showLabels && <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14 }} />}
+                  </ListItemButton>
+                </Tooltip>
+              </ListItem>
+            ))}
+          </List>
+        ))}
+      </Box>
+      {!isMobile && (
+        <>
+          <Divider />
+          <Box sx={{ display: 'flex', justifyContent: showLabels ? 'flex-end' : 'center', p: 0.5 }}>
+            <Tooltip title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} placement="right">
+              <IconButton size="small" onClick={toggleCollapsed}>
+                {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </>
+      )}
     </Box>
   );
 
@@ -282,14 +330,14 @@ const Layout = ({ children }) => {
       </AppBar>
 
       {/* Sidebar */}
-      <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>
+      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 }, transition: 'width 0.2s' }}>
         <Drawer
           variant={isMobile ? 'temporary' : 'permanent'}
           open={isMobile ? mobileOpen : true}
           onClose={() => setMobileOpen(false)}
           ModalProps={{ keepMounted: true }}
           sx={{
-            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: DRAWER_WIDTH },
+            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: isMobile ? DRAWER_WIDTH : drawerWidth, transition: 'width 0.2s', overflowX: 'hidden' },
           }}
         >
           {drawer}
@@ -297,7 +345,7 @@ const Layout = ({ children }) => {
       </Box>
 
       {/* Main content */}
-      <Box component="main" sx={{ flexGrow: 1, width: { md: `calc(100% - ${DRAWER_WIDTH}px)` }, minWidth: 0 }}>
+      <Box component="main" sx={{ flexGrow: 1, width: { md: `calc(100% - ${drawerWidth}px)` }, minWidth: 0, transition: 'width 0.2s' }}>
         <Toolbar />{/* spacer for the fixed AppBar */}
 
         {/* Global live sync status bar */}
