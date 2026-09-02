@@ -168,6 +168,29 @@ def resolve_document_id(db: Session, task_id: str) -> Optional[int]:
         return None
 
 
+def get_document_content(db: Session, document_id: int) -> Optional[str]:
+    """Fetch a Paperless document's full OCR'd text (its 'content' field).
+    Used to re-run statement-summary extraction against Paperless's OCR when
+    this app's own PDF-text-layer extraction (pdfplumber) found nothing --
+    some issuers render the Total-Amount-Due/due-date summary box as a
+    graphic rather than real selectable text, which a text-layer-only
+    extraction can never see no matter how the regex/AI prompt is tuned, but
+    OCR (reading the actual rendered page) does."""
+    _, token = _get_creds(db)
+    if not token:
+        return None
+    try:
+        r = httpx.get(
+            f"{_api_base_url()}/api/documents/{document_id}/",
+            headers={"Authorization": f"Token {token}"}, timeout=15,
+        )
+        r.raise_for_status()
+        return r.json().get("content")
+    except Exception:
+        logger.warning("Paperless-ngx document content fetch failed for %s", document_id, exc_info=True)
+        return None
+
+
 def document_url(db: Session, document_id: Optional[int]) -> Optional[str]:
     if not document_id:
         return None

@@ -144,6 +144,20 @@ def redetect_credit_card_balance(db: Session, uid: int, bank: Bank, use_ai: bool
 
     if due_date is not None:
         _upsert_credit_card_bill(db, bank, due_date, statement_date, new_balance, minimum_due)
+    elif new_balance is None or new_balance >= 1.0:
+        # Still no due date, and this isn't a genuine "nothing owed" cycle
+        # (a real near-zero balance like RBL's "Payment Due Date: Not
+        # Applicable" or SBI's "NO PAYMENT REQUIRED" correctly has none --
+        # skip those rather than re-uploading an unpaid-but-actually-paid-off
+        # card's statement forever) -- try Paperless-ngx's OCR as a last
+        # resort, best-effort and fully async (never blocks this call).
+        try:
+            from app.services import paperless_service
+            if paperless_service.is_configured(db):
+                from app.tasks.statement_ocr_tasks import enqueue_statement_ocr
+                enqueue_statement_ocr.delay(bank.id)
+        except Exception:
+            logger.info("Could not queue Paperless OCR fallback for bank %s", bank.id, exc_info=True)
 
     if new_balance is None:
         if ai_error:

@@ -21,7 +21,7 @@ celery_app = Celery(
         "app.tasks.dedupe_tasks", "app.tasks.paperless_tasks", "app.tasks.ai_categorize_tasks",
         "app.tasks.stale_pending_tasks", "app.tasks.goal_sweep_tasks",
         "app.tasks.shipment_sync_tasks", "app.tasks.package_tracker_tasks", "app.tasks.calendar_reminder_tasks",
-        "app.tasks.credit_card_bill_tasks",
+        "app.tasks.credit_card_bill_tasks", "app.tasks.statement_ocr_tasks",
     ],
 )
 
