@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Container, Typography, Paper, Box, Button, TextField, Alert,
+  Container, Typography, Paper, Box, Button, TextField, Alert, Chip,
   Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, useTheme,
   ToggleButtonGroup, ToggleButton, IconButton, Tooltip, Popover, Divider,
   CircularProgress, List, ListItemButton, ListItemText,
@@ -38,6 +38,18 @@ const typeMetaFor = (item) => {
   return TYPE_META.package;
 };
 
+// Filter categories shown as toggle chips -- broader than the raw item types
+// (credit_card_statement + credit_card_due collapse into one "Credit Cards"
+// toggle, since that split is an implementation detail no one filtering the
+// calendar cares about).
+const CATEGORIES = [
+  { key: 'package', label: 'Deliveries', color: TYPE_META.package.color, Icon: TYPE_META.package.Icon, match: (i) => i.type === 'package' },
+  { key: 'credit_card', label: 'Credit Cards', color: TYPE_META.credit_card_due.color, Icon: TYPE_META.credit_card_due.Icon, match: (i) => i.type === 'credit_card_statement' || i.type === 'credit_card_due' },
+  { key: 'subscription', label: 'Subscriptions', color: TYPE_META.subscription.color, Icon: TYPE_META.subscription.Icon, match: (i) => i.type === 'subscription' && i.subtitle === 'subscription' },
+  { key: 'bill', label: 'Bills', color: TYPE_META.bill.color, Icon: TYPE_META.bill.Icon, match: (i) => i.type === 'subscription' && i.subtitle === 'bill' },
+  { key: 'custom', label: 'Reminders', color: TYPE_META.custom.color, Icon: TYPE_META.custom.Icon, match: (i) => i.type === 'subscription' && i.subtitle === 'custom' },
+];
+
 const fmtGroupHeading = (dateStr) => {
   const d = new Date(dateStr);
   const today = new Date();
@@ -61,6 +73,15 @@ export default function CalendarPage() {
   const [matchBill, setMatchBill] = useState(null); // the credit_card_due item being mapped
   const [candidates, setCandidates] = useState([]);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [activeCategories, setActiveCategories] = useState(() => new Set(CATEGORIES.map((c) => c.key)));
+
+  const toggleCategory = (key) => {
+    setActiveCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   const load = async () => {
     // Symmetric window -- 180 days back covers real history when navigating
@@ -112,15 +133,20 @@ export default function CalendarPage() {
     } catch (e) { setErr('Failed to mark paid'); }
   };
 
+  const filteredItems = useMemo(
+    () => items.filter((i) => CATEGORIES.some((c) => activeCategories.has(c.key) && c.match(i))),
+    [items, activeCategories]
+  );
+
   const itemsByDay = useMemo(() => {
     const map = new Map();
-    for (const item of items) {
+    for (const item of filteredItems) {
       const key = new Date(item.date).toDateString();
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(item);
     }
     return map;
-  }, [items]);
+  }, [filteredItems]);
 
   // Already bounded by what load() actually fetched (180 days each way) --
   // no extra client-side cutoff here, or Agenda view silently hides items
@@ -138,9 +164,9 @@ export default function CalendarPage() {
   const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-  const next7Count = items.filter((i) => new Date(i.date) <= in7 && !i.is_overdue).length;
-  const thisMonthCount = items.filter((i) => { const d = new Date(i.date); return d >= startOfThisMonth && d <= endOfThisMonth; }).length;
-  const overdueCount = items.filter((i) => i.is_overdue).length;
+  const next7Count = filteredItems.filter((i) => new Date(i.date) <= in7 && !i.is_overdue).length;
+  const thisMonthCount = filteredItems.filter((i) => { const d = new Date(i.date); return d >= startOfThisMonth && d <= endOfThisMonth; }).length;
+  const overdueCount = filteredItems.filter((i) => i.is_overdue).length;
 
   const heroCard = (label, value, color, Icon) => (
     <Paper variant="outlined" sx={{
@@ -229,6 +255,28 @@ export default function CalendarPage() {
       {msg && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setMsg('')}>{msg}</Alert>}
       {err && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setErr('')}>{err}</Alert>}
 
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+        {CATEGORIES.map((c) => {
+          const active = activeCategories.has(c.key);
+          const CatIcon = c.Icon;
+          return (
+            <Chip
+              key={c.key}
+              icon={<CatIcon sx={{ fontSize: 16 }} />}
+              label={c.label}
+              onClick={() => toggleCategory(c.key)}
+              variant={active ? 'filled' : 'outlined'}
+              sx={{
+                fontWeight: 600,
+                bgcolor: active ? alpha(c.color, theme.palette.mode === 'dark' ? 0.3 : 0.15) : 'transparent',
+                borderColor: c.color, color: active ? c.color : 'text.secondary',
+                '& .MuiChip-icon': { color: active ? c.color : 'text.secondary' },
+              }}
+            />
+          );
+        })}
+      </Box>
+
       <Box display="flex" gap={2} flexWrap="wrap" mb={3} mt={2}>
         {heroCard('Next 7 Days', next7Count, theme.palette.info.main, Event)}
         {heroCard('This Month', thisMonthCount, theme.palette.primary.main, Payments)}
@@ -301,7 +349,9 @@ export default function CalendarPage() {
         <Paper sx={{ p: 3 }}>
           {agendaGroups.length === 0 ? (
             <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
-              Nothing coming up in the next 60 days.
+              {activeCategories.size < CATEGORIES.length
+                ? 'Nothing matches the selected filters in this range.'
+                : 'Nothing in the next/past 180 days.'}
             </Typography>
           ) : agendaGroups.map(([dateKey, groupItems]) => (
             <Box key={dateKey} sx={{ mb: 2 }}>
