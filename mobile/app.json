@@ -43,6 +43,13 @@
         {
           "faceIDPermission": "Finance Tracker uses Face ID to lock the app so your financial data stays private."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#1b6b4c"
+        }
       ]
     ]
   }

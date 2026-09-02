@@ -5,6 +5,7 @@ import { getPreferences } from "../api/users";
 import { loginRequest, restoreSession, cacheUser, getCachedUser } from "../api/client";
 import { User } from "../types";
 import { requestAndroidPermissions } from "../utils/androidPermissions";
+import { registerForPushNotificationsAsync } from "../utils/pushNotifications";
 import { setHideDecimals } from "../utils/format";
 
 // Best-effort -- applies "Hide decimals within amounts" app-wide once at
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(me);
           await cacheUser(me);
           await requestAndroidPermissions();
+          registerForPushNotificationsAsync();
           loadDisplayPrefs();
         } catch (err: any) {
           if (!err?.response) {
@@ -66,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(me);
     await cacheUser(me);
     await requestAndroidPermissions();
+    registerForPushNotificationsAsync();
     loadDisplayPrefs();
   };
 
