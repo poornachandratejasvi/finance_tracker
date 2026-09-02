@@ -63,7 +63,11 @@ export default function CalendarPage() {
   const [loadingCandidates, setLoadingCandidates] = useState(false);
 
   const load = async () => {
-    try { setItems(await getCalendar(180)); } catch (e) { setErr('Failed to load calendar'); }
+    // Symmetric window -- 180 days back covers real history when navigating
+    // to a past month (delivered packages, paid bills, expired subscription
+    // occurrences), 180 ahead covers the future including projected
+    // not-yet-statemented credit-card due dates.
+    try { setItems(await getCalendar(180, 180)); } catch (e) { setErr('Failed to load calendar'); }
   };
   useEffect(() => { load(); }, []);
 
@@ -118,10 +122,10 @@ export default function CalendarPage() {
     return map;
   }, [items]);
 
-  const agendaGroups = useMemo(() => {
-    const horizon = new Date(); horizon.setDate(horizon.getDate() + 60);
-    return Array.from(itemsByDay.entries()).filter(([key]) => new Date(key) <= horizon);
-  }, [itemsByDay]);
+  // Already bounded by what load() actually fetched (180 days each way) --
+  // no extra client-side cutoff here, or Agenda view silently hides items
+  // Month view can still show by navigating.
+  const agendaGroups = useMemo(() => Array.from(itemsByDay.entries()), [itemsByDay]);
 
   const monthDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(cursor));
@@ -156,16 +160,23 @@ export default function CalendarPage() {
   const renderItemRow = (item, i) => {
     const meta = typeMetaFor(item);
     const Icon = meta.Icon;
+    const isProjected = item.payment_status === 'projected';
     return (
       <Box
         key={`${item.type}-${item.id}-${i}`}
         sx={{
           display: 'flex', alignItems: 'center', gap: 1.5, py: 1,
           borderBottom: '1px solid', borderColor: 'divider',
+          opacity: isProjected ? 0.7 : 1,
           '&:last-child': { borderBottom: 'none' },
         }}
       >
-        <Box sx={{ width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: alpha(item.is_overdue ? theme.palette.error.main : meta.color, 0.15), color: item.is_overdue ? theme.palette.error.main : meta.color, flexShrink: 0 }}>
+        <Box sx={{
+          width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          bgcolor: alpha(item.is_overdue ? theme.palette.error.main : meta.color, 0.15),
+          color: item.is_overdue ? theme.palette.error.main : meta.color, flexShrink: 0,
+          border: isProjected ? `1px dashed ${meta.color}` : 'none',
+        }}>
           <Icon sx={{ fontSize: 16 }} />
         </Box>
         <Box sx={{ minWidth: 0, flexGrow: 1 }}>
@@ -176,7 +187,7 @@ export default function CalendarPage() {
         </Box>
         {item.amount != null && (
           <Typography variant="body2" fontWeight={700} sx={{ whiteSpace: 'nowrap' }}>
-            {inr(item.amount)}
+            {isProjected ? '~' : ''}{inr(item.amount)}
           </Typography>
         )}
         {item.link && (
@@ -188,7 +199,7 @@ export default function CalendarPage() {
         {item.type === 'credit_card_due' && item.payment_status === 'unpaid' && (
           <Button size="small" onClick={() => openMatchDialog(item)}>Check payment</Button>
         )}
-        {item.type === 'credit_card_due' && item.payment_status !== 'unpaid' && (
+        {item.type === 'credit_card_due' && ['paid', 'auto_matched'].includes(item.payment_status) && (
           <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 700 }}>✓ Paid</Typography>
         )}
       </Box>
@@ -264,12 +275,14 @@ export default function CalendarPage() {
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
                     {dayEvents.slice(0, 2).map((ev, i) => {
                       const meta = typeMetaFor(ev);
+                      const isProjected = ev.payment_status === 'projected';
                       return (
                         <Box key={i} sx={{
                           fontSize: 10.5, px: 0.5, py: 0.15, borderRadius: 0.75, whiteSpace: 'nowrap',
                           overflow: 'hidden', textOverflow: 'ellipsis',
-                          bgcolor: alpha(ev.is_overdue ? theme.palette.error.main : meta.color, 0.16),
+                          bgcolor: alpha(ev.is_overdue ? theme.palette.error.main : meta.color, isProjected ? 0.08 : 0.16),
                           color: ev.is_overdue ? theme.palette.error.main : meta.color, fontWeight: 600,
+                          border: isProjected ? `1px dashed ${alpha(meta.color, 0.5)}` : 'none',
                         }}>
                           {ev.title}
                         </Box>

@@ -4,7 +4,20 @@ GET /api/calendar endpoint and the daily due-date reminder task, so there's no
 duplicated aggregation/expansion logic between the two.
 """
 from datetime import timedelta
-from typing import List
+from typing import List, Optional
+
+
+def add_calendar_months(dt, n: int):
+    """Step forward n calendar months, clamping the day to the target month's
+    length (so a 31st-of-the-month date doesn't drift earlier every cycle
+    through a 30-day month) -- shared by expand_occurrences below and the
+    credit-card due-date projection in get_upcoming_items."""
+    month = dt.month - 1 + n
+    year = dt.year + month // 12
+    month = month % 12 + 1
+    day = min(dt.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
+                       31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
+    return dt.replace(year=year, month=month, day=day)
 
 
 def expand_occurrences(due_date, recurrence: str, window_start, window_end) -> List:
@@ -24,14 +37,7 @@ def expand_occurrences(due_date, recurrence: str, window_start, window_end) -> L
         if recurrence == "weekly":
             return dt + timedelta(days=7 * n)
         if recurrence == "monthly":
-            # Add calendar months, not a fixed day count, so a 31st-of-the-month
-            # due date doesn't drift earlier every cycle through 30-day months.
-            month = dt.month - 1 + n
-            year = dt.year + month // 12
-            month = month % 12 + 1
-            day = min(dt.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
-                               31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
-            return dt.replace(year=year, month=month, day=day)
+            return add_calendar_months(dt, n)
         if recurrence == "yearly":
             try:
                 return dt.replace(year=dt.year + n)
@@ -56,37 +62,50 @@ def expand_occurrences(due_date, recurrence: str, window_start, window_end) -> L
     return occurrences
 
 
-def get_upcoming_items(db, user_id: int, days_ahead: int = 60) -> List[dict]:
-    """Merge non-delivered Package expected-delivery-dates + expanded
-    Subscription occurrences + credit-card statement/due dates into one
-    sorted-by-date list:
-    [{type, id, date, title, subtitle, amount, link, is_overdue}, ...]."""
+def get_upcoming_items(db, user_id: int, days_ahead: int = 60, days_back: int = 60) -> List[dict]:
+    """Merge Package delivery dates + expanded Subscription occurrences +
+    credit-card statement/due dates (real AND, for cycles not yet parsed from
+    a statement, projected one month past the last known due date) into one
+    sorted-by-date list covering [now - days_back, now + days_ahead]:
+    [{type, id, date, title, subtitle, amount, link, is_overdue}, ...].
+
+    days_back exists so the Calendar page's month view shows real history when
+    browsing to a past month, not just "still actionable" items -- a delivered
+    package or an already-paid bill still shows (marked as such) within this
+    window, it just doesn't get the "is_overdue"/nagging treatment a live one
+    does.
+    """
     from sqlalchemy import and_, or_
     from app.models.models import Package, Subscription, CreditCardBill, Bank
     from app.core.time_utils import utcnow
 
     now = utcnow()
     horizon = now + timedelta(days=days_ahead)
-    window_start = now - timedelta(days=1)
+    window_start = now - timedelta(days=days_back)
     items = []
 
     packages = (
         db.query(Package)
         .filter(
             Package.user_id == user_id,
-            Package.status != "delivered",
             Package.expected_delivery_date.isnot(None),
             Package.expected_delivery_date <= horizon,
+            # A delivered package still shows within the back-window (real
+            # history), just without ever counting as overdue; a NON-delivered
+            # one shows regardless of how far in the past its estimate was
+            # (still genuinely unresolved, like an overdue bill).
+            or_(Package.status != "delivered", Package.expected_delivery_date >= window_start),
         )
         .all()
     )
     for p in packages:
+        delivered = p.status == "delivered"
         items.append({
             "type": "package", "id": p.id, "date": p.expected_delivery_date,
             "title": p.item_description or p.merchant or p.carrier.replace("_", " ").title(),
             "subtitle": f"{p.carrier.replace('_', ' ').title()} · {p.status.replace('_', ' ')}",
             "amount": None, "link": p.tracking_url,
-            "is_overdue": p.expected_delivery_date < now,
+            "is_overdue": (not delivered) and p.expected_delivery_date < now,
         })
 
     subscriptions = db.query(Subscription).filter(Subscription.user_id == user_id, Subscription.is_active.is_(True)).all()
@@ -106,17 +125,18 @@ def get_upcoming_items(db, user_id: int, days_ahead: int = 60) -> List[dict]:
             CreditCardBill.user_id == user_id,
             or_(
                 and_(CreditCardBill.statement_date.isnot(None), CreditCardBill.statement_date >= window_start, CreditCardBill.statement_date <= horizon),
-                # An unpaid due date has no lower bound -- like a non-delivered
-                # Package, a still-unpaid bill from months ago is genuinely
-                # overdue and must keep showing, not silently vanish once it
-                # scrolls past "yesterday". A paid/auto-matched one only needs
-                # the normal window (nothing actionable left to show for it).
+                # A still-unpaid due date has no lower bound -- like a
+                # non-delivered Package, it's genuinely overdue regardless of
+                # how long ago the window would otherwise cut it off. A
+                # paid/auto-matched one is real history and uses the normal
+                # back-window like everything else.
                 and_(CreditCardBill.due_date.isnot(None), CreditCardBill.due_date <= horizon,
                      or_(CreditCardBill.payment_status == "unpaid", CreditCardBill.due_date >= window_start)),
             ),
         )
         .all()
     )
+    latest_due_by_bank = {}
     for bill, bank_name in credit_bills:
         if bill.statement_date and window_start <= bill.statement_date <= horizon:
             items.append({
@@ -136,6 +156,36 @@ def get_upcoming_items(db, user_id: int, days_ahead: int = 60) -> List[dict]:
                 "is_overdue": bill.due_date < now and not is_paid,
                 "payment_status": bill.payment_status,
             })
+        if bill.due_date:
+            prev = latest_due_by_bank.get(bill.bank_id)
+            if not prev or bill.due_date > prev[0].due_date:
+                latest_due_by_bank[bill.bank_id] = (bill, bank_name)
+
+    # Project future cycles that haven't had a real statement parsed yet --
+    # without this, a card's calendar entries just stop dead after its last
+    # known due date until the next statement email/redetect happens to run,
+    # which can be weeks; credit-card billing is reliably monthly, so stepping
+    # forward from the last known due date is a safe estimate. Only emitted
+    # while no REAL bill exists at/after that projected date yet (a real
+    # parsed statement always supersedes a guess).
+    for bank_id, (latest_bill, bank_name) in latest_due_by_bank.items():
+        projected = add_calendar_months(latest_bill.due_date, 1)
+        n = 1
+        while projected <= horizon:
+            has_real = any(
+                b.due_date and b.bank_id == bank_id and b.due_date.date() == projected.date()
+                for b, _ in credit_bills
+            )
+            if not has_real and projected >= window_start:
+                items.append({
+                    "type": "credit_card_due", "id": None, "date": projected,
+                    "title": f"{bank_name} bill due (estimated)",
+                    "subtitle": "Estimated -- statement not received yet",
+                    "amount": latest_bill.total_amount_due, "link": None,
+                    "is_overdue": False, "payment_status": "projected",
+                })
+            n += 1
+            projected = add_calendar_months(latest_bill.due_date, n)
 
     items.sort(key=lambda i: i["date"])
     return items

@@ -939,8 +939,8 @@ export const createSubscription = async (data) => (await api.post('/api/subscrip
 export const updateSubscription = async (id, data) => (await api.put(`/api/subscriptions/${id}`, data)).data;
 export const deleteSubscription = async (id) => (await api.delete(`/api/subscriptions/${id}`)).data;
 export const createSubscriptionFromPattern = async (pattern) => (await api.post('/api/subscriptions/from-pattern', pattern)).data;
-export const getCalendar = async (daysAhead = 60) =>
-  (await api.get('/api/calendar/', { params: { days_ahead: daysAhead } })).data;
+export const getCalendar = async (daysAhead = 60, daysBack = 60) =>
+  (await api.get('/api/calendar/', { params: { days_ahead: daysAhead, days_back: daysBack } })).data;
 
 // Credit card bills (statement/due-date tracking)
 export const listCreditCardBills = async (unpaidOnly = false) =>

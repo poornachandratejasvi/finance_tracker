@@ -15,10 +15,11 @@ router = APIRouter()
 @router.get("/")
 def get_calendar(
     days_ahead: int = Query(60, ge=1, le=365),
+    days_back: int = Query(60, ge=0, le=365),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user_flexible),
 ):
-    items = get_upcoming_items(db, current_user.id, days_ahead)
+    items = get_upcoming_items(db, current_user.id, days_ahead, days_back)
     return [
         {**item, "date": item["date"].isoformat() if item["date"] else None}
         for item in items
