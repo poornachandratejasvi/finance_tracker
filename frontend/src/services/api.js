@@ -942,4 +942,20 @@ export const createSubscriptionFromPattern = async (pattern) => (await api.post(
 export const getCalendar = async (daysAhead = 60) =>
   (await api.get('/api/calendar/', { params: { days_ahead: daysAhead } })).data;
 
+// Credit card bills (statement/due-date tracking)
+export const listCreditCardBills = async (unpaidOnly = false) =>
+  (await api.get('/api/credit-card-bills/', { params: { unpaid_only: unpaidOnly } })).data;
+export const getBillPaymentCandidates = async (billId) =>
+  (await api.get(`/api/credit-card-bills/${billId}/candidates`)).data;
+export const confirmBillPayment = async (billId, transactionId) =>
+  (await api.post(`/api/credit-card-bills/${billId}/confirm-payment`, { transaction_id: transactionId })).data;
+export const markBillPaid = async (billId) =>
+  (await api.post(`/api/credit-card-bills/${billId}/mark-paid`)).data;
+
+// Push notification token registration (mobile)
+export const registerPushToken = async (token, platform) =>
+  (await api.post('/api/push-tokens/', { token, platform })).data;
+export const unregisterPushToken = async (token) =>
+  (await api.delete(`/api/push-tokens/${encodeURIComponent(token)}`)).data;
+
 export default api;

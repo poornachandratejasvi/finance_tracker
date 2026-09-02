@@ -628,3 +628,43 @@ class TestExpandOccurrences:
 
     def test_no_due_date_returns_empty(self):
         assert expand_occurrences(None, "none", datetime(2026, 1, 1), datetime(2026, 12, 31)) == []
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# pdf_parser due-date / statement-date extraction
+# ═════════════════════════════════════════════════════════════════════════════
+from app.services.pdf_parser import PDFParser
+
+
+class TestExtractDueDate:
+    def test_payment_due_date_slash_format(self):
+        text = "Statement Summary\nPayment Due Date: 15/03/2026\nTotal Amount Due: 12,345.00"
+        assert PDFParser.extract_due_date(text) == datetime(2026, 3, 15)
+
+    def test_due_date_label_alone(self):
+        text = "Due Date\n05-09-2026\nMinimum Amount Due 500.00"
+        assert PDFParser.extract_due_date(text) == datetime(2026, 9, 5)
+
+    def test_month_name_format(self):
+        text = "Payment Due Date: 15 March 2026"
+        assert PDFParser.extract_due_date(text) == datetime(2026, 3, 15)
+
+    def test_no_due_date_returns_none(self):
+        assert PDFParser.extract_due_date("Just some random statement text with no dates.") is None
+
+    def test_empty_text_returns_none(self):
+        assert PDFParser.extract_due_date("") is None
+        assert PDFParser.extract_due_date(None) is None
+
+
+class TestExtractStatementDate:
+    def test_statement_date_label(self):
+        text = "Statement Date: 18/08/2026\nPayment Due Date: 05/09/2026"
+        assert PDFParser.extract_statement_date(text) == datetime(2026, 8, 18)
+
+    def test_billing_date_label(self):
+        text = "Bill Date 20-08-2026"
+        assert PDFParser.extract_statement_date(text) == datetime(2026, 8, 20)
+
+    def test_no_statement_date_returns_none(self):
+        assert PDFParser.extract_statement_date("No dates here at all.") is None

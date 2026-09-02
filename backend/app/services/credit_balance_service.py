@@ -11,17 +11,47 @@ override always remains available via PUT /banks/{id}.
 """
 import logging
 import os
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.models import Bank, PDFStatement, BankEmail
+from app.models.models import Bank, PDFStatement, BankEmail, CreditCardBill
 from app.services.password_service import get_password_candidates
 from app.services.pdf_storage import ensure_decrypted_with_candidates
 from app.services.pdf_parser import PDFParser
 from app.services import ai_pdf_extraction
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_iso_date(s: str) -> Optional[datetime]:
+    try:
+        return datetime.fromisoformat(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def _upsert_credit_card_bill(db: Session, bank: Bank, due_date: datetime, statement_date, total_amount_due, minimum_due) -> CreditCardBill:
+    """Create or update this cycle's CreditCardBill row, deduped by
+    (bank_id, due_date) -- a re-parse of the same statement (or a later
+    redetect run before the next cycle) updates figures in place instead of
+    creating a duplicate row per cycle."""
+    bill = (
+        db.query(CreditCardBill)
+        .filter(CreditCardBill.bank_id == bank.id, CreditCardBill.due_date == due_date)
+        .first()
+    )
+    if not bill:
+        bill = CreditCardBill(bank_id=bank.id, user_id=bank.user_id, due_date=due_date)
+        db.add(bill)
+    if statement_date is not None:
+        bill.statement_date = statement_date
+    if total_amount_due is not None:
+        bill.total_amount_due = total_amount_due
+    if minimum_due is not None:
+        bill.minimum_amount_due = minimum_due
+    return bill
 
 
 def _latest_pdf(db: Session, bank_id: int) -> Optional[tuple]:
@@ -85,19 +115,35 @@ def redetect_credit_card_balance(db: Session, uid: int, bank: Bank, use_ai: bool
         return report
 
     new_balance = PDFParser.extract_total_amount_due(text)
+    due_date = PDFParser.extract_due_date(text)
+    statement_date = PDFParser.extract_statement_date(text)
+    minimum_due = None
     source = "regex" if new_balance is not None else None
     ai_error = None
 
-    if new_balance is None and use_ai:
+    # Only pay for an AI call if regex left something on the table -- balance,
+    # due date, or statement date. All three ride the same call when needed
+    # (extract_billing_summary returns all of them together), so a statement
+    # regex fully handles never triggers one at all.
+    if (new_balance is None or due_date is None) and use_ai:
         try:
             summary = ai_pdf_extraction.extract_billing_summary(db, uid, text)
             ai_error = summary.get("_error")
-            new_balance = summary.get("total_amount_due")
-            if new_balance is not None:
-                source = "ai"
+            if new_balance is None:
+                new_balance = summary.get("total_amount_due")
+                if new_balance is not None:
+                    source = "ai"
+            if due_date is None and summary.get("due_date"):
+                due_date = _parse_iso_date(summary["due_date"])
+            if statement_date is None and summary.get("statement_date"):
+                statement_date = _parse_iso_date(summary["statement_date"])
+            minimum_due = summary.get("minimum_amount_due")
         except Exception as e:
             ai_error = str(e)[:200]
             logger.info("AI balance fallback failed for bank %s: %s", bank.id, ai_error)
+
+    if due_date is not None:
+        _upsert_credit_card_bill(db, bank, due_date, statement_date, new_balance, minimum_due)
 
     if new_balance is None:
         if ai_error:

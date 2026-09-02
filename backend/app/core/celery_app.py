@@ -21,6 +21,7 @@ celery_app = Celery(
         "app.tasks.dedupe_tasks", "app.tasks.paperless_tasks", "app.tasks.ai_categorize_tasks",
         "app.tasks.stale_pending_tasks", "app.tasks.goal_sweep_tasks",
         "app.tasks.shipment_sync_tasks", "app.tasks.package_tracker_tasks", "app.tasks.calendar_reminder_tasks",
+        "app.tasks.credit_card_bill_tasks",
     ],
 )
 
@@ -185,6 +186,12 @@ celery_app.conf.beat_schedule = {
     # without spamming; idempotent per item via last_reminder_sent_for.
     "calendar-reminders-daily": {
         "task": "calendar.check_upcoming",
+        "schedule": 24 * 60 * 60.0,
+    },
+    # Credit-card bill due-date reminders -- daily is enough lead time for the
+    # 5-day-before window without spamming; idempotent per due date.
+    "credit-card-bill-reminders-daily": {
+        "task": "credit_card_bills.check_reminders",
         "schedule": 24 * 60 * 60.0,
     },
 }

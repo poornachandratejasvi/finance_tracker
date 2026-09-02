@@ -3,17 +3,21 @@ import {
   Container, Typography, Paper, Box, Button, TextField, Alert,
   Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, useTheme,
   ToggleButtonGroup, ToggleButton, IconButton, Tooltip, Popover, Divider,
+  CircularProgress, List, ListItemButton, ListItemText,
 } from '@mui/material';
 import {
   Add, LocalShipping, Payments, EventBusy, Event, ChevronLeft, ChevronRight,
-  ViewList, CalendarViewMonth, Today, Receipt, Notifications,
+  ViewList, CalendarViewMonth, Today, Receipt, Notifications, CreditCard, Description,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval,
   addMonths, subMonths, isSameMonth, isToday, format,
 } from 'date-fns';
-import { getCalendar, createSubscription, deleteSubscription } from '../services/api';
+import {
+  getCalendar, createSubscription, deleteSubscription,
+  getBillPaymentCandidates, confirmBillPayment, markBillPaid,
+} from '../services/api';
 
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
@@ -24,9 +28,15 @@ const TYPE_META = {
   subscription: { color: '#59a14f', Icon: Receipt, label: 'Subscription' },
   bill: { color: '#e15759', Icon: Payments, label: 'Bill' },
   custom: { color: '#af7aa1', Icon: Notifications, label: 'Reminder' },
+  credit_card_statement: { color: '#76b7b2', Icon: Description, label: 'Statement' },
+  credit_card_due: { color: '#f28e2b', Icon: CreditCard, label: 'Card payment due' },
 };
 
-const typeMetaFor = (item) => TYPE_META[item.type === 'subscription' ? (item.subtitle || 'subscription') : 'package'] || TYPE_META.custom;
+const typeMetaFor = (item) => {
+  if (item.type === 'subscription') return TYPE_META[item.subtitle] || TYPE_META.custom;
+  if (item.type === 'credit_card_statement' || item.type === 'credit_card_due') return TYPE_META[item.type];
+  return TYPE_META.package;
+};
 
 const fmtGroupHeading = (dateStr) => {
   const d = new Date(dateStr);
@@ -48,6 +58,9 @@ export default function CalendarPage() {
   const [form, setForm] = useState(blankEvent);
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
+  const [matchBill, setMatchBill] = useState(null); // the credit_card_due item being mapped
+  const [candidates, setCandidates] = useState([]);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
 
   const load = async () => {
     try { setItems(await getCalendar(180)); } catch (e) { setErr('Failed to load calendar'); }
@@ -71,6 +84,28 @@ export default function CalendarPage() {
   const openDayFor = (date) => (e) => {
     setSelectedDay(date);
     setDayAnchor(e.currentTarget);
+  };
+
+  const openMatchDialog = async (item) => {
+    setMatchBill(item);
+    setLoadingCandidates(true);
+    try { setCandidates(await getBillPaymentCandidates(item.id)); }
+    catch (e) { setErr('Failed to load possible matches'); }
+    finally { setLoadingCandidates(false); }
+  };
+
+  const pickCandidate = async (transactionId) => {
+    try {
+      await confirmBillPayment(matchBill.id, transactionId);
+      setMatchBill(null); setMsg('Payment mapped.'); load();
+    } catch (e) { setErr('Failed to confirm payment'); }
+  };
+
+  const markPaidNoMatch = async () => {
+    try {
+      await markBillPaid(matchBill.id);
+      setMatchBill(null); setMsg('Marked as paid.'); load();
+    } catch (e) { setErr('Failed to mark paid'); }
   };
 
   const itemsByDay = useMemo(() => {
@@ -149,6 +184,12 @@ export default function CalendarPage() {
         )}
         {item.type === 'subscription' && (
           <Button size="small" color="error" onClick={() => removeSubscription(item.id)}>Remove</Button>
+        )}
+        {item.type === 'credit_card_due' && item.payment_status === 'unpaid' && (
+          <Button size="small" onClick={() => openMatchDialog(item)}>Check payment</Button>
+        )}
+        {item.type === 'credit_card_due' && item.payment_status !== 'unpaid' && (
+          <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 700 }}>✓ Paid</Typography>
         )}
       </Box>
     );
@@ -305,6 +346,34 @@ export default function CalendarPage() {
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={save}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(matchBill)} onClose={() => setMatchBill(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Which transaction paid this bill?</DialogTitle>
+        <DialogContent>
+          {loadingCandidates ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
+          ) : candidates.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              No matching transaction found automatically (nothing close to {matchBill ? inr(matchBill.amount) : ''} near the due date).
+            </Typography>
+          ) : (
+            <List dense>
+              {candidates.map((c) => (
+                <ListItemButton key={c.id} onClick={() => pickCandidate(c.id)} sx={{ borderRadius: 1, mb: 0.5 }}>
+                  <ListItemText
+                    primary={`${c.description} — ${inr(c.amount)}`}
+                    secondary={new Date(c.transaction_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  />
+                </ListItemButton>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMatchBill(null)}>Cancel</Button>
+          <Button onClick={markPaidNoMatch}>Mark paid without a transaction</Button>
         </DialogActions>
       </Dialog>
     </Container>

@@ -1086,6 +1086,51 @@ class PDFParser:
         return None
 
     @staticmethod
+    def extract_due_date(text: str) -> Optional[datetime]:
+        """Extract a credit-card statement's Payment Due Date -- the free,
+        no-AI-cost first pass; ai_pdf_extraction.extract_billing_summary is the
+        fallback for a layout this misses (same two-tier shape as
+        extract_total_amount_due above)."""
+        if not text:
+            return None
+        labels = [
+            r'payment\s+due\s+date',
+            r'due\s+date',
+            r'pay\s+by\s+date',
+            r'total\s+amount\s+due\s+date',
+        ]
+        return PDFParser._extract_labelled_date(text, labels)
+
+    @staticmethod
+    def extract_statement_date(text: str) -> Optional[datetime]:
+        """Extract a credit-card statement's own generation/billing date --
+        distinct from extract_statement_period's start/end range, which some
+        issuers omit in favour of a single 'Statement Date' line."""
+        if not text:
+            return None
+        labels = [
+            r'statement\s+date',
+            r'statement\s+generation\s+date',
+            r'bill(?:ing)?\s+date',
+        ]
+        return PDFParser._extract_labelled_date(text, labels)
+
+    @staticmethod
+    def _extract_labelled_date(text: str, labels: List[str]) -> Optional[datetime]:
+        # DD/MM/YYYY, DD-MM-YYYY, or "12 Mar 2026" / "12 March 2026" -- the
+        # same date shapes extract_statement_period already handles.
+        date_re = r'(\d{2}[/-]\d{2}[/-]\d{4}|\d{1,2}\s+[A-Za-z]{3,9}[,\s]+\d{4})'
+        for gap_re in (r'\s*[:\-]?\s*', r'[^\d\n]{0,20}\s*'):
+            for label in labels:
+                m = re.search(label + gap_re + date_re, text, re.IGNORECASE)
+                if m:
+                    try:
+                        return pd.to_datetime(m.group(1), dayfirst=True).to_pydatetime()
+                    except (ValueError, TypeError):
+                        continue
+        return None
+
+    @staticmethod
     def extract_reward_points(text: str) -> Optional[float]:
         """Extract a credit-card statement's reward/loyalty points closing balance,
         if printed. Best-effort: layouts vary at least as much as Total Amount

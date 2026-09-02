@@ -58,13 +58,16 @@ def expand_occurrences(due_date, recurrence: str, window_start, window_end) -> L
 
 def get_upcoming_items(db, user_id: int, days_ahead: int = 60) -> List[dict]:
     """Merge non-delivered Package expected-delivery-dates + expanded
-    Subscription occurrences into one sorted-by-date list:
+    Subscription occurrences + credit-card statement/due dates into one
+    sorted-by-date list:
     [{type, id, date, title, subtitle, amount, link, is_overdue}, ...]."""
-    from app.models.models import Package, Subscription
+    from sqlalchemy import and_, or_
+    from app.models.models import Package, Subscription, CreditCardBill, Bank
     from app.core.time_utils import utcnow
 
     now = utcnow()
     horizon = now + timedelta(days=days_ahead)
+    window_start = now - timedelta(days=1)
     items = []
 
     packages = (
@@ -88,12 +91,43 @@ def get_upcoming_items(db, user_id: int, days_ahead: int = 60) -> List[dict]:
 
     subscriptions = db.query(Subscription).filter(Subscription.user_id == user_id, Subscription.is_active.is_(True)).all()
     for s in subscriptions:
-        for occ_date in expand_occurrences(s.due_date, s.recurrence, now - timedelta(days=1), horizon):
+        for occ_date in expand_occurrences(s.due_date, s.recurrence, window_start, horizon):
             items.append({
                 "type": "subscription", "id": s.id, "date": occ_date,
                 "title": s.name, "subtitle": s.item_type,
                 "amount": s.amount, "link": None,
                 "is_overdue": occ_date < now,
+            })
+
+    credit_bills = (
+        db.query(CreditCardBill, Bank.name)
+        .join(Bank, CreditCardBill.bank_id == Bank.id)
+        .filter(
+            CreditCardBill.user_id == user_id,
+            or_(
+                and_(CreditCardBill.statement_date.isnot(None), CreditCardBill.statement_date >= window_start, CreditCardBill.statement_date <= horizon),
+                and_(CreditCardBill.due_date.isnot(None), CreditCardBill.due_date >= window_start, CreditCardBill.due_date <= horizon),
+            ),
+        )
+        .all()
+    )
+    for bill, bank_name in credit_bills:
+        if bill.statement_date and window_start <= bill.statement_date <= horizon:
+            items.append({
+                "type": "credit_card_statement", "id": bill.id, "date": bill.statement_date,
+                "title": f"{bank_name} statement", "subtitle": "Statement generated",
+                "amount": bill.total_amount_due, "link": None,
+                "is_overdue": False,
+            })
+        if bill.due_date and window_start <= bill.due_date <= horizon:
+            is_paid = bill.payment_status in ("paid", "auto_matched")
+            items.append({
+                "type": "credit_card_due", "id": bill.id, "date": bill.due_date,
+                "title": f"{bank_name} bill due",
+                "subtitle": "Paid" if is_paid else "Payment due",
+                "amount": bill.total_amount_due, "link": None,
+                "is_overdue": bill.due_date < now and not is_paid,
+                "payment_status": bill.payment_status,
             })
 
     items.sort(key=lambda i: i["date"])

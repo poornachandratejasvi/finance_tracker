@@ -34,8 +34,15 @@ def redetect_all_credit_card_balances():
                 report = redetect_credit_card_balance(db, bank.user_id, bank, use_ai=True)
                 if report.get("source") not in ("unchanged", "no_pdf"):
                     updated += 1
+                # redetect_credit_card_balance only mutates the in-memory ORM
+                # objects (Bank.current_balance, CreditCardBill upserts) --
+                # this task's own SessionLocal never had a commit, so none of
+                # it was actually being persisted before. Commit per-bank so
+                # one bank's failure below can't roll back an already-good one.
+                db.commit()
             except Exception:
                 logger.warning("Credit balance redetect failed for bank %s", bank.id, exc_info=True)
+                db.rollback()
     finally:
         db.close()
 

@@ -975,6 +975,56 @@ class Subscription(Base):
     user = relationship("User")
 
 
+class CreditCardBill(Base):
+    """One row per credit-card billing cycle -- kept as history (like
+    VehicleInsurancePolicy), not overwritten, since each cycle has its own
+    statement/due date and payment record. Created/updated whenever a
+    statement is (re)parsed -- see credit_balance_service.py -- and matched
+    against transactions to detect whether the bill has actually been paid
+    (see credit_card_bill_service.py). Deduped by (bank_id, due_date)."""
+    __tablename__ = "credit_card_bills"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bank_id = Column(Integer, ForeignKey("banks.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    statement_date = Column(DateTime, nullable=True)
+    due_date = Column(DateTime, nullable=True, index=True)
+    total_amount_due = Column(Float, nullable=True)
+    minimum_amount_due = Column(Float, nullable=True)
+    payment_status = Column(String(20), default="unpaid")  # unpaid|auto_matched|paid
+    payment_transaction_id = Column(Integer, ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True)
+    last_reminder_sent_for = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    bank = relationship("Bank")
+    user = relationship("User")
+    payment_transaction = relationship("Transaction")
+
+    __table_args__ = (
+        Index("ix_credit_card_bills_bank_due", "bank_id", "due_date"),
+    )
+
+
+class PushToken(Base):
+    """A device's push-notification token (Expo push token, covering both iOS
+    and Android through one API) -- registered by the mobile app on launch,
+    used by expo_push_service.py to deliver OS-level notifications (e.g. a
+    credit-card-bill-due reminder) even when the app is closed. A user can
+    have multiple (phone + tablet); a re-registered token for the same device
+    replaces the old row rather than duplicating (see the unique index)."""
+    __tablename__ = "push_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String(255), nullable=False, unique=True)
+    platform = Column(String(10), nullable=True)  # ios|android
+    created_at = Column(DateTime, default=utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+
+    user = relationship("User")
+
+
 class ExternalLookupRequest(Base):
     """A unit of work Finance Tracker can't fulfill itself -- no captcha-free
     API exists (e.g. Bluedart/DTDC tracking, both confirmed hCaptcha/
