@@ -101,26 +101,29 @@ def poll_statement_ocr(self, pdf_statement_id: int, bank_id: int, user_id: int, 
 
 
 def _apply_credit_card_bill_ocr(db, bank, content: str) -> None:
-    from app.core.time_utils import utcnow
+    """Only ever recovers due_date/statement_date from the OCR'd text, NEVER
+    Total Amount Due -- deliberately. Confirmed against a real ICICI statement:
+    extract_total_amount_due's "closing balance" label matched a stale
+    illustrative-example figure buried in the T&C section (a full fake
+    "Closing Balance 26,958.20" row from a worked example, nowhere near the
+    real summary box) before the real "Total Amount Due" label ever got a
+    chance to try a wider gap. Balance is already reliably covered by
+    credit_balance_service.py's regex+AI path on the ORIGINAL text -- this
+    fallback exists for due_date, which that path couldn't find, not to
+    second-guess a balance it already got right."""
     from app.services.pdf_parser import PDFParser
     from app.services.credit_balance_service import _upsert_credit_card_bill
 
     due_date = PDFParser.extract_due_date(content)
     statement_date = PDFParser.extract_statement_date(content)
-    balance = PDFParser.extract_total_amount_due(content)
 
-    if due_date is None and balance is None:
-        logger.info("Statement OCR: still nothing found for bank %s even from Paperless's OCR", bank.id)
+    if due_date is None:
+        logger.info("Statement OCR: still no due date for bank %s even from Paperless's OCR", bank.id)
         return
 
-    if due_date is not None:
-        _upsert_credit_card_bill(db, bank, due_date, statement_date, balance, None)
-    if balance is not None and bank.current_balance != balance and bank.balance_source != "manual":
-        bank.current_balance = balance
-        bank.balance_updated_at = utcnow()
-        bank.balance_source = "auto"
+    _upsert_credit_card_bill(db, bank, due_date, statement_date, None, None)
     db.commit()
-    logger.info("Statement OCR: resolved due_date=%s balance=%s for bank %s via Paperless", due_date, balance, bank.id)
+    logger.info("Statement OCR: resolved due_date=%s statement_date=%s for bank %s via Paperless", due_date, statement_date, bank.id)
 
 
 def _notify_if_transactions_found(db, bank, user_id: int, pdf_statement_id: int, content: str) -> None:
@@ -135,7 +138,8 @@ def _notify_if_transactions_found(db, bank, user_id: int, pdf_statement_id: int,
       - create_or_reconcile_transaction for everything else: absorbs into a
         matching PENDING transaction if one exists, otherwise creates new.
     """
-    from app.models.models import PDFStatement
+    from datetime import timedelta
+    from app.models.models import PDFStatement, BankEmail
     from app.services.pdf_parser import PDFParser
     from app.services.categorization import resolve_category
     from app.services.transaction_hooks import find_confirmed_match, create_or_reconcile_transaction, apply_auto_rules_and_notify
@@ -153,6 +157,30 @@ def _notify_if_transactions_found(db, bank, user_id: int, pdf_statement_id: int,
     if not rows:
         logger.info("Statement OCR: Paperless OCR also found zero transactions for statement %s (bank %s)", pdf_statement_id, bank.id)
         return
+
+    # Defense in depth against a real, confirmed hazard: some issuers (ICICI
+    # confirmed) print full illustrative "Most Important T&C" example tables
+    # with plausible-looking fake transaction rows and dates, purely to
+    # explain how Minimum Amount Due is calculated -- OCR'd text loses
+    # whatever visual cues (font, box borders) mark these as illustrative.
+    # Anchor to the statement's real period/received date and drop anything
+    # implausibly outside it rather than trust the generic parser's row
+    # patterns alone to have excluded them.
+    anchor = (period[1] or period[0]) if period else None
+    if anchor is None and pdf:
+        bank_email = db.query(BankEmail).filter(BankEmail.id == pdf.bank_email_id).first()
+        anchor = (bank_email.received_date if bank_email else None) or pdf.created_at
+    if anchor:
+        window_start, window_end = anchor - timedelta(days=45), anchor + timedelta(days=15)
+        before = len(rows)
+        rows = [r for r in rows if r.get("transaction_date") and window_start <= r["transaction_date"] <= window_end]
+        if len(rows) < before:
+            logger.info(
+                "Statement OCR: dropped %d row(s) dated outside the statement's plausible window for statement %s (bank %s)",
+                before - len(rows), pdf_statement_id, bank.id,
+            )
+        if not rows:
+            return
 
     added = 0
     skipped_duplicates = 0

@@ -144,7 +144,16 @@ def upload_document(db: Session, file_bytes: bytes, filename: str, title: Option
 def resolve_document_id(db: Session, task_id: str) -> Optional[int]:
     """Polls Paperless's task-status endpoint once. Returns the resulting
     document ID if the consume task finished successfully, None otherwise
-    (still running, or failed -- caller decides whether to retry)."""
+    (still running, or failed -- caller decides whether to retry).
+
+    Paperless's /api/tasks/ response shape (confirmed against a live
+    instance): a DRF-paginated object (`{"count", "results": [...]}`), not a
+    bare list -- and each task's `status` is lowercase ("success"/"failure",
+    not "SUCCESS"/"FAILURE"), with the resulting document id under
+    `related_document_ids` (a list) rather than a singular `related_document`
+    field. The original version of this function assumed all three
+    incorrectly and so never once successfully resolved a real task -- it
+    always fell into the generic except-and-retry path instead."""
     _, token = _get_creds(db)
     if not token:
         return None
@@ -154,13 +163,18 @@ def resolve_document_id(db: Session, task_id: str) -> Optional[int]:
             headers={"Authorization": f"Token {token}"}, timeout=15,
         )
         r.raise_for_status()
-        results = r.json()
+        data = r.json()
+        results = data.get("results", []) if isinstance(data, dict) else data
         if not results:
             return None
         task = results[0]
-        if task.get("status") == "SUCCESS":
-            return task.get("related_document")
-        if task.get("status") == "FAILURE":
+        status = str(task.get("status", "")).lower()
+        if status == "success":
+            related = task.get("related_document_ids") or []
+            if related:
+                return related[0]
+            return (task.get("result_data") or {}).get("document_id")
+        if status == "failure":
             logger.warning("Paperless-ngx consume task %s failed: %s", task_id, task.get("result"))
         return None
     except Exception:

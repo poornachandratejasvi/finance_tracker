@@ -1117,15 +1117,51 @@ class PDFParser:
 
     @staticmethod
     def _extract_labelled_date(text: str, labels: List[str]) -> Optional[datetime]:
-        # DD/MM/YYYY, DD-MM-YYYY, or "12 Mar 2026" / "12 March 2026" -- the
-        # same date shapes extract_statement_period already handles.
-        date_re = r'(\d{2}[/-]\d{2}[/-]\d{4}|\d{1,2}\s+[A-Za-z]{3,9}[,\s]+\d{4})'
-        for gap_re in (r'\s*[:\-]?\s*', r'[^\d\n]{0,20}\s*'):
-            for label in labels:
-                m = re.search(label + gap_re + date_re, text, re.IGNORECASE)
-                if m:
+        # DD/MM/YYYY, DD-MM-YYYY, "12 Mar 2026" / "12 March 2026" (day-first,
+        # the same shapes extract_statement_period already handles), or
+        # "August 30, 2026" (month-first -- confirmed real case: ICICI's OCR'd
+        # summary box prints it this way, not day-first like everything else
+        # this file was originally tuned against).
+        date_re = (
+            r'(\d{2}[/-]\d{2}[/-]\d{4}'
+            r'|\d{1,2}\s+[A-Za-z]{3,9}[,\s]+\d{4}'
+            r'|[A-Za-z]{3,9}\s+\d{1,2}[,\s]+\d{4})'
+        )
+        # The gap must exclude letters, not just digits/newlines -- greedy
+        # matching + backtracking otherwise happily eats into the front of a
+        # month name (e.g. "August 30, 2026") before backtracking lands on a
+        # shorter gap where the REMAINDER ("ust 30, 2026") still satisfies
+        # date_re's month-first alternative, silently truncating the match.
+        # Confirmed real case, not a hypothetical.
+        gaps = [
+            r'\A[^\w\n]{0,20}',
+            # OCR output (Paperless fallback) often interposes several lines of
+            # unrelated/garbled text between a label and its value -- confirmed
+            # against a real ICICI statement, 3 lines separate "PAYMENT DUE
+            # DATE" from "August 30, 2026" (page-layout text + an OCR garbage
+            # line).
+            r'\A(?:[^\n]*\n){0,4}[^\w\n]{0,30}',
+        ]
+        for label in labels:
+            # Anchor to the FIRST occurrence of this label only, then search a
+            # bounded window strictly after it -- never let re.search roam
+            # forward to some LATER occurrence of the same label elsewhere in
+            # the document. Confirmed real hazard: a credit-card statement's
+            # "Most Important T&C" section prints a full worked example
+            # ("Payment due date: Oct 26, 2023") with the label and a
+            # plausible-looking date on the very same line -- a tight,
+            # same-line match against the WHOLE document finds that fake
+            # example before ever trying a wider gap against the real summary
+            # box's label (whose actual date sits a few lines below it).
+            m = re.search(label, text, re.IGNORECASE)
+            if not m:
+                continue
+            window = text[m.end():m.end() + 400]
+            for gap_re in gaps:
+                dm = re.search(gap_re + date_re, window)
+                if dm:
                     try:
-                        return pd.to_datetime(m.group(1), dayfirst=True).to_pydatetime()
+                        return pd.to_datetime(dm.group(1), dayfirst=True).to_pydatetime()
                     except (ValueError, TypeError):
                         continue
         return None

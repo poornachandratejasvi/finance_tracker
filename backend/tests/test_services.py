@@ -656,6 +656,47 @@ class TestExtractDueDate:
         assert PDFParser.extract_due_date("") is None
         assert PDFParser.extract_due_date(None) is None
 
+    def test_month_first_format(self):
+        # "August 30, 2026" -- month-first, confirmed real case from a
+        # Paperless-OCR'd ICICI statement (day-first was the only format
+        # this originally handled).
+        text = "PAYMENT DUE DATE\nAugust 30, 2026"
+        assert PDFParser.extract_due_date(text) == datetime(2026, 8, 30)
+
+    def test_month_first_gap_does_not_truncate_month_name(self):
+        # Regression: a greedy non-digit gap previously ate into the front of
+        # the month name itself ("August" -> gap consumes "Aug", leaving
+        # "ust 30, 2026" to (wrongly) still satisfy the date pattern).
+        text = "PAYMENT DUE DATE l Some page furniture text\nAugust 30, 2026 Scan to pay"
+        assert PDFParser.extract_due_date(text) == datetime(2026, 8, 30)
+
+    def test_ocr_multiline_gap_confirmed_real_icici_case(self):
+        # Real structure from a Paperless-OCR'd ICICI statement: 3 lines
+        # (page furniture + an OCR garbage line) separate the label from its
+        # actual value.
+        text = (
+            "PAYMENT DUE DATE l To update mobile number, visit the nearest branch\n"
+            "\x90xr\x89\xa6y\x96 \xea\xe4\xb5\x92\xd7\xe2\xc6\xa6xv\xb6\xe7\n"
+            "l Click here to access your Credit Card One View Statement\n"
+            "August 30, 2026 Scan to Pay using UPI\n"
+        )
+        assert PDFParser.extract_due_date(text) == datetime(2026, 8, 30)
+
+    def test_prefers_first_label_occurrence_over_illustrative_example(self):
+        # Real hazard: a credit-card statement's T&C section prints a full
+        # worked example with the SAME label immediately next to a plausible
+        # fake date, further down the document -- must never let that beat
+        # the real (but multi-line-separated) occurrence near the top.
+        text = (
+            "PAYMENT DUE DATE some furniture text\n"
+            "some ocr garbage\n"
+            "more furniture\n"
+            "August 30, 2026 real value\n"
+            "...pages of terms and conditions...\n"
+            "Illustration: Payment due date - Oct 26, 2023\n"
+        )
+        assert PDFParser.extract_due_date(text) == datetime(2026, 8, 30)
+
 
 class TestExtractStatementDate:
     def test_statement_date_label(self):
