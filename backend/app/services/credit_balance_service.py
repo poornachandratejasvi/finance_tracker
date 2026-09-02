@@ -155,7 +155,7 @@ def redetect_credit_card_balance(db: Session, uid: int, bank: Bank, use_ai: bool
             from app.services import paperless_service
             if paperless_service.is_configured(db):
                 from app.tasks.statement_ocr_tasks import enqueue_statement_ocr
-                enqueue_statement_ocr.delay(bank.id)
+                enqueue_statement_ocr.delay(pdf.id, bank.id, uid, purpose="credit_card_bill")
         except Exception:
             logger.info("Could not queue Paperless OCR fallback for bank %s", bank.id, exc_info=True)
 

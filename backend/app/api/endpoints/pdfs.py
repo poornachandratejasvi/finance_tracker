@@ -539,6 +539,17 @@ def reprocess_pdf(
             apply_auto_rules_and_notify(db, current_user.id, transaction)
             transactions_added += 1
 
+        if transactions_added == 0 and bank.bank_type != "investment":
+            # Same Paperless-OCR detect-and-notify fallback as the automatic
+            # sync path (sync.py) -- see that call site's comment.
+            try:
+                from app.services import paperless_service
+                if paperless_service.is_configured(db):
+                    from app.tasks.statement_ocr_tasks import enqueue_statement_ocr
+                    enqueue_statement_ocr.delay(pdf.id, bank.id, current_user.id, purpose="statement_transactions")
+            except Exception:
+                logger.info("Could not queue Paperless OCR fallback for statement %s", pdf.id, exc_info=True)
+
         if pdf.is_password_protected and bank.account_password:
             from app.services.pdf_storage import ensure_decrypted_pdf
             ensure_decrypted_pdf(db, pdf, bank.account_password)
@@ -677,6 +688,17 @@ def _reprocess_pdf_worker(pdf_id: int, user_id: int) -> dict:
             )
             apply_auto_rules_and_notify(db, user_id, transaction)
             transactions_added += 1
+
+        if transactions_added == 0 and bank.bank_type != "investment":
+            # Same Paperless-OCR detect-and-notify fallback as the automatic
+            # sync path (sync.py) -- see that call site's comment.
+            try:
+                from app.services import paperless_service
+                if paperless_service.is_configured(db):
+                    from app.tasks.statement_ocr_tasks import enqueue_statement_ocr
+                    enqueue_statement_ocr.delay(pdf.id, bank.id, user_id, purpose="statement_transactions")
+            except Exception:
+                logger.info("Could not queue Paperless OCR fallback for statement %s", pdf.id, exc_info=True)
 
         if pdf.is_password_protected and bank.account_password:
             from app.services.pdf_storage import ensure_decrypted_pdf

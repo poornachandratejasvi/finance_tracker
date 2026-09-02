@@ -168,6 +168,21 @@ def _process_pdf_task(
             apply_auto_rules_and_notify(db, user_id, transaction)
             transactions_added += 1
 
+        if transactions_added == 0 and bank.bank_type != "investment":
+            # Regex/table parsing AND the AI-on-text fallback both found
+            # nothing -- try Paperless-ngx's OCR as a last resort (catches a
+            # summary/table rendered as a graphic rather than real text, which
+            # no amount of text-based parsing can ever see). Detect-and-notify
+            # only, not auto-create -- this touches nothing else in the sync
+            # pipeline and never risks creating a wrong transaction.
+            try:
+                from app.services import paperless_service
+                if paperless_service.is_configured(db):
+                    from app.tasks.statement_ocr_tasks import enqueue_statement_ocr
+                    enqueue_statement_ocr.delay(pdf_statement.id, bank.id, user_id, purpose="statement_transactions")
+            except Exception:
+                logger.info("Could not queue Paperless OCR fallback for statement %s", pdf_statement.id, exc_info=True)
+
         if is_protected and bank.account_password:
             ensure_decrypted_pdf(db, pdf_statement, bank.account_password)
 
