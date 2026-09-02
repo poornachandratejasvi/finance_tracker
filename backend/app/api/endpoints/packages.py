@@ -31,13 +31,17 @@ _CARRIER_LABELS = {
 
 
 def _carriers() -> list:
-    # has_live_tracking is derived from courier_trackers.LIVE_TRACKING_CARRIERS
-    # (not hand-duplicated here) so this list can never drift out of sync with
-    # which carriers actually have a working tracker function.
-    from app.services.courier_trackers import LIVE_TRACKING_CARRIERS
+    # has_live_tracking / has_external_lookup are derived from
+    # courier_trackers.py's two carrier sets (not hand-duplicated here) so this
+    # list can never drift out of sync with which carriers actually work.
+    from app.services.courier_trackers import LIVE_TRACKING_CARRIERS, BROWSER_AUTOMATION_CARRIERS
 
     return [
-        {"key": key, "label": label, "has_live_tracking": key in LIVE_TRACKING_CARRIERS}
+        {
+            "key": key, "label": label,
+            "has_live_tracking": key in LIVE_TRACKING_CARRIERS,
+            "has_external_lookup": key in BROWSER_AUTOMATION_CARRIERS,
+        }
         for key, label in _CARRIER_LABELS.items()
     ]
 
@@ -166,11 +170,20 @@ def delete_package(package_id: int, db: Session = Depends(get_db), current_user:
 
 @router.post("/{package_id}/refresh-now")
 def refresh_package_now(package_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_write_access_flexible)):
-    from app.services.courier_trackers import track_package, LIVE_TRACKING_CARRIERS
+    from app.services.courier_trackers import track_package, LIVE_TRACKING_CARRIERS, BROWSER_AUTOMATION_CARRIERS
 
     p = _get_package(db, package_id, current_user.id)
-    if p.carrier not in LIVE_TRACKING_CARRIERS or not p.tracking_number:
+    if not p.tracking_number or (p.carrier not in LIVE_TRACKING_CARRIERS and p.carrier not in BROWSER_AUTOMATION_CARRIERS):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This carrier doesn't support live tracking, or no tracking number is set.")
+
+    if p.carrier in BROWSER_AUTOMATION_CARRIERS:
+        from app.services.external_lookup_service import enqueue_courier_tracking
+
+        enqueue_courier_tracking(db, current_user.id, p.carrier, p.tracking_number)
+        p.last_tracker_error = "Queued for external lookup (no direct API for this carrier) -- check back shortly."
+        db.commit()
+        db.refresh(p)
+        return _package_dict(p)
 
     result = track_package(p.carrier, p.tracking_number)
     p.last_checked_at = utcnow()

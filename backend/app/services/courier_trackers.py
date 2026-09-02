@@ -294,6 +294,12 @@ CARRIER_TRACKERS = {
 # supported.
 LIVE_TRACKING_CARRIERS = {"delhivery", "india_post", "xpressbees", "shadowfax", "ekart", "ecom_express"}
 
+# Carriers with no captcha-free API at all (see module docstring) -- rather
+# than stay permanently email-only, these get their tracking handed off to an
+# external browser-automation agent (see external_lookup_service.py) instead
+# of a direct requests-based tracker function.
+BROWSER_AUTOMATION_CARRIERS = {"bluedart", "dtdc"}
+
 
 def track_package(carrier: str, tracking_number: str) -> Optional[Dict]:
     """Dispatch to the right carrier function. Returns None for 'amazon'/

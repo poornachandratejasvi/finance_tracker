@@ -225,7 +225,9 @@ export default function Packages() {
 
                   {p.last_tracker_error && (
                     <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 1 }}>
-                      Last check failed — showing last known status.
+                      {p.last_tracker_error.startsWith('Queued for external lookup')
+                        ? p.last_tracker_error
+                        : 'Last check failed — showing last known status.'}
                     </Typography>
                   )}
 
@@ -235,14 +237,14 @@ export default function Packages() {
                         Track
                       </Button>
                     )}
-                    {cMeta.has_live_tracking && p.tracking_number && p.status !== 'delivered' && (
-                      <Tooltip title="Check live tracking now">
+                    {(cMeta.has_live_tracking || cMeta.has_external_lookup) && p.tracking_number && p.status !== 'delivered' && (
+                      <Tooltip title={cMeta.has_live_tracking ? 'Check live tracking now' : 'Queue an external browser-automation lookup (no direct API for this carrier)'}>
                         <span>
                           <Button
                             size="small" startIcon={refreshingId === p.id ? <CircularProgress size={14} /> : <Refresh fontSize="small" />}
                             onClick={() => refreshOne(p.id)} disabled={refreshingId === p.id}
                           >
-                            Refresh
+                            {cMeta.has_live_tracking ? 'Refresh' : 'Queue lookup'}
                           </Button>
                         </span>
                       </Tooltip>

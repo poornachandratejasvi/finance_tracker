@@ -1,6 +1,8 @@
 """Celery task: periodic live carrier-tracker refresh (see
 courier_trackers.py). Runs every few hours -- shipment emails already give
-same-day status for most updates, this just fills gaps between them.
+same-day status for most updates, this just fills gaps between them. Carriers
+with no captcha-free API (Bluedart/DTDC) get queued for an external
+browser-automation agent instead -- see external_lookup_service.py.
 """
 import logging
 from datetime import timedelta
@@ -21,17 +23,19 @@ def refresh_active_packages():
     from app.core.database import SessionLocal
     from app.core.time_utils import utcnow
     from app.models.models import Package
-    from app.services.courier_trackers import track_package, LIVE_TRACKING_CARRIERS
+    from app.services.courier_trackers import track_package, LIVE_TRACKING_CARRIERS, BROWSER_AUTOMATION_CARRIERS
+    from app.services.external_lookup_service import enqueue_courier_tracking
 
     db = SessionLocal()
     refreshed = 0
+    queued = 0
     try:
         cutoff = utcnow() - _STALE_AFTER
         packages = (
             db.query(Package)
             .filter(
                 Package.status != "delivered",
-                Package.carrier.in_(list(LIVE_TRACKING_CARRIERS)),
+                Package.carrier.in_(list(LIVE_TRACKING_CARRIERS) + list(BROWSER_AUTOMATION_CARRIERS)),
                 Package.tracking_number.isnot(None),
             )
             .all()
@@ -39,6 +43,18 @@ def refresh_active_packages():
         for pkg in packages:
             if pkg.last_checked_at and pkg.last_checked_at > cutoff:
                 continue
+
+            if pkg.carrier in BROWSER_AUTOMATION_CARRIERS:
+                try:
+                    enqueue_courier_tracking(db, pkg.user_id, pkg.carrier, pkg.tracking_number)
+                    pkg.last_checked_at = utcnow()
+                    db.commit()
+                    queued += 1
+                except Exception:
+                    logger.warning("Failed to queue external lookup for package %s", pkg.id, exc_info=True)
+                    db.rollback()
+                continue
+
             try:
                 result = track_package(pkg.carrier, pkg.tracking_number)
                 if result:
@@ -60,6 +76,6 @@ def refresh_active_packages():
     finally:
         db.close()
 
-    if refreshed:
-        logger.info("Package tracker refresh: %d package(s) updated", refreshed)
-    return {"refreshed": refreshed}
+    if refreshed or queued:
+        logger.info("Package tracker refresh: %d package(s) updated, %d queued for external lookup", refreshed, queued)
+    return {"refreshed": refreshed, "queued": queued}

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import auth, users, banks, transactions, labels, sync, logs, oauth, pdfs, dashboard, field_mapping, settings, csv_exports, api_tokens, ingest, goals, categories, currencies, analytics, filters, templates, backup, ai, rules, notifications, notification_rules, gmail_accounts, watchers, imports, reward_points, family_dashboard, search, investments, dashboard_widgets, receipts, vehicles, debt, gamification, metrics, summary, packages, subscriptions, calendar
+from app.api.endpoints import auth, users, banks, transactions, labels, sync, logs, oauth, pdfs, dashboard, field_mapping, settings, csv_exports, api_tokens, ingest, goals, categories, currencies, analytics, filters, templates, backup, ai, rules, notifications, notification_rules, gmail_accounts, watchers, imports, reward_points, family_dashboard, search, investments, dashboard_widgets, receipts, vehicles, debt, gamification, metrics, summary, packages, subscriptions, calendar, external_lookups
 
 api_router = APIRouter()
 
@@ -47,3 +47,4 @@ api_router.include_router(summary.router, prefix="/summary", tags=["Summary"])
 api_router.include_router(packages.router, prefix="/packages", tags=["Packages"])
 api_router.include_router(subscriptions.router, prefix="/subscriptions", tags=["Subscriptions"])
 api_router.include_router(calendar.router, prefix="/calendar", tags=["Calendar"])
+api_router.include_router(external_lookups.router, prefix="/external-lookups", tags=["External Lookups"])

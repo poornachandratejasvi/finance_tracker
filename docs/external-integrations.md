@@ -42,8 +42,8 @@ Full OpenAPI schema (request/response models, all fields) is browsable live at
 | POST | `/` | Add a package manually (`carrier`, `tracking_number`, `merchant`, `item_description`, `expected_delivery_date`, `tracking_url`, `notes`) |
 | PUT | `/{id}` | Edit a package |
 | DELETE | `/{id}` | Remove a package |
-| POST | `/{id}/refresh-now` | Force a live tracking-status check (only for carriers with `has_live_tracking: true`) |
-| GET | `/carriers` | List known carrier keys/labels + which support live tracking |
+| POST | `/{id}/refresh-now` | Force a live tracking-status check (`has_live_tracking: true` carriers), or queue an external browser-automation lookup (`has_external_lookup: true` carriers — see section 5) |
+| GET | `/carriers` | List known carrier keys/labels + which support live tracking / external lookup |
 
 `carrier` accepts any string — not limited to the listed keys — so any courier
 not in the fixed list can be tracked under its own name (e.g.
@@ -75,11 +75,51 @@ curl -s "https://your-domain/api/calendar/?days_ahead=7" \
   -H "Authorization: Bearer ft_XXXXXXXX..."
 ```
 
-## 5. Notes for a push-based (webhook) integration
+## 5. External Lookups — handing browser-automation work to an agent (OpenClaw)
 
-There is currently no outbound webhook — package/subscription due-date alerts
-go out via the existing Discord/Apprise notification channel (Settings →
-Notifications), not to arbitrary third-party endpoints. If a tool needs to be
-*pushed to* rather than polling `/api/calendar`, that would need a small new
-webhook-dispatch feature — not built yet, ask for it once the target tool's
-expected payload shape is known.
+Some couriers (currently Bluedart, DTDC) have no captcha-free tracking API at
+all — Bluedart's known API keys are revoked and its web tracker is
+hCaptcha-gated; DTDC's tracking calls require a token minted by solving a
+captcha first. Rather than give up on these, Finance Tracker queues the work
+for an agent that *can* drive a real browser (OpenClaw) to pull the answer.
+
+This queue (`/api/external-lookups`) is generic by design — `courier_tracking`
+is the only request type today, but a future need (checking a page behind a
+login, anything else only a real browser can do) reuses the same two
+endpoints, not a new pair each time.
+
+**How it fills up:** every 6 hours, and whenever you tap "Queue lookup" on a
+Bluedart/DTDC package in the Packages page, a pending request is created (deduped
+— a package with one already pending doesn't get a second).
+
+**Polling loop for OpenClaw:**
+
+```bash
+# 1. See what's waiting
+curl -s "https://your-domain/api/external-lookups/pending?request_type=courier_tracking" \
+  -H "Authorization: Bearer ft_XXXXXXXX..."
+# -> [{"id": 12, "request_type": "courier_tracking", "status": "pending",
+#      "input": {"carrier": "bluedart", "tracking_number": "..."}, ...}]
+```
+
+For each pending request: use `input.carrier` + `input.tracking_number` to
+know what to look up (open the carrier's tracking page, solve whatever's in
+the way, read the result), then post it back:
+
+```bash
+curl -s -X POST "https://your-domain/api/external-lookups/12/complete" \
+  -H "Authorization: Bearer ft_XXXXXXXX..." \
+  -H "Content-Type: application/json" \
+  -d '{"result": {"status": "out_for_delivery", "expected_delivery_date": "2026-09-05T00:00:00", "current_location": "Bengaluru Hub"}}'
+```
+
+`result.status` should be one of `ordered|shipped|out_for_delivery|delivered`
+(anything else is ignored, leaving the package's current status alone).
+`expected_delivery_date`/`actual_delivery_date` are optional ISO date strings.
+Completing the request immediately updates the matching Package — no separate
+step needed. If the lookup genuinely can't be completed (site down, AWB not
+found), post `{"error": "reason"}` instead of `result` to mark it failed
+rather than leaving it pending forever.
+
+A request can only be completed once (`400` if already completed/failed) — no
+need to guard against double-processing on your end.

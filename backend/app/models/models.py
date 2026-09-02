@@ -975,6 +975,32 @@ class Subscription(Base):
     user = relationship("User")
 
 
+class ExternalLookupRequest(Base):
+    """A unit of work Finance Tracker can't fulfill itself -- no captcha-free
+    API exists (e.g. Bluedart/DTDC tracking, both confirmed hCaptcha/
+    captcha-token-gated, see courier_trackers.py) -- handed off to an external
+    agent capable of browser automation (e.g. OpenClaw): created here, polled
+    and completed over there via /api/external-lookups.
+
+    Deliberately generic (request_type + free-form JSON payloads) rather than
+    one table per use case, so a future need beyond courier tracking (checking
+    a page behind a login, etc) reuses this same queue -- just a new
+    request_type and whatever service applies its result, no schema change."""
+    __tablename__ = "external_lookup_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    request_type = Column(String(40), nullable=False, index=True)  # 'courier_tracking' | ...
+    status = Column(String(20), default="pending", index=True)  # pending|completed|failed
+    input_payload = Column(Text, nullable=False)  # JSON string -- shape depends on request_type
+    result_payload = Column(Text, nullable=True)  # JSON string -- shape depends on request_type
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, index=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    user = relationship("User")
+
+
 class TransactionAuditLog(Base):
     """Immutable record of every edit/delete made to a transaction, for tax/
     business-expense record-keeping. transaction_id is deliberately NOT a foreign
