@@ -106,7 +106,13 @@ def get_upcoming_items(db, user_id: int, days_ahead: int = 60) -> List[dict]:
             CreditCardBill.user_id == user_id,
             or_(
                 and_(CreditCardBill.statement_date.isnot(None), CreditCardBill.statement_date >= window_start, CreditCardBill.statement_date <= horizon),
-                and_(CreditCardBill.due_date.isnot(None), CreditCardBill.due_date >= window_start, CreditCardBill.due_date <= horizon),
+                # An unpaid due date has no lower bound -- like a non-delivered
+                # Package, a still-unpaid bill from months ago is genuinely
+                # overdue and must keep showing, not silently vanish once it
+                # scrolls past "yesterday". A paid/auto-matched one only needs
+                # the normal window (nothing actionable left to show for it).
+                and_(CreditCardBill.due_date.isnot(None), CreditCardBill.due_date <= horizon,
+                     or_(CreditCardBill.payment_status == "unpaid", CreditCardBill.due_date >= window_start)),
             ),
         )
         .all()
@@ -119,7 +125,8 @@ def get_upcoming_items(db, user_id: int, days_ahead: int = 60) -> List[dict]:
                 "amount": bill.total_amount_due, "link": None,
                 "is_overdue": False,
             })
-        if bill.due_date and window_start <= bill.due_date <= horizon:
+        due_in_range = bill.due_date and (bill.due_date <= horizon) and (bill.payment_status == "unpaid" or bill.due_date >= window_start)
+        if due_in_range:
             is_paid = bill.payment_status in ("paid", "auto_matched")
             items.append({
                 "type": "credit_card_due", "id": bill.id, "date": bill.due_date,
