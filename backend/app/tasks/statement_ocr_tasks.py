@@ -13,13 +13,14 @@ the exact same upload/poll mechanism for two different purposes, selected by
   Confirmed real case: an ICICI statement's summary box came through as raw
   font glyph codes, not readable text, in pdfplumber's extraction.
 - 'statement_transactions': a statement parsed to ZERO transactions even after
-  the AI-on-text fallback (see sync.py / pdfs.py) -- detect-and-notify only.
-  Deliberately does NOT auto-create transactions: reusing the real
-  reconciliation/dedup/categorization pipeline safely from here would mean
-  refactoring the core sync path to accept OCR'd text as an alternate input,
-  which is a bigger, riskier change than this fallback's actual confirmed
-  value justifies today. This just tells the user OCR found something worth
-  a manual look via Discord, nothing gets written to a Transaction.
+  the AI-on-text fallback (see sync.py / pdfs.py). Re-parses Paperless's OCR'd
+  text with the same bank-agnostic parse_transactions_text_generic, then
+  creates whatever isn't a duplicate -- reusing the exact same
+  dedup/reconciliation functions (find_confirmed_match,
+  create_or_reconcile_transaction, apply_auto_rules_and_notify) every other
+  ingestion path already calls, just invoked directly here rather than by
+  re-entering sync.py's larger PDF-processing function. A Discord notification
+  summarizes what was added (and how many duplicates were skipped).
 """
 import logging
 import os
@@ -123,8 +124,21 @@ def _apply_credit_card_bill_ocr(db, bank, content: str) -> None:
 
 
 def _notify_if_transactions_found(db, bank, user_id: int, pdf_statement_id: int, content: str) -> None:
+    """Re-parse via Paperless's OCR'd text and create whatever comes out that
+    isn't a duplicate -- same dedup pipeline every other ingestion path
+    (sync.py, pdfs.py) uses, just called directly rather than by re-entering
+    those functions:
+      - find_confirmed_match first: skip a row that's already a real,
+        confirmed transaction (e.g. a bank alert/SMS already recorded the
+        same purchase while this OCR pass was still pending) -- a true
+        duplicate, never created.
+      - create_or_reconcile_transaction for everything else: absorbs into a
+        matching PENDING transaction if one exists, otherwise creates new.
+    """
     from app.models.models import PDFStatement
     from app.services.pdf_parser import PDFParser
+    from app.services.categorization import resolve_category
+    from app.services.transaction_hooks import find_confirmed_match, create_or_reconcile_transaction, apply_auto_rules_and_notify
     from app.services import discord_service
 
     pdf = db.query(PDFStatement).filter(PDFStatement.id == pdf_statement_id).first()
@@ -140,14 +154,35 @@ def _notify_if_transactions_found(db, bank, user_id: int, pdf_statement_id: int,
         logger.info("Statement OCR: Paperless OCR also found zero transactions for statement %s (bank %s)", pdf_statement_id, bank.id)
         return
 
-    logger.info("Statement OCR: found %d transaction(s) via OCR for statement %s (bank %s)", len(rows), pdf_statement_id, bank.id)
+    added = 0
+    skipped_duplicates = 0
+    for trans_data in rows:
+        if find_confirmed_match(db, user_id, bank.id, trans_data.get("transaction_type"), trans_data.get("amount"), trans_data.get("transaction_date")):
+            skipped_duplicates += 1
+            continue
+        if not trans_data.get("category"):
+            trans_data["category"] = resolve_category(db, user_id, trans_data["description"])
+        transaction, _reconciled = create_or_reconcile_transaction(
+            db, user_id, bank.id, trans_data, pdf_statement_id=pdf_statement_id, source="pdf"
+        )
+        apply_auto_rules_and_notify(db, user_id, transaction)
+        added += 1
+    db.commit()
+
+    logger.info(
+        "Statement OCR: added %d transaction(s), skipped %d duplicate(s) for statement %s (bank %s)",
+        added, skipped_duplicates, pdf_statement_id, bank.id,
+    )
+    if added == 0:
+        return
     try:
         discord_service.send_discord_message(
             db, user_id,
-            f"📄 {bank.name}: found {len(rows)} transaction(s) via OCR fallback",
+            f"📄 {bank.name}: added {added} transaction(s) via OCR fallback",
             f"The original statement parse found none for this PDF, but Paperless's OCR of the rendered "
-            f"page recovered {len(rows)} possible transaction(s). Nothing was created automatically -- "
-            f"open PDFs and reprocess statement #{pdf_statement_id} to review.",
+            f"page recovered {added} transaction(s), automatically added" +
+            (f" ({skipped_duplicates} duplicate(s) skipped)" if skipped_duplicates else "") +
+            f". Review statement #{pdf_statement_id} in PDFs if anything looks off.",
         )
     except Exception:
         logger.warning("Statement OCR: Discord notify failed for statement %s", pdf_statement_id, exc_info=True)

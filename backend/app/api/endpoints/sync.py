@@ -172,9 +172,9 @@ def _process_pdf_task(
             # Regex/table parsing AND the AI-on-text fallback both found
             # nothing -- try Paperless-ngx's OCR as a last resort (catches a
             # summary/table rendered as a graphic rather than real text, which
-            # no amount of text-based parsing can ever see). Detect-and-notify
-            # only, not auto-create -- this touches nothing else in the sync
-            # pipeline and never risks creating a wrong transaction.
+            # no amount of text-based parsing can ever see). Fully async and
+            # runs the same dedup pipeline as this function -- see
+            # statement_ocr_tasks.py's module docstring.
             try:
                 from app.services import paperless_service
                 if paperless_service.is_configured(db):

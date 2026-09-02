@@ -540,7 +540,7 @@ def reprocess_pdf(
             transactions_added += 1
 
         if transactions_added == 0 and bank.bank_type != "investment":
-            # Same Paperless-OCR detect-and-notify fallback as the automatic
+            # Same Paperless-OCR fallback as the automatic
             # sync path (sync.py) -- see that call site's comment.
             try:
                 from app.services import paperless_service
@@ -690,7 +690,7 @@ def _reprocess_pdf_worker(pdf_id: int, user_id: int) -> dict:
             transactions_added += 1
 
         if transactions_added == 0 and bank.bank_type != "investment":
-            # Same Paperless-OCR detect-and-notify fallback as the automatic
+            # Same Paperless-OCR fallback as the automatic
             # sync path (sync.py) -- see that call site's comment.
             try:
                 from app.services import paperless_service
