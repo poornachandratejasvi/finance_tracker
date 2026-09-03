@@ -37,8 +37,9 @@ import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import ElderlyIcon from '@mui/icons-material/Elderly';
 import CurrencyBitcoinIcon from '@mui/icons-material/CurrencyBitcoin';
 import CollectionsIcon from '@mui/icons-material/Collections';
+import SettingsIcon from '@mui/icons-material/Settings';
 import {
-  getInvestmentsDashboard, createInvestmentAccount, deleteInvestmentAccount,
+  getInvestmentsDashboard, createInvestmentAccount, updateInvestmentAccount, deleteInvestmentAccount,
   getInvestmentEntries, createInvestmentEntry, deleteInvestmentEntry,
 } from '../services/api';
 
@@ -77,6 +78,8 @@ export default function Investments() {
   const [accountForm, setAccountForm] = useState(emptyAccountForm);
   const [entryDialogAccount, setEntryDialogAccount] = useState(null);
   const [entryForm, setEntryForm] = useState(emptyEntryForm);
+  const [refreshDialogAccount, setRefreshDialogAccount] = useState(null);
+  const [refreshForm, setRefreshForm] = useState({ external_ref: '', units_held: '', tax_section: '' });
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
 
@@ -164,6 +167,27 @@ export default function Investments() {
       setEntriesByAccount((prev) => ({ ...prev, [accountId]: res.entries }));
     } catch {
       setErr('Failed to delete entry');
+    }
+  };
+
+  const openRefreshDialog = (acc) => {
+    setRefreshForm({ external_ref: acc.external_ref || '', units_held: acc.units_held ?? '', tax_section: acc.tax_section || '' });
+    setRefreshDialogAccount(acc);
+  };
+
+  const onSaveRefresh = async () => {
+    setErr('');
+    try {
+      await updateInvestmentAccount(refreshDialogAccount.id, {
+        external_ref: refreshForm.external_ref || null,
+        units_held: refreshForm.units_held === '' ? null : parseFloat(refreshForm.units_held),
+        tax_section: refreshForm.tax_section || '',
+      });
+      setRefreshDialogAccount(null);
+      setMsg('Account settings saved.');
+      await load();
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Failed to save account settings');
     }
   };
 
@@ -268,6 +292,9 @@ export default function Investments() {
                   </Typography>
                   <Typography fontWeight={600} sx={{ fontVariantNumeric: 'tabular-nums' }}>{inr(acc.current_value)}</Typography>
                   <Button size="small" onClick={() => openEntryDialog(acc)}>+ Entry</Button>
+                  <IconButton size="small" title="Auto-refresh & tax settings" onClick={() => openRefreshDialog(acc)}>
+                    <SettingsIcon fontSize="small" />
+                  </IconButton>
                   <IconButton size="small" onClick={() => onDeleteAccount(acc.id)}>
                     <DeleteIcon fontSize="small" />
                   </IconButton>
@@ -375,6 +402,39 @@ export default function Investments() {
         <DialogActions>
           <Button onClick={() => setEntryDialogAccount(null)}>Cancel</Button>
           <Button variant="contained" onClick={onSaveEntry} disabled={!entryForm.amount}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!refreshDialogAccount} onClose={() => setRefreshDialogAccount(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Auto-refresh & Tax — {refreshDialogAccount?.name}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Set both fields below to auto-refresh this account's value daily from a public NAV/price feed.
+            Leave blank to keep updating the value manually as today.
+          </Typography>
+          <TextField
+            label="External Ref (MF scheme code or stock ticker)" value={refreshForm.external_ref}
+            placeholder="e.g. 119598 or RELIANCE.NS"
+            onChange={(e) => setRefreshForm({ ...refreshForm, external_ref: e.target.value })}
+          />
+          <TextField
+            label="Units Held" type="number" value={refreshForm.units_held}
+            helperText="Bump this up yourself whenever you buy more units"
+            onChange={(e) => setRefreshForm({ ...refreshForm, units_held: e.target.value })}
+          />
+          <TextField
+            select label="Tax section (optional)" value={refreshForm.tax_section}
+            helperText="Tag an ELSS fund as 80C, or an NPS-like account as 80CCD(1B)"
+            onChange={(e) => setRefreshForm({ ...refreshForm, tax_section: e.target.value })}
+          >
+            <MenuItem value="">None</MenuItem>
+            <MenuItem value="80c">80C</MenuItem>
+            <MenuItem value="80ccd_1b">80CCD(1B)</MenuItem>
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRefreshDialogAccount(null)}>Cancel</Button>
+          <Button variant="contained" onClick={onSaveRefresh}>Save</Button>
         </DialogActions>
       </Dialog>
     </Container>

@@ -25,6 +25,8 @@ celery_app = Celery(
         "app.tasks.credit_card_bill_tasks", "app.tasks.statement_ocr_tasks",
         "app.tasks.vehicle_document_tasks", "app.tasks.insurance_document_tasks",
         "app.tasks.warranty_document_tasks", "app.tasks.digest_tasks",
+        "app.tasks.nav_refresh_tasks", "app.tasks.fx_refresh_tasks",
+        "app.tasks.anomaly_tasks", "app.tasks.payslip_document_tasks",
     ],
 )
 
@@ -58,6 +60,20 @@ celery_app.conf.beat_schedule = {
     "weekly-digest": {
         "task": "digest.send_weekly",
         "schedule": crontab(hour=8, minute=0, day_of_week=1),  # Monday 8am UTC
+    },
+    # NAVs/prices only move once a day for MFs anyway -- no value in polling more often.
+    "nav-refresh-daily": {
+        "task": "investments.refresh_nav",
+        "schedule": crontab(hour=1, minute=0),
+    },
+    "fx-refresh-daily": {
+        "task": "currencies.refresh_rates",
+        "schedule": crontab(hour=1, minute=15),
+    },
+    # Evening, so the day's transactions have settled before checking for anomalies.
+    "anomaly-check-daily": {
+        "task": "anomalies.check_daily",
+        "schedule": crontab(hour=20, minute=0),
     },
     # 'Absence' notification rules only need checking once a day (they fire at most
     # once per calendar month per rule, guarded by last_triggered_month) — every few

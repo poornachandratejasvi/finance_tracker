@@ -665,6 +665,12 @@ class Currency(Base):
     name = Column(String(50))                        # "Indian Rupee"
     rate_to_base = Column(Float, default=1.0)
     is_base = Column(Boolean, default=False)
+    # 'manual' -- rate_to_base only ever changes when the user edits it (same
+    # convention as Bank.balance_source); 'auto' -- the daily FX refresh task
+    # (fx_refresh_service.py) is allowed to overwrite it. New non-base
+    # currencies default to 'auto' since that's almost always what's wanted.
+    rate_source = Column(String(10), default="manual")
+    rate_updated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -816,6 +822,17 @@ class InvestmentAccount(Base):
     value_updated_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=utcnow)
+    # Tax-saving dashboard (tax_service.py) needs to distinguish an ELSS-flavoured
+    # mutual_fund/stocks account from a regular one -- category alone can't do
+    # that, so this is a manual override. ppf/epf -> 80c and nps -> 80ccd_1b are
+    # inferred from category alone and don't need this set.
+    tax_section = Column(String(10), nullable=True)  # '80c' | '80ccd_1b' | None
+    # NAV/price auto-refresh (nav_refresh_service.py) -- both must be set for an
+    # account to be auto-refreshed. units_held is manually maintained by the user
+    # (bumped whenever they buy more) since real transaction history here never
+    # reliably records quantity, so it can't be derived from InvestmentEntry rows.
+    external_ref = Column(String(30), nullable=True)  # MF scheme code or stock ticker
+    units_held = Column(Float, nullable=True)
 
     user = relationship("User")
     linked_bank = relationship("Bank")
@@ -1293,4 +1310,66 @@ class CreditCardFee(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     bank = relationship("Bank")
+    user = relationship("User")
+
+
+class Payslip(Base):
+    """One month's parsed payslip (see payslip_service.parse_payslip) --
+    feeds the tax-saving dashboard's 80C (provident_fund) and HRA-exemption
+    (basic/hra_received) figures. Re-uploading the same month updates in
+    place, same "dedupe by cycle" precedent as CreditCardBill."""
+    __tablename__ = "payslips"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    month = Column(String(7), nullable=False)  # 'YYYY-MM'
+    employee_name = Column(String(150), nullable=True)
+    regime_type = Column(String(20), nullable=True)  # 'New Regime' | 'Old Regime'
+    basic = Column(Float, nullable=True)
+    hra_received = Column(Float, nullable=True)
+    provident_fund = Column(Float, nullable=True)
+    income_tax_deducted = Column(Float, nullable=True)
+    other_earnings_total = Column(Float, nullable=True)
+    other_deductions_total = Column(Float, nullable=True)
+    total_earnings = Column(Float, nullable=True)
+    total_deductions = Column(Float, nullable=True)
+    net_pay = Column(Float, nullable=True)
+    paperless_document_id = Column(Integer, nullable=True, index=True)
+    created_at = Column(DateTime, default=utcnow)
+
+    user = relationship("User")
+    __table_args__ = (Index("ix_payslips_user_month", "user_id", "month", unique=True),)
+
+
+class SharedExpense(Base):
+    """A household expense one member paid, split across some subset of the
+    household -- distinct from Iou (which is for people OUTSIDE the app);
+    every party here is a real User in the same household."""
+    __tablename__ = "shared_expenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    household_id = Column(Integer, ForeignKey("households.id", ondelete="CASCADE"), nullable=False, index=True)
+    paid_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    description = Column(String(255), nullable=False)
+    total_amount = Column(Float, nullable=False)
+    expense_date = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+    paid_by = relationship("User")
+    shares = relationship("SharedExpenseShare", cascade="all, delete-orphan", back_populates="expense")
+
+
+class SharedExpenseShare(Base):
+    """One household member's portion of a SharedExpense. The payer's own
+    share is created already-settled (they don't owe themselves)."""
+    __tablename__ = "shared_expense_shares"
+
+    id = Column(Integer, primary_key=True, index=True)
+    shared_expense_id = Column(Integer, ForeignKey("shared_expenses.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    share_amount = Column(Float, nullable=False)
+    is_settled = Column(Boolean, default=False)
+    settled_at = Column(DateTime, nullable=True)
+
+    expense = relationship("SharedExpense", back_populates="shares")
     user = relationship("User")

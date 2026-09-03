@@ -18,6 +18,10 @@ DEFAULT_PREFS = {
     "hide_decimals": False,
     "auto_logout": False,
     "digest_enabled": True,
+    # HRA exemption inputs for the tax dashboard (tax_service.py) -- not on a
+    # payslip, so these stay a small manual input rather than a whole new table.
+    "monthly_rent": 0,
+    "city_metro": False,
 }
 
 

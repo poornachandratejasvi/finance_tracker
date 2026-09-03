@@ -51,6 +51,7 @@ import AutorenewIcon from '@mui/icons-material/Autorenew';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import HandshakeIcon from '@mui/icons-material/Handshake';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import GlobalSearch from './GlobalSearch.jsx';
 
 const DRAWER_WIDTH = 236;
@@ -78,6 +79,8 @@ const NAV_GROUPS = [
     { label: 'Insurance', path: '/insurance', icon: <HealthAndSafetyIcon /> },
     { label: 'Warranties', path: '/warranties', icon: <VerifiedUserIcon /> },
     { label: 'IOUs', path: '/ious', icon: <HandshakeIcon /> },
+    { label: 'Tax Dashboard', path: '/tax-dashboard', icon: <RequestQuoteIcon /> },
+    { label: 'Shared Expenses', path: '/shared-expenses', icon: <GroupsIcon /> },
   ] },
   { heading: 'Accounts & Data', items: [
     { label: 'Banks', path: '/banks', icon: <AccountBalanceIcon /> },

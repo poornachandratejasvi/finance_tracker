@@ -36,6 +36,9 @@ def account_summary(db: Session, account: InvestmentAccount) -> dict:
         "source": account.source,
         "current_value": current_value,
         "linked_bank_id": account.linked_bank_id,
+        "external_ref": account.external_ref,
+        "units_held": account.units_held,
+        "tax_section": account.tax_section,
     }
 
 

@@ -21,13 +21,15 @@ import {
   FormControlLabel,
   Checkbox,
 } from '@mui/material';
-import { Add, Edit, Delete } from '@mui/icons-material';
+import { Add, Edit, Delete, Refresh } from '@mui/icons-material';
 import {
   getCurrencies,
   createCurrency,
   updateCurrency,
   deleteCurrency,
+  refreshCurrencyRates,
 } from '../../services/api';
+import { timeAgo } from '../../utils/format';
 
 const emptyForm = {
   code: '',
@@ -35,6 +37,7 @@ const emptyForm = {
   name: '',
   rate_to_base: 1,
   is_base: false,
+  rate_source: 'auto',
 };
 
 export default function CurrenciesPanel() {
@@ -47,6 +50,7 @@ export default function CurrenciesPanel() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -78,8 +82,23 @@ export default function CurrenciesPanel() {
       name: c.name || '',
       rate_to_base: c.rate_to_base ?? 1,
       is_base: !!c.is_base,
+      rate_source: c.rate_source || 'manual',
     });
     setDialogOpen(true);
+  };
+
+  const handleRefreshNow = async () => {
+    setRefreshing(true);
+    setError('');
+    try {
+      const res = await refreshCurrencyRates();
+      setSuccess(`Refreshed ${res.updated} currenc${res.updated === 1 ? 'y' : 'ies'}.`);
+      fetchData();
+    } catch {
+      setError('Failed to refresh rates');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const closeDialog = () => {
@@ -97,6 +116,7 @@ export default function CurrenciesPanel() {
         name: form.name,
         rate_to_base: form.is_base ? 1 : (parseFloat(form.rate_to_base) || 1),
         is_base: form.is_base,
+        rate_source: form.is_base ? 'manual' : form.rate_source,
       };
       if (editing) {
         await updateCurrency(editing.id, payload);
@@ -140,9 +160,14 @@ export default function CurrenciesPanel() {
     <Paper sx={{ p: 3 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h6">Currencies</Typography>
-        <Button variant="contained" startIcon={<Add />} onClick={openAdd}>
-          Add Currency
-        </Button>
+        <Box display="flex" gap={1}>
+          <Button variant="outlined" startIcon={<Refresh />} onClick={handleRefreshNow} disabled={refreshing}>
+            {refreshing ? 'Refreshing…' : 'Refresh Rates Now'}
+          </Button>
+          <Button variant="contained" startIcon={<Add />} onClick={openAdd}>
+            Add Currency
+          </Button>
+        </Box>
       </Box>
       <Divider sx={{ mb: 2 }} />
 
@@ -171,9 +196,19 @@ export default function CurrenciesPanel() {
                       <strong>{c.code}</strong>
                       {c.symbol ? <span>({c.symbol})</span> : null}
                       {c.is_base && <Chip label="BASE" size="small" color="primary" />}
+                      {!c.is_base && (
+                        <Chip
+                          label={c.rate_source === 'manual' ? 'Manual' : 'Auto'}
+                          size="small" variant="outlined"
+                          color={c.rate_source === 'manual' ? 'default' : 'success'}
+                        />
+                      )}
                     </Box>
                   }
-                  secondary={`${c.name || 'Unnamed'} · Rate to base: ${c.rate_to_base ?? 1}`}
+                  secondary={
+                    `${c.name || 'Unnamed'} · Rate to base: ${c.rate_to_base ?? 1}`
+                    + (c.rate_updated_at ? ` · Refreshed ${timeAgo(c.rate_updated_at)}` : '')
+                  }
                 />
                 <ListItemSecondaryAction>
                   <IconButton edge="end" size="small" onClick={() => openEdit(c)}>
@@ -240,6 +275,18 @@ export default function CurrenciesPanel() {
               }
               label="Set as base currency"
             />
+            {!form.is_base && (
+              <FormControlLabel
+                sx={{ display: 'block', mt: 1 }}
+                control={
+                  <Checkbox
+                    checked={form.rate_source !== 'manual'}
+                    onChange={(e) => setForm({ ...form, rate_source: e.target.checked ? 'auto' : 'manual' })}
+                  />
+                }
+                label="Auto-refresh this rate daily (uncheck to keep it manual)"
+              />
+            )}
           </Box>
         </DialogContent>
         <DialogActions>

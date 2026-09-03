@@ -38,6 +38,8 @@ import AutopayMandates from './pages/AutopayMandates.jsx';
 import Insurance from './pages/Insurance.jsx';
 import Warranties from './pages/Warranties.jsx';
 import IOUs from './pages/IOUs.jsx';
+import TaxDashboard from './pages/TaxDashboard.jsx';
+import SharedExpenses from './pages/SharedExpenses.jsx';
 
 const queryClient = new QueryClient();
 
@@ -79,6 +81,8 @@ function App() {
                 <Route path="/insurance" element={<ProtectedRoute><Layout><Insurance /></Layout></ProtectedRoute>} />
                 <Route path="/warranties" element={<ProtectedRoute><Layout><Warranties /></Layout></ProtectedRoute>} />
                 <Route path="/ious" element={<ProtectedRoute><Layout><IOUs /></Layout></ProtectedRoute>} />
+                <Route path="/tax-dashboard" element={<ProtectedRoute><Layout><TaxDashboard /></Layout></ProtectedRoute>} />
+                <Route path="/shared-expenses" element={<ProtectedRoute><Layout><SharedExpenses /></Layout></ProtectedRoute>} />
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </Router>

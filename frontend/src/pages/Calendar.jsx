@@ -8,7 +8,7 @@ import {
 import {
   Add, LocalShipping, Payments, EventBusy, Event, ChevronLeft, ChevronRight,
   ViewList, CalendarViewMonth, Today, Receipt, Notifications, CreditCard, Description,
-  DirectionsCar, Autorenew, HealthAndSafety, VerifiedUser, Handshake,
+  DirectionsCar, Autorenew, HealthAndSafety, VerifiedUser, Handshake, CardGiftcard,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import {
@@ -39,6 +39,7 @@ const TYPE_META = {
   amc_expiry: { color: '#79706e', Icon: VerifiedUser, label: 'AMC expiry' },
   iou_due: { color: '#bab0ac', Icon: Handshake, label: 'IOU due' },
   credit_card_fee: { color: '#f28e2b', Icon: CreditCard, label: 'Annual fee' },
+  reward_points_expiry: { color: '#59a14f', Icon: CardGiftcard, label: 'Reward points expiry' },
 };
 
 const typeMetaFor = (item) => {
@@ -62,6 +63,7 @@ const CATEGORIES = [
   { key: 'insurance', label: 'Insurance', color: TYPE_META.insurance_expiry.color, Icon: TYPE_META.insurance_expiry.Icon, match: (i) => i.type === 'insurance_expiry' },
   { key: 'warranty', label: 'Warranties', color: TYPE_META.warranty_expiry.color, Icon: TYPE_META.warranty_expiry.Icon, match: (i) => i.type === 'warranty_expiry' || i.type === 'amc_expiry' },
   { key: 'iou', label: 'IOUs', color: TYPE_META.iou_due.color, Icon: TYPE_META.iou_due.Icon, match: (i) => i.type === 'iou_due' },
+  { key: 'reward_points', label: 'Reward Points', color: TYPE_META.reward_points_expiry.color, Icon: TYPE_META.reward_points_expiry.Icon, match: (i) => i.type === 'reward_points_expiry' },
 ];
 
 const fmtGroupHeading = (dateStr) => {

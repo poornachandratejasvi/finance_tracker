@@ -203,6 +203,19 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "investments_total", "ALTER TABLE balance_snapshots ADD COLUMN investments_total FLOAT DEFAULT 0.0")
         _add_column_if_missing(columns, "loan_total", "ALTER TABLE balance_snapshots ADD COLUMN loan_total FLOAT DEFAULT 0.0")
 
+    if "investment_accounts" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("investment_accounts")}
+        # Tax-saving dashboard override (tax_service.py) and NAV/price auto-refresh
+        # (nav_refresh_service.py) -- see the fields' own comments in models.py.
+        _add_column_if_missing(columns, "tax_section", "ALTER TABLE investment_accounts ADD COLUMN tax_section VARCHAR(10)")
+        _add_column_if_missing(columns, "external_ref", "ALTER TABLE investment_accounts ADD COLUMN external_ref VARCHAR(30)")
+        _add_column_if_missing(columns, "units_held", "ALTER TABLE investment_accounts ADD COLUMN units_held FLOAT")
+
+    if "currencies" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("currencies")}
+        _add_column_if_missing(columns, "rate_source", "ALTER TABLE currencies ADD COLUMN rate_source VARCHAR(10) DEFAULT 'manual'")
+        _add_column_if_missing(columns, "rate_updated_at", "ALTER TABLE currencies ADD COLUMN rate_updated_at TIMESTAMP")
+
     if "users" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("users")}
         _add_column_if_missing(columns, "avatar_url", "ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500)")

@@ -325,5 +325,25 @@ def get_upcoming_items(db, user_id: int, days_ahead: int = 60, days_back: int = 
             n += 1
             next_date = add_calendar_months(fee.fee_anniversary_date, 12 * n)
 
+    from app.models.models import RewardPointEntry
+
+    reward_rows = (
+        db.query(RewardPointEntry, Bank)
+        .join(Bank, RewardPointEntry.bank_id == Bank.id)
+        .filter(
+            RewardPointEntry.user_id == user_id, RewardPointEntry.entry_type == "earned",
+            RewardPointEntry.expiry_date.isnot(None),
+        )
+        .all()
+    )
+    for entry, bank in reward_rows:
+        if entry.expiry_date <= horizon and (entry.expiry_date >= window_start or entry.expiry_date < now):
+            items.append({
+                "type": "reward_points_expiry", "id": entry.id, "date": entry.expiry_date,
+                "title": f"{entry.points:,.0f} pts expiring — {bank.name}", "subtitle": "Reward points",
+                "amount": None, "link": None,
+                "is_overdue": entry.expiry_date < now,
+            })
+
     items.sort(key=lambda i: i["date"])
     return items

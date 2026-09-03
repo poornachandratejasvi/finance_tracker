@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import auth, users, banks, transactions, labels, sync, logs, oauth, pdfs, dashboard, field_mapping, settings, csv_exports, api_tokens, ingest, goals, categories, currencies, analytics, filters, templates, backup, ai, rules, notifications, notification_rules, gmail_accounts, watchers, imports, reward_points, family_dashboard, search, investments, dashboard_widgets, receipts, vehicles, debt, gamification, metrics, summary, packages, subscriptions, calendar, external_lookups, credit_card_bills, push_tokens, autopay_mandates, insurance, warranties, ious, credit_card_fees
+from app.api.endpoints import auth, users, banks, transactions, labels, sync, logs, oauth, pdfs, dashboard, field_mapping, settings, csv_exports, api_tokens, ingest, goals, categories, currencies, analytics, filters, templates, backup, ai, rules, notifications, notification_rules, gmail_accounts, watchers, imports, reward_points, family_dashboard, search, investments, dashboard_widgets, receipts, vehicles, debt, gamification, metrics, summary, packages, subscriptions, calendar, external_lookups, credit_card_bills, push_tokens, autopay_mandates, insurance, warranties, ious, credit_card_fees, tax, payslips, shared_expenses
 
 api_router = APIRouter()
 
@@ -55,3 +55,6 @@ api_router.include_router(insurance.router, prefix="/insurance", tags=["Insuranc
 api_router.include_router(warranties.router, prefix="/warranties", tags=["Warranties"])
 api_router.include_router(ious.router, prefix="/ious", tags=["IOUs"])
 api_router.include_router(credit_card_fees.router, prefix="/credit-card-fees", tags=["Credit Card Fees"])
+api_router.include_router(tax.router, prefix="/tax", tags=["Tax Dashboard"])
+api_router.include_router(payslips.router, prefix="/payslips", tags=["Payslips"])
+api_router.include_router(shared_expenses.router, prefix="/shared-expenses", tags=["Shared Expenses"])

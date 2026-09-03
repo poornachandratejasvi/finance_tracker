@@ -558,6 +558,7 @@ export const getFamilyDashboard = async () => {
 export const getInvestments = async () => (await api.get('/api/investments/')).data;
 export const getInvestmentsDashboard = async () => (await api.get('/api/investments/dashboard')).data;
 export const createInvestmentAccount = async (data) => (await api.post('/api/investments/', data)).data;
+export const updateInvestmentAccount = async (id, data) => (await api.put(`/api/investments/${id}`, data)).data;
 export const deleteInvestmentAccount = async (id) => { await api.delete(`/api/investments/${id}`); };
 export const getInvestmentEntries = async (accountId) =>
   (await api.get(`/api/investments/${accountId}/entries`)).data;
@@ -1052,5 +1053,29 @@ export const deleteCreditCardFee = async (bankId) => (await api.delete(`/api/cre
 
 // Subscription price-creep detector
 export const getPriceChanges = async () => (await api.get('/api/watchers/price-changes')).data;
+
+// Tax-saving dashboard (80C/80D/80CCD(1B) + HRA exemption)
+export const getTaxDashboard = async (financialYear, seniorCitizen = false) =>
+  (await api.get('/api/tax/dashboard', { params: { financial_year: financialYear || undefined, senior_citizen: seniorCitizen } })).data;
+
+// Payslip upload/parsing
+export const listPayslips = async () => (await api.get('/api/payslips/')).data;
+export const uploadPayslip = async (file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return (await api.post('/api/payslips/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
+};
+export const deletePayslip = async (id) => (await api.delete(`/api/payslips/${id}`)).data;
+
+// FX rate manual refresh (auto-refresh runs daily via Celery beat)
+export const refreshCurrencyRates = async () => (await api.post('/api/currencies/refresh')).data;
+
+// Household bill-splitting
+export const listHouseholdMembers = async () => (await api.get('/api/shared-expenses/members')).data;
+export const listSharedExpenses = async () => (await api.get('/api/shared-expenses/')).data;
+export const createSharedExpense = async (data) => (await api.post('/api/shared-expenses/', data)).data;
+export const settleSharedExpenseShare = async (expenseId, shareId) =>
+  (await api.post(`/api/shared-expenses/${expenseId}/shares/${shareId}/settle`)).data;
+export const deleteSharedExpense = async (id) => (await api.delete(`/api/shared-expenses/${id}`)).data;
 
 export default api;

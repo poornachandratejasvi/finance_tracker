@@ -51,7 +51,10 @@ def create_currency(
     currency = Currency(user_id=current_user.id, **payload)
     if currency.is_base:
         currency.rate_to_base = 1.0
+        currency.rate_source = "manual"
         _clear_other_base(db, current_user.id, exclude_id=None)
+    elif "rate_source" not in data.dict(exclude_unset=True):
+        currency.rate_source = "auto"  # a new non-base currency almost always wants auto-refresh
     db.add(currency)
     db.commit()
     db.refresh(currency)
@@ -103,6 +106,18 @@ def delete_currency(
     db.delete(currency)
     db.commit()
     return None
+
+
+@router.post("/refresh")
+def refresh_rates_now(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Manually trigger the same FX refresh the daily task runs -- see fx_refresh_service.py."""
+    from app.services import fx_refresh_service
+
+    updated = fx_refresh_service.refresh_rates(db, current_user.id)
+    return {"updated": updated}
 
 
 def _clear_other_base(db: Session, user_id: int, exclude_id) -> None:

@@ -63,6 +63,44 @@ def create_investment_account(
     return investment_service.account_summary(db, account)
 
 
+class InvestmentAccountUpdate(BaseModel):
+    name: Optional[str] = None
+    # NAV/price auto-refresh (nav_refresh_service.py) -- both external_ref and
+    # units_held must be set for an account to be auto-refreshed.
+    external_ref: Optional[str] = None
+    units_held: Optional[float] = None
+    # Tax-saving dashboard override -- '80c' | '80ccd_1b' | null to clear.
+    tax_section: Optional[str] = None
+
+
+@router.put("/{account_id}")
+def update_investment_account(
+    account_id: int,
+    payload: InvestmentAccountUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_write_access),
+):
+    from app.models.models import InvestmentAccount
+
+    account = db.query(InvestmentAccount).filter(
+        InvestmentAccount.id == account_id, InvestmentAccount.user_id == current_user.id
+    ).first()
+    if not account:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
+    if payload.tax_section is not None and payload.tax_section not in ("80c", "80ccd_1b", ""):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "tax_section must be '80c', '80ccd_1b', or empty")
+
+    data = payload.dict(exclude_unset=True)
+    for field in ("name", "external_ref", "units_held"):
+        if field in data:
+            setattr(account, field, data[field])
+    if "tax_section" in data:
+        account.tax_section = data["tax_section"] or None
+    db.commit()
+    db.refresh(account)
+    return investment_service.account_summary(db, account)
+
+
 @router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_investment_account(
     account_id: int,
