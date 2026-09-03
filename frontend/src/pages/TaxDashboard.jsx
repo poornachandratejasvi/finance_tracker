@@ -27,6 +27,7 @@ export default function TaxDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [uploading, setUploading] = useState(false);
   const [payslips, setPayslips] = useState([]);
   const [rent, setRent] = useState('');
@@ -56,18 +57,26 @@ export default function TaxDashboard() {
 
   useEffect(() => { load(); }, [fy, seniorCitizen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleUpload = async (file) => {
-    if (!file) return;
+  const handleUpload = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
     setUploading(true);
     setError('');
-    try {
-      await uploadPayslip(file);
-      load();
-    } catch (e) {
-      setError(e?.response?.data?.detail || 'Failed to parse this payslip');
-    } finally {
-      setUploading(false);
+    setSuccessMsg('');
+    const failures = [];
+    for (const file of files) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await uploadPayslip(file);
+      } catch (e) {
+        failures.push(`${file.name}: ${e?.response?.data?.detail || 'failed to parse'}`);
+      }
     }
+    const succeeded = files.length - failures.length;
+    if (succeeded) setSuccessMsg(`Uploaded ${succeeded} payslip${succeeded === 1 ? '' : 's'}.`);
+    if (failures.length) setError(failures.join('; '));
+    setUploading(false);
+    load();
   };
 
   const removePayslip = async (id) => {
@@ -140,6 +149,7 @@ export default function TaxDashboard() {
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+      {successMsg && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccessMsg('')}>{successMsg}</Alert>}
 
       {loading ? (
         <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>
@@ -185,8 +195,11 @@ export default function TaxDashboard() {
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
               <Typography variant="subtitle1" fontWeight={700}>Payslips</Typography>
               <Button component="label" variant="contained" size="small" startIcon={<UploadFile />} disabled={uploading}>
-                {uploading ? 'Uploading…' : 'Upload Payslip'}
-                <input type="file" hidden accept=".pdf" onChange={(e) => handleUpload(e.target.files?.[0])} />
+                {uploading ? 'Uploading…' : 'Upload Payslip(s)'}
+                <input
+                  type="file" hidden accept=".pdf" multiple
+                  onChange={(e) => { handleUpload(e.target.files); e.target.value = ''; }}
+                />
               </Button>
             </Box>
             {payslips.length === 0 ? (
