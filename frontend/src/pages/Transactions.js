@@ -158,9 +158,13 @@ function Transactions() {
     return () => clearTimeout(id);
   }, [filters.search]);
 
-  const fetchData = useCallback(async () => {
+  // silent=true skips the full-list loading spinner (see fetchData's render
+  // usage below) -- used after editing/deleting a single record so the list
+  // updates in place instead of the whole page flashing to a spinner and
+  // losing the user's scroll position.
+  const fetchData = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       // Month-scoped (like the reference app) rather than paginated -- a single
       // period's transactions are fetched in one shot (a "high enough" cap, not
       // true pagination) so the period's net total and "select all" are computed
@@ -337,7 +341,7 @@ function Transactions() {
 
   const handleDialogSaved = () => {
     setSuccess('Transaction saved');
-    fetchData();
+    fetchData({ silent: true });
     reloadReferenceData();
   };
 
@@ -347,7 +351,7 @@ function Transactions() {
         await deleteTransaction(id);
         setSuccess('Deleted');
         setSelectedTransactions((prev) => prev.filter((s) => s.id !== id));
-        fetchData();
+        fetchData({ silent: true });
       } catch (err) {
         setError('Failed to delete');
       }
