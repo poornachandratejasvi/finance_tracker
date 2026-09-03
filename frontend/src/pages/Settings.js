@@ -118,6 +118,7 @@ function GeneralPanel({ setSuccess, setError }) {
     default_interval: 'this_month',
     hide_decimals: false,
     auto_logout: false,
+    digest_enabled: true,
   });
   const [prefsLoading, setPrefsLoading] = useState(true);
 
@@ -368,6 +369,17 @@ function GeneralPanel({ setSuccess, setError }) {
                 />
               }
               label="Enable auto-logout"
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={!!prefs.digest_enabled}
+                  onChange={(e) => persistPref({ digest_enabled: e.target.checked })}
+                />
+              }
+              label="Weekly digest (spend recap, upcoming bills, net worth change) via Discord/ntfy"
             />
           </Grid>
           <Grid item xs={12}>

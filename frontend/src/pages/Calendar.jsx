@@ -8,6 +8,7 @@ import {
 import {
   Add, LocalShipping, Payments, EventBusy, Event, ChevronLeft, ChevronRight,
   ViewList, CalendarViewMonth, Today, Receipt, Notifications, CreditCard, Description,
+  DirectionsCar, Autorenew, HealthAndSafety, VerifiedUser, Handshake,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import {
@@ -30,11 +31,19 @@ const TYPE_META = {
   custom: { color: '#af7aa1', Icon: Notifications, label: 'Reminder' },
   credit_card_statement: { color: '#76b7b2', Icon: Description, label: 'Statement' },
   credit_card_due: { color: '#f28e2b', Icon: CreditCard, label: 'Card payment due' },
+  vehicle_insurance: { color: '#edc948', Icon: DirectionsCar, label: 'Vehicle insurance' },
+  vehicle_puc: { color: '#b07aa1', Icon: DirectionsCar, label: 'Vehicle PUC' },
+  autopay_mandate: { color: '#9c755f', Icon: Autorenew, label: 'Autopay' },
+  insurance_expiry: { color: '#e6a532', Icon: HealthAndSafety, label: 'Insurance expiry' },
+  warranty_expiry: { color: '#79706e', Icon: VerifiedUser, label: 'Warranty expiry' },
+  amc_expiry: { color: '#79706e', Icon: VerifiedUser, label: 'AMC expiry' },
+  iou_due: { color: '#bab0ac', Icon: Handshake, label: 'IOU due' },
+  credit_card_fee: { color: '#f28e2b', Icon: CreditCard, label: 'Annual fee' },
 };
 
 const typeMetaFor = (item) => {
   if (item.type === 'subscription') return TYPE_META[item.subtitle] || TYPE_META.custom;
-  if (item.type === 'credit_card_statement' || item.type === 'credit_card_due') return TYPE_META[item.type];
+  if (TYPE_META[item.type]) return TYPE_META[item.type];
   return TYPE_META.package;
 };
 
@@ -44,10 +53,15 @@ const typeMetaFor = (item) => {
 // calendar cares about).
 const CATEGORIES = [
   { key: 'package', label: 'Deliveries', color: TYPE_META.package.color, Icon: TYPE_META.package.Icon, match: (i) => i.type === 'package' },
-  { key: 'credit_card', label: 'Credit Cards', color: TYPE_META.credit_card_due.color, Icon: TYPE_META.credit_card_due.Icon, match: (i) => i.type === 'credit_card_statement' || i.type === 'credit_card_due' },
+  { key: 'credit_card', label: 'Credit Cards', color: TYPE_META.credit_card_due.color, Icon: TYPE_META.credit_card_due.Icon, match: (i) => i.type === 'credit_card_statement' || i.type === 'credit_card_due' || i.type === 'credit_card_fee' },
   { key: 'subscription', label: 'Subscriptions', color: TYPE_META.subscription.color, Icon: TYPE_META.subscription.Icon, match: (i) => i.type === 'subscription' && i.subtitle === 'subscription' },
   { key: 'bill', label: 'Bills', color: TYPE_META.bill.color, Icon: TYPE_META.bill.Icon, match: (i) => i.type === 'subscription' && i.subtitle === 'bill' },
   { key: 'custom', label: 'Reminders', color: TYPE_META.custom.color, Icon: TYPE_META.custom.Icon, match: (i) => i.type === 'subscription' && i.subtitle === 'custom' },
+  { key: 'vehicle', label: 'Vehicles', color: TYPE_META.vehicle_insurance.color, Icon: DirectionsCar, match: (i) => i.type === 'vehicle_insurance' || i.type === 'vehicle_puc' },
+  { key: 'autopay', label: 'Autopay', color: TYPE_META.autopay_mandate.color, Icon: TYPE_META.autopay_mandate.Icon, match: (i) => i.type === 'autopay_mandate' },
+  { key: 'insurance', label: 'Insurance', color: TYPE_META.insurance_expiry.color, Icon: TYPE_META.insurance_expiry.Icon, match: (i) => i.type === 'insurance_expiry' },
+  { key: 'warranty', label: 'Warranties', color: TYPE_META.warranty_expiry.color, Icon: TYPE_META.warranty_expiry.Icon, match: (i) => i.type === 'warranty_expiry' || i.type === 'amc_expiry' },
+  { key: 'iou', label: 'IOUs', color: TYPE_META.iou_due.color, Icon: TYPE_META.iou_due.Icon, match: (i) => i.type === 'iou_due' },
 ];
 
 const fmtGroupHeading = (dateStr) => {

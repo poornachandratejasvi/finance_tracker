@@ -6,11 +6,13 @@ import {
 } from '@mui/material';
 import {
   Email, Refresh, PlayArrow, Sync as SyncIcon, LinkOff, Add, UploadFile, CheckCircle, Forum, Description,
+  NotificationsActive,
 } from '@mui/icons-material';
 import api, {
   getGmailAccountsStatus, getGmailAuthUrl, checkGmailAccountNow, testGmailNotification,
   disconnectGmailAccount, getGoogleCredentialsStatus, uploadGoogleCredentials,
   getDiscordConfig, updateDiscordWebhook, testDiscordWebhook,
+  getNtfyConfig, updateNtfyConfig, testNtfyConfig,
   getPaperlessConfig, savePaperlessConfig, testPaperlessConfig,
 } from '../../services/api';
 import { formatDate, timeAgo } from '../../utils/format';
@@ -53,6 +55,15 @@ export default function ExternalAccountsPanel() {
   const [discordTesting, setDiscordTesting] = useState(false);
   const [discordTestResult, setDiscordTestResult] = useState(null);
 
+  // ntfy
+  const [ntfyConfig, setNtfyConfig] = useState(null);
+  const [ntfyServerInput, setNtfyServerInput] = useState('');
+  const [ntfyTopicInput, setNtfyTopicInput] = useState('');
+  const [ntfyTokenInput, setNtfyTokenInput] = useState('');
+  const [ntfySaving, setNtfySaving] = useState(false);
+  const [ntfyTesting, setNtfyTesting] = useState(false);
+  const [ntfyTestResult, setNtfyTestResult] = useState(null);
+
   // Other notification services (Apprise)
   const [notifyUrlsText, setNotifyUrlsText] = useState('');
   const [notifyUrlsLoading, setNotifyUrlsLoading] = useState(false);
@@ -71,16 +82,20 @@ export default function ExternalAccountsPanel() {
     setLoading(true);
     setError('');
     try {
-      const [statusRes, credRes, discordRes, notifyRes, paperlessRes] = await Promise.all([
+      const [statusRes, credRes, discordRes, ntfyRes, notifyRes, paperlessRes] = await Promise.all([
         getGmailAccountsStatus().catch(() => ({ accounts: [] })),
         getGoogleCredentialsStatus().catch(() => null),
         getDiscordConfig().catch(() => null),
+        getNtfyConfig().catch(() => null),
         api.get('/api/settings/notify-urls').catch(() => null),
         getPaperlessConfig().catch(() => null),
       ]);
       setAccounts(statusRes?.accounts || []);
       setCredStatus(credRes);
       setDiscordWebhookSet(!!discordRes?.webhook_set);
+      setNtfyConfig(ntfyRes);
+      setNtfyServerInput(ntfyRes?.server_url || '');
+      setNtfyTopicInput(ntfyRes?.topic || '');
       setNotifyUrlsText((notifyRes?.data?.urls || []).join('\n'));
       setPaperlessConfig(paperlessRes);
       setPaperlessUrlInput(paperlessRes?.base_url || '');
@@ -213,6 +228,42 @@ export default function ExternalAccountsPanel() {
       setDiscordTestResult({ ok: false, message: 'Request failed.' });
     } finally {
       setDiscordTesting(false);
+    }
+  };
+
+  const handleSaveNtfy = async () => {
+    setNtfySaving(true);
+    setNtfyTestResult(null);
+    setError('');
+    try {
+      // Omit token entirely when the field is left blank -- so re-saving just
+      // the server/topic doesn't accidentally wipe an already-stored token.
+      const res = await updateNtfyConfig({
+        server_url: ntfyServerInput.trim() || undefined,
+        topic: ntfyTopicInput.trim(),
+        token: ntfyTokenInput.trim() || undefined,
+      });
+      setNtfyConfig(res);
+      setNtfyTokenInput('');
+      setSuccess(res?.topic ? 'ntfy settings saved.' : 'ntfy configuration removed.');
+    } catch (e) {
+      setError(apiError(e, 'Failed to save ntfy settings'));
+    } finally {
+      setNtfySaving(false);
+    }
+  };
+
+  const handleTestNtfy = async () => {
+    setNtfyTesting(true);
+    setNtfyTestResult(null);
+    setError('');
+    try {
+      const res = await testNtfyConfig();
+      setNtfyTestResult(res);
+    } catch {
+      setNtfyTestResult({ ok: false, message: 'Request failed.' });
+    } finally {
+      setNtfyTesting(false);
     }
   };
 
@@ -409,6 +460,72 @@ export default function ExternalAccountsPanel() {
         {discordTestResult && (
           <Alert severity={discordTestResult.ok ? 'success' : 'error'} sx={{ mt: 1.5 }} onClose={() => setDiscordTestResult(null)}>
             {discordTestResult.message}
+          </Alert>
+        )}
+      </Paper>
+
+      {/* ── ntfy ────────────────────────────────────────────────────────── */}
+      <Paper variant="outlined" sx={{ mb: 3, p: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <NotificationsActive color="action" />
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>ntfy</Typography>
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Push notifications via{' '}
+          <a href="https://ntfy.sh" target="_blank" rel="noreferrer">ntfy</a> — either the public
+          ntfy.sh service or your own self-hosted server. Leave the server blank to use ntfy.sh.
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mb: 1 }}>
+          <TextField
+            size="small"
+            label="Server URL (optional)"
+            placeholder="https://ntfy.sh"
+            value={ntfyServerInput}
+            onChange={(e) => setNtfyServerInput(e.target.value)}
+            sx={{ minWidth: 220, flex: 1 }}
+          />
+          <TextField
+            size="small"
+            label="Topic"
+            placeholder="my-finance-alerts"
+            value={ntfyTopicInput}
+            onChange={(e) => setNtfyTopicInput(e.target.value)}
+            sx={{ minWidth: 200, flex: 1 }}
+          />
+          <TextField
+            size="small"
+            label={ntfyConfig?.token ? 'Replace access token' : 'Access token (optional)'}
+            placeholder="tk_..."
+            value={ntfyTokenInput}
+            onChange={(e) => setNtfyTokenInput(e.target.value)}
+            sx={{ minWidth: 200, flex: 1 }}
+          />
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Button
+            variant="contained" size="small"
+            onClick={handleSaveNtfy}
+            disabled={ntfySaving}
+          >
+            {ntfySaving ? 'Saving…' : 'Save'}
+          </Button>
+          <Button
+            variant="outlined" size="small"
+            onClick={handleTestNtfy}
+            disabled={ntfyTesting || !ntfyConfig?.topic}
+          >
+            {ntfyTesting ? 'Sending…' : 'Send test message'}
+          </Button>
+          <Chip
+            size="small"
+            color={ntfyConfig?.topic ? 'success' : 'default'}
+            variant="outlined"
+            label={ntfyConfig?.topic ? `Configured — topic "${ntfyConfig.topic}"` : 'Not configured'}
+          />
+        </Box>
+        {ntfyTestResult && (
+          <Alert severity={ntfyTestResult.ok ? 'success' : 'error'} sx={{ mt: 1.5 }} onClose={() => setNtfyTestResult(null)}>
+            {ntfyTestResult.message}
           </Alert>
         )}
       </Paper>

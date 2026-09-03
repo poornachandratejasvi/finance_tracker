@@ -2,16 +2,30 @@ import React, { useEffect, useState } from 'react';
 import {
   Container, Typography, Paper, Box, Button, TextField, IconButton, Alert,
   Grid, Dialog, DialogTitle, DialogContent, DialogActions, Chip, MenuItem,
+  Tabs, Tab, List, ListItem, ListItemText, ListItemIcon, CircularProgress, Divider,
 } from '@mui/material';
-import { Add, Delete, Edit, PhotoCamera, DirectionsCar } from '@mui/icons-material';
+import {
+  Add, Delete, Edit, PhotoCamera, DirectionsCar, InsertDriveFile,
+  UploadFile, OpenInNew, LocalGasStation, Info,
+} from '@mui/icons-material';
 import {
   listVehicles, createVehicle, updateVehicle, deleteVehicle,
   createVehiclePolicy, updateVehiclePolicy, getExpiringPolicies, scanVehicleDocument,
+  listVehiclePuc, createVehiclePuc, updateVehiclePuc, deleteVehiclePuc,
+  listVehicleDocuments, uploadVehicleDocument, deleteVehicleDocument, getVehicleSpendSummary,
 } from '../services/api';
 
 const inr = (n) => (n == null ? '—' : `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`);
 const blankVehicle = { registration_number: '', nickname: '', vehicle_type: 'car', make: '', model: '', fuel_type: '', purchase_date: '' };
 const blankPolicy = { provider: '', policy_number: '', policy_type: 'comprehensive', premium_amount: '', start_date: '', expiry_date: '' };
+const blankPuc = { certificate_number: '', issued_date: '', expiry_date: '' };
+const DOCUMENT_TYPES = [
+  { value: 'rc', label: 'RC (Registration Certificate)' },
+  { value: 'insurance', label: 'Insurance' },
+  { value: 'puc', label: 'PUC Certificate' },
+  { value: 'service_record', label: 'Service Record / Invoice' },
+  { value: 'other', label: 'Other' },
+];
 
 function expiryColor(days) {
   if (days == null) return 'default';
@@ -34,6 +48,74 @@ export default function Vehicles() {
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
   const [scanning, setScanning] = useState(false);
+
+  // Vehicle details dialog: PUC, documents, spend summary.
+  const [detailsVehicle, setDetailsVehicle] = useState(null);
+  const [detailsTab, setDetailsTab] = useState(0);
+  const [pucList, setPucList] = useState([]);
+  const [pucOpen, setPucOpen] = useState(false);
+  const [pucEditing, setPucEditing] = useState(null);
+  const [pucForm, setPucForm] = useState(blankPuc);
+  const [documents, setDocuments] = useState([]);
+  const [uploadType, setUploadType] = useState('other');
+  const [uploading, setUploading] = useState(false);
+  const [spendSummary, setSpendSummary] = useState(null);
+
+  const openDetails = async (vehicle) => {
+    setDetailsVehicle(vehicle);
+    setDetailsTab(0);
+    try {
+      const [pucs, docs, spend] = await Promise.all([
+        listVehiclePuc(vehicle.id), listVehicleDocuments(vehicle.id), getVehicleSpendSummary(vehicle.id, 12),
+      ]);
+      setPucList(pucs); setDocuments(docs); setSpendSummary(spend);
+    } catch (e) { setErr('Failed to load vehicle details'); }
+  };
+
+  const reloadDetails = async () => {
+    if (!detailsVehicle) return;
+    const [pucs, docs, spend] = await Promise.all([
+      listVehiclePuc(detailsVehicle.id), listVehicleDocuments(detailsVehicle.id), getVehicleSpendSummary(detailsVehicle.id, 12),
+    ]);
+    setPucList(pucs); setDocuments(docs); setSpendSummary(spend);
+  };
+
+  const openNewPuc = () => { setPucEditing(null); setPucForm(blankPuc); setPucOpen(true); };
+  const openEditPuc = (p) => {
+    setPucEditing(p.id);
+    setPucForm({ certificate_number: p.certificate_number || '', issued_date: p.issued_date || '', expiry_date: p.expiry_date || '' });
+    setPucOpen(true);
+  };
+  const savePuc = async () => {
+    setErr('');
+    try {
+      if (pucEditing) await updateVehiclePuc(pucEditing, pucForm);
+      else await createVehiclePuc(detailsVehicle.id, pucForm);
+      setPucOpen(false); reloadDetails(); load();
+    } catch (e) { setErr(e.response?.data?.detail || 'Failed to save PUC certificate'); }
+  };
+  const removePuc = async (id) => {
+    if (!window.confirm('Delete this PUC certificate?')) return;
+    try { await deleteVehiclePuc(id); reloadDetails(); load(); } catch (e) { setErr('Failed to delete PUC certificate'); }
+  };
+
+  const handleUploadDocument = async (file) => {
+    if (!file || !detailsVehicle) return;
+    setUploading(true); setErr('');
+    try {
+      await uploadVehicleDocument(detailsVehicle.id, uploadType, file.name, file);
+      setMsg('Document uploaded — archiving in the background.');
+      reloadDetails();
+    } catch (e) {
+      setErr('Failed to upload document.');
+    } finally {
+      setUploading(false);
+    }
+  };
+  const removeDocument = async (docId) => {
+    if (!window.confirm('Remove this document reference? (the archived copy is kept in Paperless)')) return;
+    try { await deleteVehicleDocument(detailsVehicle.id, docId); reloadDetails(); } catch (e) { setErr('Failed to remove document'); }
+  };
 
   const load = async () => {
     try {
@@ -163,9 +245,24 @@ export default function Vehicles() {
                   ) : (
                     <Typography variant="body2" color="text.secondary">No insurance policy recorded.</Typography>
                   )}
-                  <Button size="small" sx={{ mt: 1 }} onClick={() => openPolicy(v)}>
-                    {v.current_policy ? 'Edit Policy' : 'Add Policy'}
-                  </Button>
+                  {v.current_puc && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+                      <Typography variant="caption" color="text.secondary">PUC expires {v.current_puc.expiry_date || '—'}</Typography>
+                      <Chip
+                        size="small"
+                        label={v.current_puc.days_until_expiry < 0 ? 'Expired' : `${v.current_puc.days_until_expiry}d left`}
+                        color={expiryColor(v.current_puc.days_until_expiry)}
+                      />
+                    </Box>
+                  )}
+                  <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                    <Button size="small" onClick={() => openPolicy(v)}>
+                      {v.current_policy ? 'Edit Policy' : 'Add Policy'}
+                    </Button>
+                    <Button size="small" startIcon={<Info fontSize="small" />} onClick={() => openDetails(v)}>
+                      Details {v.document_count > 0 ? `(${v.document_count})` : ''}
+                    </Button>
+                  </Box>
                 </Box>
               </Paper>
             </Grid>
@@ -240,6 +337,146 @@ export default function Vehicles() {
         <DialogActions>
           <Button onClick={() => setPOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={savePolicy}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Vehicle details dialog: PUC, documents, spend summary */}
+      <Dialog open={Boolean(detailsVehicle)} onClose={() => setDetailsVehicle(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>{detailsVehicle?.nickname || detailsVehicle?.registration_number}</DialogTitle>
+        <Tabs value={detailsTab} onChange={(e, v) => setDetailsTab(v)} sx={{ px: 3 }}>
+          <Tab label="Spend" />
+          <Tab label="PUC" />
+          <Tab label="Documents" />
+        </Tabs>
+        <DialogContent sx={{ pt: 2 }}>
+          {detailsTab === 0 && (
+            spendSummary ? (
+              <Box>
+                <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+                  <Box sx={{ flex: '1 1 140px' }}>
+                    <Typography variant="caption" color="text.secondary">Total spent (12mo)</Typography>
+                    <Typography variant="h5" fontWeight={800}>{inr(spendSummary.total_spent)}</Typography>
+                  </Box>
+                  <Box sx={{ flex: '1 1 140px' }}>
+                    <Typography variant="caption" color="text.secondary">Insurance (lifetime)</Typography>
+                    <Typography variant="h5" fontWeight={800}>{inr(spendSummary.insurance_lifetime_total)}</Typography>
+                  </Box>
+                  <Box sx={{ flex: '1 1 140px' }}>
+                    <Typography variant="caption" color="text.secondary">Transactions</Typography>
+                    <Typography variant="h5" fontWeight={800}>{spendSummary.transaction_count}</Typography>
+                  </Box>
+                </Box>
+                <Divider sx={{ mb: 1.5 }} />
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>By category</Typography>
+                {spendSummary.by_category.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No transactions tagged to this vehicle yet — assign one from the Transactions page.
+                  </Typography>
+                ) : (
+                  <List dense>
+                    {spendSummary.by_category.map((c) => (
+                      <ListItem key={c.category} disableGutters>
+                        <ListItemIcon sx={{ minWidth: 32 }}><LocalGasStation fontSize="small" /></ListItemIcon>
+                        <ListItemText primary={c.category} />
+                        <Typography variant="body2" fontWeight={600}>{inr(c.amount)}</Typography>
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </Box>
+            ) : <CircularProgress size={20} />
+          )}
+
+          {detailsTab === 1 && (
+            <Box>
+              <Button size="small" startIcon={<Add />} onClick={openNewPuc} sx={{ mb: 1 }}>Add PUC Certificate</Button>
+              {pucList.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">No PUC certificates recorded.</Typography>
+              ) : (
+                <List dense>
+                  {pucList.map((p) => (
+                    <ListItem key={p.id} disableGutters
+                      secondaryAction={
+                        <Box>
+                          <IconButton size="small" onClick={() => openEditPuc(p)}><Edit fontSize="small" /></IconButton>
+                          <IconButton size="small" onClick={() => removePuc(p.id)}><Delete fontSize="small" /></IconButton>
+                        </Box>
+                      }
+                    >
+                      <ListItemText
+                        primary={p.certificate_number || 'PUC Certificate'}
+                        secondary={`Expires ${p.expiry_date || '—'}`}
+                      />
+                      <Chip size="small" sx={{ mr: 5 }}
+                        label={p.days_until_expiry < 0 ? 'Expired' : `${p.days_until_expiry}d left`}
+                        color={expiryColor(p.days_until_expiry)}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </Box>
+          )}
+
+          {detailsTab === 2 && (
+            <Box>
+              <Box sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                <TextField select size="small" label="Type" value={uploadType} onChange={(e) => setUploadType(e.target.value)} sx={{ minWidth: 200 }}>
+                  {DOCUMENT_TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+                </TextField>
+                <Button component="label" size="small" variant="outlined" startIcon={uploading ? <CircularProgress size={14} /> : <UploadFile />} disabled={uploading}>
+                  Upload
+                  <input type="file" accept="image/*,.pdf" hidden onChange={(e) => handleUploadDocument(e.target.files[0])} />
+                </Button>
+              </Box>
+              {documents.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">No documents archived yet.</Typography>
+              ) : (
+                <List dense>
+                  {documents.map((d) => (
+                    <ListItem key={d.id} disableGutters
+                      secondaryAction={
+                        <Box>
+                          {d.url && (
+                            <IconButton size="small" component="a" href={d.url} target="_blank" rel="noopener noreferrer">
+                              <OpenInNew fontSize="small" />
+                            </IconButton>
+                          )}
+                          <IconButton size="small" onClick={() => removeDocument(d.id)}><Delete fontSize="small" /></IconButton>
+                        </Box>
+                      }
+                    >
+                      <ListItemIcon sx={{ minWidth: 32 }}><InsertDriveFile fontSize="small" /></ListItemIcon>
+                      <ListItemText
+                        primary={d.title || d.document_type}
+                        secondary={d.processing ? 'Archiving…' : DOCUMENT_TYPES.find((t) => t.value === d.document_type)?.label}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailsVehicle(null)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* PUC dialog */}
+      <Dialog open={pucOpen} onClose={() => setPucOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>{pucEditing ? 'Edit PUC Certificate' : 'Add PUC Certificate'}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+          <TextField label="Certificate Number" value={pucForm.certificate_number}
+            onChange={(e) => setPucForm({ ...pucForm, certificate_number: e.target.value })} />
+          <TextField label="Issued Date" type="date" InputLabelProps={{ shrink: true }} value={pucForm.issued_date}
+            onChange={(e) => setPucForm({ ...pucForm, issued_date: e.target.value })} />
+          <TextField label="Expiry Date" type="date" InputLabelProps={{ shrink: true }} value={pucForm.expiry_date}
+            onChange={(e) => setPucForm({ ...pucForm, expiry_date: e.target.value })} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPucOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={savePuc}>Save</Button>
         </DialogActions>
       </Dialog>
     </Container>

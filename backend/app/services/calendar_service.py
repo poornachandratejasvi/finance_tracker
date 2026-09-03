@@ -187,5 +187,143 @@ def get_upcoming_items(db, user_id: int, days_ahead: int = 60, days_back: int = 
             n += 1
             projected = add_calendar_months(latest_bill.due_date, n)
 
+    from app.models.models import Vehicle, VehicleInsurancePolicy, VehiclePucCertificate
+
+    # Only ever the CURRENT (latest-by-expiry) policy/PUC per vehicle -- a
+    # renewed-every-year record otherwise means N years of history all
+    # separately (and permanently, since an expired-but-superseded one is
+    # still "in the past") cluttering the calendar forever.
+    def _latest_per_vehicle(rows):
+        latest = {}
+        for row, vehicle in rows:
+            prev = latest.get(row.vehicle_id)
+            if not prev or row.expiry_date > prev[0].expiry_date:
+                latest[row.vehicle_id] = (row, vehicle)
+        return latest.values()
+
+    insurance_rows = (
+        db.query(VehicleInsurancePolicy, Vehicle)
+        .join(Vehicle, VehicleInsurancePolicy.vehicle_id == Vehicle.id)
+        .filter(VehicleInsurancePolicy.user_id == user_id, VehicleInsurancePolicy.expiry_date.isnot(None))
+        .all()
+    )
+    for policy, vehicle in _latest_per_vehicle(insurance_rows):
+        if policy.expiry_date <= horizon and (policy.expiry_date >= window_start or policy.expiry_date < now):
+            label = vehicle.nickname or vehicle.registration_number
+            items.append({
+                "type": "vehicle_insurance", "id": policy.id, "date": policy.expiry_date,
+                "title": f"{label} insurance expiry", "subtitle": policy.provider or "Insurance",
+                "amount": policy.premium_amount, "link": None,
+                "is_overdue": policy.expiry_date < now,
+            })
+
+    puc_rows = (
+        db.query(VehiclePucCertificate, Vehicle)
+        .join(Vehicle, VehiclePucCertificate.vehicle_id == Vehicle.id)
+        .filter(VehiclePucCertificate.user_id == user_id, VehiclePucCertificate.expiry_date.isnot(None))
+        .all()
+    )
+    for puc, vehicle in _latest_per_vehicle(puc_rows):
+        if puc.expiry_date <= horizon and (puc.expiry_date >= window_start or puc.expiry_date < now):
+            label = vehicle.nickname or vehicle.registration_number
+            items.append({
+                "type": "vehicle_puc", "id": puc.id, "date": puc.expiry_date,
+                "title": f"{label} PUC expiry", "subtitle": "Pollution certificate",
+                "amount": None, "link": None,
+                "is_overdue": puc.expiry_date < now,
+            })
+
+    from app.models.models import AutopayMandate, InsurancePolicy, Warranty, Iou, CreditCardFee
+
+    mandates = (
+        db.query(AutopayMandate)
+        .filter(AutopayMandate.user_id == user_id, AutopayMandate.status == "active", AutopayMandate.next_debit_date.isnot(None))
+        .all()
+    )
+    for m in mandates:
+        # expand_occurrences only understands none/weekly/monthly/yearly --
+        # frequency='other' is a single one-off reminder, not a recurrence to
+        # step through (passing it straight through would either silently
+        # drop it or, worse, loop forever re-appending the same date, since
+        # its internal _step() has no case for an unrecognized recurrence).
+        occurrences = (
+            expand_occurrences(m.next_debit_date, m.frequency, window_start, horizon)
+            if m.frequency in ("weekly", "monthly", "yearly")
+            else ([m.next_debit_date] if window_start <= m.next_debit_date <= horizon else [])
+        )
+        for occ_date in occurrences:
+            items.append({
+                "type": "autopay_mandate", "id": m.id, "date": occ_date,
+                "title": f"{m.merchant_name} autopay", "subtitle": "UPI/bank autopay mandate",
+                "amount": m.max_amount, "link": None,
+                "is_overdue": occ_date < now,
+            })
+
+    policies = db.query(InsurancePolicy).filter(
+        InsurancePolicy.user_id == user_id, InsurancePolicy.is_active.is_(True), InsurancePolicy.expiry_date.isnot(None),
+    ).all()
+    for p in policies:
+        if p.expiry_date <= horizon and (p.expiry_date >= window_start or p.expiry_date < now):
+            items.append({
+                "type": "insurance_expiry", "id": p.id, "date": p.expiry_date,
+                "title": f"{(p.provider or p.policy_type.title())} insurance expiry",
+                "subtitle": f"{p.policy_type.title()} insurance",
+                "amount": p.premium_amount, "link": None,
+                "is_overdue": p.expiry_date < now,
+            })
+
+    warranties = db.query(Warranty).filter(Warranty.user_id == user_id).all()
+    for w in warranties:
+        if w.warranty_expiry and w.warranty_expiry <= horizon and (w.warranty_expiry >= window_start or w.warranty_expiry < now):
+            items.append({
+                "type": "warranty_expiry", "id": w.id, "date": w.warranty_expiry,
+                "title": f"{w.item_name} warranty expiry", "subtitle": w.category.title(),
+                "amount": None, "link": None,
+                "is_overdue": w.warranty_expiry < now,
+            })
+        if w.amc_expiry and w.amc_expiry <= horizon and (w.amc_expiry >= window_start or w.amc_expiry < now):
+            items.append({
+                "type": "amc_expiry", "id": w.id, "date": w.amc_expiry,
+                "title": f"{w.item_name} AMC expiry", "subtitle": w.amc_provider or "AMC",
+                "amount": None, "link": None,
+                "is_overdue": w.amc_expiry < now,
+            })
+
+    ious = db.query(Iou).filter(Iou.user_id == user_id, Iou.status == "open", Iou.due_date.isnot(None)).all()
+    for i in ious:
+        if i.due_date <= horizon and (i.due_date >= window_start or i.due_date < now):
+            verb = "owes you" if i.direction == "lent" else "you owe"
+            items.append({
+                "type": "iou_due", "id": i.id, "date": i.due_date,
+                "title": f"{i.person_name} {verb}", "subtitle": "IOU due",
+                "amount": i.outstanding_amount, "link": None,
+                "is_overdue": i.due_date < now,
+            })
+
+    fee_rows = (
+        db.query(CreditCardFee, Bank)
+        .join(Bank, CreditCardFee.bank_id == Bank.id)
+        .filter(CreditCardFee.user_id == user_id)
+        .all()
+    )
+    for fee, bank in fee_rows:
+        # Project the next annual occurrence -- same 12-month-step technique
+        # already used above for un-parsed future credit-card DUE dates, just
+        # yearly instead of monthly.
+        next_date = fee.fee_anniversary_date
+        n = 0
+        while next_date < window_start:
+            n += 1
+            next_date = add_calendar_months(fee.fee_anniversary_date, 12 * n)
+        while next_date <= horizon:
+            items.append({
+                "type": "credit_card_fee", "id": fee.id, "date": next_date,
+                "title": f"{bank.name} annual fee", "subtitle": "Credit card annual fee",
+                "amount": fee.annual_fee_amount, "link": None,
+                "is_overdue": next_date < now,
+            })
+            n += 1
+            next_date = add_calendar_months(fee.fee_anniversary_date, 12 * n)
+
     items.sort(key=lambda i: i["date"])
     return items

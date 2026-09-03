@@ -242,6 +242,11 @@ class Transaction(Base):
     # app.services.paperless_service) -- set asynchronously once the consume task
     # finishes (app.tasks.paperless_tasks), NULL until then or if never scanned.
     paperless_document_id = Column(Integer, index=True)
+    # Manually tagged -- no reliable signal in bank data indicates WHICH of a
+    # user's (possibly several) vehicles a fuel/service/toll charge belongs to,
+    # so this is user-assigned rather than auto-detected. Powers each
+    # vehicle's spend summary (see vehicles.py's /spend-summary).
+    vehicle_id = Column(Integer, ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True, index=True)
 
     # 'alert' rows (parsed from a real-time bank SMS/email alert, before the official
     # statement arrives) start life unconfirmed; everything else defaults confirmed.
@@ -522,6 +527,12 @@ class BalanceSnapshot(Base):
     savings_total = Column(Float, default=0.0)
     credit_total = Column(Float, default=0.0)
     net_worth = Column(Float, default=0.0)
+    # Additive-only (see NetWorth.jsx / dashboard.py's /net-worth 'full_net_worth') --
+    # savings_total/credit_total/net_worth above keep their original bank-only meaning
+    # untouched, since investments were deliberately excluded from the existing
+    # Dashboard net-worth figure per an earlier explicit decision (investment_service.py).
+    investments_total = Column(Float, default=0.0)
+    loan_total = Column(Float, default=0.0)
     created_at = Column(DateTime, default=utcnow)
 
     user = relationship("User")
@@ -868,6 +879,8 @@ class Vehicle(Base):
 
     user = relationship("User")
     policies = relationship("VehicleInsurancePolicy", cascade="all, delete-orphan", back_populates="vehicle")
+    puc_certificates = relationship("VehiclePucCertificate", cascade="all, delete-orphan", back_populates="vehicle")
+    documents = relationship("VehicleDocument", cascade="all, delete-orphan", back_populates="vehicle")
 
 
 class VehicleInsurancePolicy(Base):
@@ -890,6 +903,48 @@ class VehicleInsurancePolicy(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     vehicle = relationship("Vehicle", back_populates="policies")
+    user = relationship("User")
+
+
+class VehiclePucCertificate(Base):
+    """A Pollution Under Control certificate for a vehicle -- same
+    keep-history/latest-by-expiry-is-current shape as VehicleInsurancePolicy
+    (mandatory in India, renewed every 6-12 months, no open API to check it
+    automatically -- same VAHAN gap noted on Vehicle's own docstring)."""
+    __tablename__ = "vehicle_puc_certificates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vehicle_id = Column(Integer, ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    certificate_number = Column(String(60), nullable=True)
+    issued_date = Column(DateTime, nullable=True)
+    expiry_date = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    vehicle = relationship("Vehicle", back_populates="puc_certificates")
+    user = relationship("User")
+
+
+class VehicleDocument(Base):
+    """Any document worth keeping against a vehicle (RC copy, service
+    invoice, loan paperwork, ...) beyond the two structured record types
+    above -- archived to Paperless-ngx (see paperless_service.py) exactly
+    like a receipt, just linked to a Vehicle instead of a Transaction.
+    paperless_document_id is set asynchronously once Paperless's OCR/consume
+    task finishes (see vehicle_document_tasks.py), NULL until then."""
+    __tablename__ = "vehicle_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vehicle_id = Column(Integer, ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_type = Column(String(20), default="other")  # rc|insurance|puc|service_record|other
+    title = Column(String(200), nullable=True)
+    paperless_document_id = Column(Integer, nullable=True, index=True)
+    created_at = Column(DateTime, default=utcnow)
+
+    vehicle = relationship("Vehicle", back_populates="documents")
     user = relationship("User")
 
 
@@ -1066,4 +1121,176 @@ class TransactionAuditLog(Base):
     changes = Column(Text, nullable=False)
     changed_at = Column(DateTime, default=utcnow, index=True)
 
+    user = relationship("User")
+
+
+class AutopayMandate(Base):
+    """A UPI/bank autopay authorization the user has registered with a merchant --
+    manually tracked (no captcha-free API exists to discover these automatically,
+    same gap noted on ExternalLookupRequest), so a silent recurring debit never
+    surprises them. Distinct from Subscription: this represents the AUTHORIZATION
+    itself, not a bill to pay by hand."""
+    __tablename__ = "autopay_mandates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    bank_id = Column(Integer, ForeignKey("banks.id", ondelete="SET NULL"), nullable=True, index=True)
+    merchant_name = Column(String(150), nullable=False)
+    upi_vpa = Column(String(100), nullable=True)
+    max_amount = Column(Float, nullable=True)
+    frequency = Column(String(10), default="monthly")  # weekly|monthly|yearly|other
+    next_debit_date = Column(DateTime, nullable=True)
+    status = Column(String(10), default="active")  # active|paused|cancelled
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")
+    bank = relationship("Bank")
+
+
+class InsurancePolicy(Base):
+    """A health/life/home/other insurance policy -- unlike VehicleInsurancePolicy
+    (one derived "current" policy per vehicle), a person can legitimately hold
+    several simultaneous policies of the same type (e.g. two health policies), so
+    this is a flat, independently-managed list rather than a history-with-a-
+    derived-current shape. is_active lets an expired/replaced policy be archived
+    instead of deleted."""
+    __tablename__ = "insurance_policies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    policy_type = Column(String(10), default="other")  # health|life|home|other
+    provider = Column(String(150), nullable=True)
+    policy_number = Column(String(60), nullable=True)
+    insured_name = Column(String(150), nullable=True)  # who/what is covered
+    premium_amount = Column(Float, nullable=True)
+    premium_frequency = Column(String(10), default="yearly")  # monthly|quarterly|yearly
+    coverage_amount = Column(Float, nullable=True)
+    issued_date = Column(DateTime, nullable=True)
+    expiry_date = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")
+    documents = relationship("InsuranceDocument", cascade="all, delete-orphan", back_populates="policy")
+
+
+class InsuranceDocument(Base):
+    """Any document worth keeping against an insurance policy (policy PDF, claim
+    form, proposal, ...) -- archived to Paperless-ngx exactly like VehicleDocument,
+    just linked to an InsurancePolicy instead of a Vehicle."""
+    __tablename__ = "insurance_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    policy_id = Column(Integer, ForeignKey("insurance_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_type = Column(String(20), default="other")  # policy_doc|proposal|claim|other
+    title = Column(String(200), nullable=True)
+    paperless_document_id = Column(Integer, nullable=True, index=True)
+    created_at = Column(DateTime, default=utcnow)
+
+    policy = relationship("InsurancePolicy", back_populates="documents")
+    user = relationship("User")
+
+
+class Warranty(Base):
+    """An appliance/electronics warranty and/or AMC (annual maintenance contract),
+    same expiry-tracking shape as InsurancePolicy/VehiclePucCertificate."""
+    __tablename__ = "warranties"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_name = Column(String(150), nullable=False)
+    category = Column(String(20), default="other")  # electronics|appliance|furniture|other
+    vendor = Column(String(150), nullable=True)
+    purchase_date = Column(DateTime, nullable=True)
+    purchase_amount = Column(Float, nullable=True)
+    warranty_expiry = Column(DateTime, nullable=True)
+    amc_expiry = Column(DateTime, nullable=True)
+    amc_provider = Column(String(150), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")
+    documents = relationship("WarrantyDocument", cascade="all, delete-orphan", back_populates="warranty")
+
+
+class WarrantyDocument(Base):
+    """Mirrors VehicleDocument/InsuranceDocument -- Paperless-archived, linked to
+    a Warranty (invoice, warranty card, AMC contract, ...)."""
+    __tablename__ = "warranty_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    warranty_id = Column(Integer, ForeignKey("warranties.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_type = Column(String(20), default="other")  # invoice|warranty_card|amc_contract|other
+    title = Column(String(200), nullable=True)
+    paperless_document_id = Column(Integer, nullable=True, index=True)
+    created_at = Column(DateTime, default=utcnow)
+
+    warranty = relationship("Warranty", back_populates="documents")
+    user = relationship("User")
+
+
+class Iou(Base):
+    """Money lent to or borrowed from a specific person (assumed NOT an app user
+    -- a friend/family member outside the tracker, hence person_name is free
+    text rather than a User FK). Distinct from formal Bank-tracked debt."""
+    __tablename__ = "ious"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    person_name = Column(String(150), nullable=False)
+    direction = Column(String(10), nullable=False)  # lent|borrowed
+    principal_amount = Column(Float, nullable=False)
+    outstanding_amount = Column(Float, nullable=False)
+    iou_date = Column(DateTime, nullable=False)
+    due_date = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    status = Column(String(10), default="open")  # open|settled
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")
+    payments = relationship("IouPayment", cascade="all, delete-orphan", back_populates="iou")
+
+
+class IouPayment(Base):
+    """A partial (or full) repayment against an Iou -- kept as a sub-ledger
+    rather than just mutating Iou.outstanding_amount blindly, same
+    keep-a-history precedent as InvestmentEntry."""
+    __tablename__ = "iou_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    iou_id = Column(Integer, ForeignKey("ious.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount = Column(Float, nullable=False)
+    payment_date = Column(DateTime, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
+    iou = relationship("Iou", back_populates="payments")
+
+
+class CreditCardFee(Base):
+    """Annual-fee / fee-waiver config for a credit card -- a different lifecycle
+    than CreditCardBill's per-statement-cycle due dates (once/year, independent
+    of statement cycles, often with a spend-based waiver condition), so it's a
+    separate 1:1-per-Bank config row rather than a CreditCardBill field."""
+    __tablename__ = "credit_card_fees"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bank_id = Column(Integer, ForeignKey("banks.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    annual_fee_amount = Column(Float, nullable=False)
+    fee_anniversary_date = Column(DateTime, nullable=False)  # last/next known charge date
+    waiver_spend_threshold = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    bank = relationship("Bank")
     user = relationship("User")

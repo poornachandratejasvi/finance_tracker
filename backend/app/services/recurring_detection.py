@@ -109,6 +109,95 @@ def detect_recurring(db, user_id: int, min_occurrences: int = 3, lookback_days: 
     return results
 
 
+_PRICE_CHANGE_THRESHOLD_PCT = 2.0  # ignore rounding noise below this
+# A genuine "price went up" pattern (subscription, rent, gym...) has a STABLE
+# amount before the jump -- confirmed via live testing against real transaction
+# history that skipping this check floods results with ordinary variable-amount
+# recurring payments (e.g. frequent UPI transfers to the same person/merchant
+# for different purchases each time), which "jump" constantly by construction
+# and have nothing to do with a price increase. Coefficient of variation
+# (stdev/mean) of the amounts BEFORE the latest one must be low for this to
+# count as a real baseline worth comparing against.
+_STABLE_BASELINE_CV = 0.10
+
+
+def detect_price_changes(db, user_id: int, lookback_days: int = 730) -> list:
+    """Flag a recurring pattern whose latest occurrence costs more than its
+    prior history -- e.g. a subscription that silently went ₹199 -> ₹249.
+
+    Deliberately a SEPARATE grouping pass from detect_recurring, not a
+    modification of it: detect_recurring groups by (bank_id, signature,
+    round(amount, 2)) -- amount is part of its key, so a pattern whose amount
+    changes is already split into two smaller groups there, and its returned
+    dict never keeps each occurrence's individual amount. Changing that
+    grouping would also affect check_upcoming_renewals's pattern_key/reminder
+    dedup, which round(amount, 2) too -- too risky to touch in place. This
+    function re-groups by (bank_id, signature) ONLY (no amount in the key),
+    so an amount-drift series is seen as one pattern instead of two."""
+    from app.models.models import Transaction
+    from app.core.time_utils import utcnow
+    from datetime import timedelta
+
+    cutoff = utcnow() - timedelta(days=lookback_days)
+    txns = (
+        db.query(Transaction)
+        .filter(Transaction.user_id == user_id, Transaction.transaction_date >= cutoff, Transaction.amount.isnot(None))
+        .order_by(Transaction.transaction_date)
+        .all()
+    )
+
+    groups = defaultdict(list)
+    for t in txns:
+        sig = _signature(t.description)
+        if not sig:
+            continue
+        groups[(t.bank_id, sig)].append(t)
+
+    results = []
+    for (bank_id, sig), items in groups.items():
+        if len(items) < 3:
+            continue
+        items.sort(key=lambda t: t.transaction_date)
+        gaps = [(items[i + 1].transaction_date - items[i].transaction_date).days for i in range(len(items) - 1)]
+        if not gaps or not _classify(median(gaps)):
+            continue  # not actually a recurring cadence, just coincidental same-signature charges
+
+        current_amount = items[-1].amount
+        prior_amounts = [t.amount for t in items[:-1]]
+        previous_amount = median(prior_amounts)
+        if previous_amount <= 0:
+            continue
+
+        # Reject anything whose "before" amounts weren't actually stable --
+        # otherwise a naturally variable-amount series (frequent payments to
+        # the same person/merchant that just happen to differ each time)
+        # constantly looks like a "price increase" against its own median.
+        if len(prior_amounts) >= 2:
+            baseline_mean = sum(prior_amounts) / len(prior_amounts)
+            baseline_variance = sum((a - baseline_mean) ** 2 for a in prior_amounts) / len(prior_amounts)
+            baseline_cv = (baseline_variance ** 0.5) / baseline_mean if baseline_mean else float("inf")
+            if baseline_cv > _STABLE_BASELINE_CV:
+                continue
+
+        change_pct = round((current_amount - previous_amount) / previous_amount * 100, 1)
+        if change_pct <= _PRICE_CHANGE_THRESHOLD_PCT:
+            continue
+
+        results.append({
+            "bank_id": bank_id,
+            "signature": sig,
+            "sample_description": items[-1].description,
+            "previous_amount": round(previous_amount, 2),
+            "current_amount": round(current_amount, 2),
+            "change_pct": change_pct,
+            "last_date": items[-1].transaction_date,
+            "occurrences": len(items),
+        })
+
+    results.sort(key=lambda r: -r["change_pct"])
+    return results
+
+
 def _reminder_key(uid: int) -> str:
     return f"recurring_reminders_sent:{uid}"
 

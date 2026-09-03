@@ -6,6 +6,7 @@ Start a worker with:
     celery -A app.core.celery_app:celery_app worker --loglevel=info
 """
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import settings
 
@@ -22,6 +23,8 @@ celery_app = Celery(
         "app.tasks.stale_pending_tasks", "app.tasks.goal_sweep_tasks",
         "app.tasks.shipment_sync_tasks", "app.tasks.package_tracker_tasks", "app.tasks.calendar_reminder_tasks",
         "app.tasks.credit_card_bill_tasks", "app.tasks.statement_ocr_tasks",
+        "app.tasks.vehicle_document_tasks", "app.tasks.insurance_document_tasks",
+        "app.tasks.warranty_document_tasks", "app.tasks.digest_tasks",
     ],
 )
 
@@ -48,6 +51,13 @@ celery_app.conf.beat_schedule = {
     "auto-backup-dispatch": {
         "task": "backup.dispatch_scheduled",
         "schedule": 60.0,
+    },
+    # Spend recap + upcoming items (bills, subscriptions, all the new
+    # expiry-tracking features) + net worth delta, pushed via the Apprise
+    # fan-out (Discord/ntfy/...) instead of the user checking the dashboard.
+    "weekly-digest": {
+        "task": "digest.send_weekly",
+        "schedule": crontab(hour=8, minute=0, day_of_week=1),  # Monday 8am UTC
     },
     # 'Absence' notification rules only need checking once a day (they fire at most
     # once per calendar month per rule, guarded by last_triggered_month) — every few

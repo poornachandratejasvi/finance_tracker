@@ -20,6 +20,7 @@ class TransactionBase(BaseModel):
 class TransactionCreate(TransactionBase):
     bank_id: int
     pdf_statement_id: Optional[int] = None
+    vehicle_id: Optional[int] = None
     # Client-generated UUID from the mobile app's offline write queue -- lets a
     # retried submission (e.g. the network dropped after the server committed
     # but before the response arrived) return the existing row instead of
@@ -48,6 +49,12 @@ class TransactionUpdate(BaseModel):
     to_account: Optional[str] = None
     notes: Optional[str] = None
     transaction_date: Optional[datetime] = None
+    # No reliable signal in bank data indicates which vehicle a fuel/service/
+    # toll charge belongs to -- user-assigned. Send `null` explicitly to
+    # clear an existing assignment (the endpoint uses exclude_unset=True, so
+    # omitting the field entirely leaves it untouched, but an explicit null
+    # is still applied).
+    vehicle_id: Optional[int] = None
 
     @field_validator("amount")
     @classmethod
@@ -72,6 +79,8 @@ class TransactionResponse(TransactionBase):
     client_uuid: Optional[str] = None
     paperless_document_id: Optional[int] = None
     receipt_url: Optional[str] = None  # computed: Paperless-ngx document link, if archived there
+    vehicle_id: Optional[int] = None
+    vehicle_label: Optional[str] = None  # computed: nickname or registration number, for display
     labels: List[str] = []
     label_details: List[dict] = []  # [{id,name,color}] for colored chips
     created_at: datetime
@@ -96,6 +105,7 @@ class TransactionFilter(BaseModel):
     search_query: Optional[str] = None
     label_ids: Optional[List[int]] = []
     show_duplicates: Optional[bool] = None
+    vehicle_id: Optional[int] = None
 
 
 class DuplicateGroup(BaseModel):

@@ -64,6 +64,7 @@ def list_transactions(
     search: Optional[str] = None,
     is_confirmed: Optional[bool] = None,
     source: Optional[str] = None,
+    vehicle_id: Optional[int] = None,
     updated_since: Optional[str] = None,
     sort_by: str = Query("date", pattern="^(date|amount|description|category)$"),
     sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
@@ -111,6 +112,9 @@ def list_transactions(
     if is_confirmed is not None:
         query = query.filter(Transaction.is_confirmed.is_(is_confirmed))
 
+    if vehicle_id is not None:
+        query = query.filter(Transaction.vehicle_id == vehicle_id)
+
     sources = _parse_csv_list(source, str)
     if sources:
         query = query.filter(Transaction.source.in_(sources))
@@ -148,6 +152,13 @@ def list_transactions(
     from app.services import paperless_service
     paperless_base_url = paperless_service.get_config(db).get("base_url")
 
+    from app.models.models import Vehicle
+    vehicle_ids = {t.vehicle_id for t in transactions if t.vehicle_id}
+    vehicle_labels = {
+        v.id: (v.nickname or v.registration_number)
+        for v in (db.query(Vehicle).filter(Vehicle.id.in_(vehicle_ids)).all() if vehicle_ids else [])
+    }
+
     # Add bank name, currency and labels (with colors) to response
     result = []
     for trans in transactions:
@@ -164,6 +175,7 @@ def list_transactions(
         ]
         if paperless_base_url and trans.paperless_document_id:
             trans_dict['receipt_url'] = f"{paperless_base_url}/documents/{trans.paperless_document_id}/"
+        trans_dict['vehicle_label'] = vehicle_labels.get(trans.vehicle_id)
         result.append(trans_dict)
 
     return {"items": result, "total": total, "skip": skip, "limit": limit}
@@ -394,7 +406,11 @@ def create_transaction(
     trans_dict = TransactionResponse.from_orm(transaction).dict()
     trans_dict['bank_name'] = transaction.bank.name if transaction.bank else None
     trans_dict['labels'] = [tl.label.name for tl in transaction.transaction_labels]
-    
+    if transaction.vehicle_id:
+        from app.models.models import Vehicle
+        vehicle = db.query(Vehicle).filter(Vehicle.id == transaction.vehicle_id).first()
+        trans_dict['vehicle_label'] = (vehicle.nickname or vehicle.registration_number) if vehicle else None
+
     return trans_dict
 
 
@@ -697,6 +713,10 @@ def get_transaction(
     if transaction.paperless_document_id:
         from app.services import paperless_service
         trans_dict['receipt_url'] = paperless_service.document_url(db, transaction.paperless_document_id)
+    if transaction.vehicle_id:
+        from app.models.models import Vehicle
+        vehicle = db.query(Vehicle).filter(Vehicle.id == transaction.vehicle_id).first()
+        trans_dict['vehicle_label'] = (vehicle.nickname or vehicle.registration_number) if vehicle else None
     return trans_dict
 
 

@@ -129,16 +129,35 @@ def _take_balance_snapshots(db, now: datetime) -> None:
                 continue
             # bank_type='investment' rows exist only to auto-download CAS/PPF
             # statement emails, not to hold a real balance -- excluded the same
-            # way the dashboard excludes them from net worth.
+            # way the dashboard excludes them from net worth. 'loan' rows are
+            # excluded here too (fixed bug: they used to fall through into
+            # savings_total, counting a liability as an asset) and summed
+            # separately below into loan_total instead.
             savings = float(db.query(func.coalesce(func.sum(Bank.current_balance), 0.0)).filter(
-                Bank.user_id == uid, Bank.bank_type.notin_(["credit", "investment"]), Bank.current_balance.isnot(None)
+                Bank.user_id == uid, Bank.bank_type.notin_(["credit", "investment", "loan"]), Bank.current_balance.isnot(None)
             ).scalar() or 0.0)
             credit = float(db.query(func.coalesce(func.sum(Bank.current_balance), 0.0)).filter(
                 Bank.user_id == uid, Bank.bank_type == "credit", Bank.current_balance.isnot(None)
             ).scalar() or 0.0)
+            loan = float(db.query(func.coalesce(func.sum(Bank.current_balance), 0.0)).filter(
+                Bank.user_id == uid, Bank.bank_type == "loan", Bank.current_balance.isnot(None)
+            ).scalar() or 0.0)
+            # Additive-only (see NetWorth.jsx / dashboard.py's /net-worth
+            # 'full_net_worth') -- net_worth below keeps its original bank-only
+            # meaning; investments_total/loan_total are extra fields the fuller
+            # Net Worth page reads on top of it.
+            investments_total = 0.0
+            try:
+                from app.services import investment_service
+                investments_total = sum(
+                    s["current_value"] for s in investment_service.all_account_summaries(db, uid)
+                )
+            except Exception:
+                logger.warning("Failed summing investments for balance snapshot, user %s", uid, exc_info=True)
             db.add(BalanceSnapshot(
                 user_id=uid, snapshot_date=today,
                 savings_total=savings, credit_total=credit, net_worth=savings - credit,
+                investments_total=investments_total, loan_total=loan,
             ))
         db.commit()
     except Exception:

@@ -72,12 +72,15 @@ def set_extra_urls(db: Session, uid: int, urls: List[str]) -> None:
 
 
 def _all_targets(db: Session, uid: int) -> List[str]:
-    from app.services import discord_service
+    from app.services import discord_service, ntfy_service
 
     targets = []
     discord_url = discord_service.get_webhook(db, uid)
     if discord_url:
         targets.append(_discord_to_apprise(discord_url))
+    ntfy_url = ntfy_service.to_apprise_url(uid, db=db)
+    if ntfy_url:
+        targets.append(ntfy_url)
     targets.extend(get_extra_urls(db, uid))
     return targets
 

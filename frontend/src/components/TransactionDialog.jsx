@@ -4,13 +4,14 @@ import {
   Select, MenuItem, FormControl, InputLabel, ToggleButton, ToggleButtonGroup, Chip,
   IconButton, Typography, Divider, Tooltip, Alert, CircularProgress, Autocomplete,
 } from '@mui/material';
-import { Add, Delete, Close, AutoAwesome, History, Description } from '@mui/icons-material';
+import { Add, Delete, Close, AutoAwesome, History, Description, DirectionsCar } from '@mui/icons-material';
 import CategoryIcon from './CategoryIcon';
 import { ICON_KEYS, getCategoryIconComponent, invalidateCategories } from '../utils/categories';
 import { formatCurrency } from '../utils/format';
 import api, {
   createTransaction, updateTransaction, deleteTransaction,
   createCategory, createLabel, createAutoRule, bulkLabelTransactions,
+  listVehicles,
 } from '../services/api';
 
 // Wallet-style Add/Edit dialog.
@@ -74,6 +75,8 @@ export default function TransactionDialog({
   const [payer, setPayer] = useState('');
   const [paymentType, setPaymentType] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
+  const [vehicleId, setVehicleId] = useState('');
+  const [vehicles, setVehicles] = useState([]);
 
   const [originalLabelIds, setOriginalLabelIds] = useState([]);
   const [createdLabels, setCreatedLabels] = useState([]);
@@ -119,6 +122,12 @@ export default function TransactionDialog({
     return b?.currency_code;
   };
 
+  // Load the vehicle picker's options once per dialog open (list rarely changes mid-edit).
+  useEffect(() => {
+    if (!open) return;
+    listVehicles().then(setVehicles).catch(() => setVehicles([]));
+  }, [open]);
+
   // Initialize state whenever the dialog opens (or the target transaction changes).
   useEffect(() => {
     if (!open) return;
@@ -142,6 +151,7 @@ export default function TransactionDialog({
       const cf = parseCustom(t.custom_fields);
       setPaymentType(cf.payment_type || '');
       setPaymentStatus(cf.payment_status || '');
+      setVehicleId(t.vehicle_id || '');
     } else {
       const d = initialDraft || {};
       const bid = d.bank_id || defaultBankId || (banks[0] && banks[0].id) || '';
@@ -158,6 +168,7 @@ export default function TransactionDialog({
       setPayer('');
       setPaymentType('');
       setPaymentStatus('');
+      setVehicleId(d.vehicle_id || '');
     }
     setCreatedLabels([]);
     setShowCreateCategory(false);
@@ -305,6 +316,7 @@ export default function TransactionDialog({
           category: category || null,
           notes: note.trim() || null,
           from_account: payer.trim() || null,
+          vehicle_id: vehicleId || null,
         };
         // Only send description when it has a value, so clearing it can't wipe the record's text.
         if (desc.trim()) editPayload.description = desc.trim();
@@ -323,6 +335,7 @@ export default function TransactionDialog({
           notes: note.trim() || null,
           from_account: payer.trim() || null,
           currency_code: currencyCode || null,
+          vehicle_id: vehicleId || null,
         });
         const newId = created?.id;
         await applyCustomFields(newId);
@@ -673,6 +686,31 @@ export default function TransactionDialog({
               fullWidth label="From account (optional)" value={payer}
               onChange={(e) => setPayer(e.target.value)} sx={{ mb: 2 }}
             />
+            {vehicles.length > 0 && (
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Vehicle</InputLabel>
+                <Select
+                  value={vehicleId}
+                  label="Vehicle"
+                  onChange={(e) => setVehicleId(e.target.value)}
+                  renderValue={(val) => {
+                    if (!val) return <em>None</em>;
+                    const v = vehicles.find((x) => x.id === val);
+                    return (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <DirectionsCar fontSize="small" />
+                        <span>{v ? (v.nickname || v.registration_number) : val}</span>
+                      </Box>
+                    );
+                  }}
+                >
+                  <MenuItem value=""><em>None</em></MenuItem>
+                  {vehicles.map((v) => (
+                    <MenuItem key={v.id} value={v.id}>{v.nickname || v.registration_number}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
             <FormControl fullWidth sx={{ mb: 2 }}>
               <InputLabel>Payment type</InputLabel>
               <Select value={paymentType} label="Payment type" onChange={(e) => setPaymentType(e.target.value)}>

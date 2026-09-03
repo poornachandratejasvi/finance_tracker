@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Paper, Box, Typography, Table, TableHead, TableRow, TableCell, TableBody,
-  TableContainer, IconButton, Tooltip, CircularProgress, Alert, Button, Snackbar,
+  TableContainer, IconButton, Tooltip, CircularProgress, Alert, Button, Snackbar, Chip,
 } from '@mui/material';
-import { AutoAwesome, Refresh, Add, CalendarMonth } from '@mui/icons-material';
-import { detectRecurringTransactions, createWatcher, createSubscriptionFromPattern } from '../services/api';
+import { AutoAwesome, Refresh, Add, CalendarMonth, TrendingUp } from '@mui/icons-material';
+import { detectRecurringTransactions, createWatcher, createSubscriptionFromPattern, getPriceChanges } from '../services/api';
 
 const apiError = (e, fallback) => {
   const detail = e?.response?.data?.detail;
@@ -15,6 +15,7 @@ const apiError = (e, fallback) => {
 
 export default function RecurringTransactionsCard() {
   const [detected, setDetected] = useState([]);
+  const [priceChanges, setPriceChanges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [creatingIdx, setCreatingIdx] = useState(null);
@@ -26,12 +27,15 @@ export default function RecurringTransactionsCard() {
     setError('');
     try {
       setDetected(await detectRecurringTransactions());
+      setPriceChanges(await getPriceChanges().catch(() => []));
     } catch (e) {
       setError(apiError(e, 'Failed to scan for recurring transactions'));
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const priceChangeFor = (r) => priceChanges.find((p) => p.bank_id === r.bank_id && p.signature === r.signature);
 
   useEffect(() => { load(); }, [load]);
 
@@ -116,7 +120,18 @@ export default function RecurringTransactionsCard() {
                     <Typography variant="body2" noWrap title={r.sample_description}>{r.sample_description}</Typography>
                   </TableCell>
                   <TableCell>{r.bank_name || '—'}</TableCell>
-                  <TableCell>₹{r.amount}</TableCell>
+                  <TableCell>
+                    ₹{r.amount}
+                    {priceChangeFor(r) && (
+                      <Tooltip title={`Was ₹${priceChangeFor(r).previous_amount} — check if this price increase is expected`}>
+                        <Chip
+                          size="small" color="warning" variant="outlined" icon={<TrendingUp fontSize="small" />}
+                          label={`+${priceChangeFor(r).change_pct.toFixed(0)}%`}
+                          sx={{ ml: 0.75, height: 20 }}
+                        />
+                      </Tooltip>
+                    )}
+                  </TableCell>
                   <TableCell sx={{ textTransform: 'capitalize' }}>{r.frequency}</TableCell>
                   <TableCell>{r.occurrences}×</TableCell>
                   <TableCell>{new Date(r.last_date).toLocaleDateString()}</TableCell>

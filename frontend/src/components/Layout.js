@@ -46,6 +46,11 @@ import PaymentsIcon from '@mui/icons-material/Payments';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import EventIcon from '@mui/icons-material/Event';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
+import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import HandshakeIcon from '@mui/icons-material/Handshake';
 import GlobalSearch from './GlobalSearch.jsx';
 
 const DRAWER_WIDTH = 236;
@@ -68,6 +73,11 @@ const NAV_GROUPS = [
     { label: 'Debt Payoff', path: '/debt-payoff', icon: <PaymentsIcon /> },
     { label: 'Packages', path: '/packages', icon: <LocalShippingIcon /> },
     { label: 'Calendar', path: '/calendar', icon: <EventIcon /> },
+    { label: 'Net Worth', path: '/net-worth', icon: <ShowChartIcon /> },
+    { label: 'Autopay Mandates', path: '/autopay', icon: <AutorenewIcon /> },
+    { label: 'Insurance', path: '/insurance', icon: <HealthAndSafetyIcon /> },
+    { label: 'Warranties', path: '/warranties', icon: <VerifiedUserIcon /> },
+    { label: 'IOUs', path: '/ious', icon: <HandshakeIcon /> },
   ] },
   { heading: 'Accounts & Data', items: [
     { label: 'Banks', path: '/banks', icon: <AccountBalanceIcon /> },

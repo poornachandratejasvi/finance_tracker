@@ -41,7 +41,7 @@ import {
 import { Avatar, Divider, Tooltip } from '@mui/material';
 import InputAdornment from '@mui/material/InputAdornment';
 import { useLocation } from 'react-router-dom';
-import { getBanks, createBank, updateBank, deleteBank, startSync, emailLatestBankCSV, generateAllCSV, reprocessAllPDFs, getBankAccountPassword, getBankPasswordCandidates, updateBankPasswordCandidates, recomputeBalances, redetectCreditBalances, checkStaleCreditCards, reorderBanks } from '../services/api';
+import { getBanks, createBank, updateBank, deleteBank, startSync, emailLatestBankCSV, generateAllCSV, reprocessAllPDFs, getBankAccountPassword, getBankPasswordCandidates, updateBankPasswordCandidates, recomputeBalances, redetectCreditBalances, checkStaleCreditCards, reorderBanks, listCreditCardFees, createCreditCardFee, updateCreditCardFee, deleteCreditCardFee } from '../services/api';
 import api from '../services/api';
 import { formatCurrency, signedAccountBalance, hasAccountBalance, isEstimatedBalance, timeAgo } from '../utils/format';
 
@@ -88,6 +88,11 @@ function Banks() {
   const [passwordCandidates, setPasswordCandidates] = useState([]);
   const [newPasswordCandidate, setNewPasswordCandidate] = useState('');
   const [showCandidatePasswords, setShowCandidatePasswords] = useState(false);
+
+  // Annual fee / fee-waiver config for a credit-type bank (separate table, see
+  // credit_card_fees.py -- only relevant/loaded when editing an existing credit card).
+  const [feeForm, setFeeForm] = useState({ annual_fee_amount: '', fee_anniversary_date: '', waiver_spend_threshold: '' });
+  const [hadFeeConfig, setHadFeeConfig] = useState(false);
   
   // PDF Upload Dialog
   const [pdfDialog, setPdfDialog] = useState(false);
@@ -197,6 +202,7 @@ function Banks() {
         }
       }
 
+      let savedBankId = editingBankId;
       if (editMode) {
         await updateBank(editingBankId, bankData);
         // Save password candidates if any are set
@@ -209,7 +215,8 @@ function Banks() {
         }
         setSuccess('Bank updated successfully');
       } else {
-        await createBank(bankData);
+        const created = await createBank(bankData);
+        savedBankId = created?.id;
         try {
           await startSync({ gmail_account_id: null, sync_type: 'incremental' });
           setSuccess('Bank added successfully. Sync started to fetch PDFs.');
@@ -218,12 +225,36 @@ function Banks() {
           console.error('Auto-sync failed:', syncError);
         }
       }
+
+      // Annual fee / fee-waiver config -- separate table from Bank itself, only
+      // relevant for credit cards. Create/update/delete based on what changed.
+      if (bankData.bank_type === 'credit' && savedBankId) {
+        const feeFilled = feeForm.annual_fee_amount !== '' && feeForm.fee_anniversary_date !== '';
+        try {
+          if (feeFilled) {
+            const feePayload = {
+              annual_fee_amount: parseFloat(feeForm.annual_fee_amount),
+              fee_anniversary_date: feeForm.fee_anniversary_date,
+              waiver_spend_threshold: feeForm.waiver_spend_threshold === '' ? null : parseFloat(feeForm.waiver_spend_threshold),
+            };
+            if (hadFeeConfig) await updateCreditCardFee(savedBankId, feePayload);
+            else await createCreditCardFee({ bank_id: savedBankId, ...feePayload });
+          } else if (hadFeeConfig) {
+            await deleteCreditCardFee(savedBankId);
+          }
+        } catch (feeErr) {
+          console.error('Failed to save annual fee config:', feeErr);
+        }
+      }
+
       setBankDialog(false);
       setEditMode(false);
       setEditingBankId(null);
       setNewBank({ name: '', code: '', sender_email: '', sender_emails: '', sms_sender_pattern: '', account_number: '', account_password: '', bank_type: 'savings', csv_email: '', current_balance: '', pdf_filename_prefix: '', interest_rate: '', minimum_payment: '', balance_below_limit_enabled: false, balance_below_threshold: '', balance_above_limit_enabled: false, balance_above_threshold: '' });
       setPasswordCandidates([]);
       setNewPasswordCandidate('');
+      setFeeForm({ annual_fee_amount: '', fee_anniversary_date: '', waiver_spend_threshold: '' });
+      setHadFeeConfig(false);
       fetchData();
     } catch (err) {
       setError(editMode ? 'Failed to update bank' : 'Failed to add bank');
@@ -489,6 +520,22 @@ function Banks() {
     getBankPasswordCandidates(bank.id).then((data) => {
       setPasswordCandidates(data?.candidates || []);
     }).catch(() => {});
+
+    setFeeForm({ annual_fee_amount: '', fee_anniversary_date: '', waiver_spend_threshold: '' });
+    setHadFeeConfig(false);
+    if (bank.bank_type === 'credit') {
+      listCreditCardFees().then((fees) => {
+        const existing = (fees || []).find((f) => f.bank_id === bank.id);
+        if (existing) {
+          setFeeForm({
+            annual_fee_amount: existing.annual_fee_amount ?? '',
+            fee_anniversary_date: existing.fee_anniversary_date || '',
+            waiver_spend_threshold: existing.waiver_spend_threshold ?? '',
+          });
+          setHadFeeConfig(true);
+        }
+      }).catch(() => {});
+    }
     setBankDialog(true);
   };
 
@@ -1042,6 +1089,37 @@ function Banks() {
                   value={newBank.minimum_payment || ''}
                   onChange={(e) => setNewBank({ ...newBank, minimum_payment: e.target.value })}
                   helperText="Leave blank to estimate as 2% of balance"
+                  fullWidth
+                />
+              </Box>
+            )}
+            {newBank.bank_type === 'credit' && (
+              <Box sx={{ mb: 2, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Annual Fee (Optional)</Typography>
+                <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                  <TextField
+                    label="Annual Fee Amount"
+                    type="number"
+                    value={feeForm.annual_fee_amount}
+                    onChange={(e) => setFeeForm({ ...feeForm, annual_fee_amount: e.target.value })}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Anniversary Date"
+                    type="date"
+                    value={feeForm.fee_anniversary_date}
+                    onChange={(e) => setFeeForm({ ...feeForm, fee_anniversary_date: e.target.value })}
+                    InputLabelProps={{ shrink: true }}
+                    helperText="Last (or first) date the fee was/will be charged"
+                    fullWidth
+                  />
+                </Box>
+                <TextField
+                  label="Waiver Spend Threshold (Optional)"
+                  type="number"
+                  value={feeForm.waiver_spend_threshold}
+                  onChange={(e) => setFeeForm({ ...feeForm, waiver_spend_threshold: e.target.value })}
+                  helperText="Spend this much since the last anniversary to get the fee waived"
                   fullWidth
                 />
               </Box>

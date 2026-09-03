@@ -729,6 +729,12 @@ export const updateDiscordWebhook = async (webhookUrl) =>
   (await api.put('/api/notifications/discord', { webhook_url: webhookUrl })).data;
 export const testDiscordWebhook = async () => (await api.post('/api/notifications/discord/test')).data;
 
+// ntfy (self-hosted or ntfy.sh push notifications -- fans out through the same
+// Apprise delivery path as Discord, see backend/app/services/ntfy_service.py)
+export const getNtfyConfig = async () => (await api.get('/api/notifications/ntfy')).data;
+export const updateNtfyConfig = async (config) => (await api.put('/api/notifications/ntfy', config)).data;
+export const testNtfyConfig = async () => (await api.post('/api/notifications/ntfy/test')).data;
+
 // Paperless-ngx (receipt archive -- see backend/app/services/paperless_service.py)
 export const getPaperlessConfig = async () => (await api.get('/api/settings/paperless-config')).data;
 export const savePaperlessConfig = async (baseUrl, apiToken) =>
@@ -924,6 +930,31 @@ export const scanVehicleDocument = async (docType, file) => {
   })).data;
 };
 
+// Vehicle PUC certificates
+export const listVehiclePuc = async (vehicleId) => (await api.get(`/api/vehicles/${vehicleId}/puc`)).data;
+export const createVehiclePuc = async (vehicleId, data) => (await api.post(`/api/vehicles/${vehicleId}/puc`, data)).data;
+export const updateVehiclePuc = async (pucId, data) => (await api.put(`/api/vehicles/puc/${pucId}`, data)).data;
+export const deleteVehiclePuc = async (pucId) => (await api.delete(`/api/vehicles/puc/${pucId}`)).data;
+
+// Vehicle documents (archived via Paperless-ngx)
+export const listVehicleDocuments = async (vehicleId) => (await api.get(`/api/vehicles/${vehicleId}/documents`)).data;
+export const uploadVehicleDocument = async (vehicleId, documentType, title, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return (await api.post(`/api/vehicles/${vehicleId}/documents`, form, {
+    params: { document_type: documentType, title: title || undefined },
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })).data;
+};
+export const deleteVehicleDocument = async (vehicleId, documentId) =>
+  (await api.delete(`/api/vehicles/${vehicleId}/documents/${documentId}`)).data;
+
+// Vehicle spend summary + transaction assignment
+export const getVehicleSpendSummary = async (vehicleId, months = 12) =>
+  (await api.get(`/api/vehicles/${vehicleId}/spend-summary`, { params: { months } })).data;
+export const assignTransactionVehicle = async (transactionId, vehicleId) =>
+  (await api.put(`/api/transactions/${transactionId}`, { vehicle_id: vehicleId })).data;
+
 // Packages (shipment tracking)
 export const listPackages = async () => (await api.get('/api/packages/')).data;
 export const createPackage = async (data) => (await api.post('/api/packages/', data)).data;
@@ -957,5 +988,69 @@ export const registerPushToken = async (token, platform) =>
   (await api.post('/api/push-tokens/', { token, platform })).data;
 export const unregisterPushToken = async (token) =>
   (await api.delete(`/api/push-tokens/${encodeURIComponent(token)}`)).data;
+
+// Autopay mandates
+export const listAutopayMandates = async () => (await api.get('/api/autopay-mandates/')).data;
+export const createAutopayMandate = async (data) => (await api.post('/api/autopay-mandates/', data)).data;
+export const updateAutopayMandate = async (id, data) => (await api.put(`/api/autopay-mandates/${id}`, data)).data;
+export const deleteAutopayMandate = async (id) => (await api.delete(`/api/autopay-mandates/${id}`)).data;
+
+// General insurance (health/life/home/other) + documents
+export const listInsurancePolicies = async (policyType) =>
+  (await api.get('/api/insurance/', { params: { policy_type: policyType || undefined } })).data;
+export const createInsurancePolicy = async (data) => (await api.post('/api/insurance/', data)).data;
+export const updateInsurancePolicy = async (id, data) => (await api.put(`/api/insurance/${id}`, data)).data;
+export const deleteInsurancePolicy = async (id) => (await api.delete(`/api/insurance/${id}`)).data;
+export const getExpiringInsurance = async (withinDays = 45) =>
+  (await api.get('/api/insurance/expiring', { params: { within_days: withinDays } })).data;
+export const listInsuranceDocuments = async (policyId) => (await api.get(`/api/insurance/${policyId}/documents`)).data;
+export const uploadInsuranceDocument = async (policyId, documentType, title, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return (await api.post(`/api/insurance/${policyId}/documents`, form, {
+    params: { document_type: documentType, title: title || undefined },
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })).data;
+};
+export const deleteInsuranceDocument = async (policyId, documentId) =>
+  (await api.delete(`/api/insurance/${policyId}/documents/${documentId}`)).data;
+
+// Warranty/AMC tracker + documents
+export const listWarranties = async (category) =>
+  (await api.get('/api/warranties/', { params: { category: category || undefined } })).data;
+export const createWarranty = async (data) => (await api.post('/api/warranties/', data)).data;
+export const updateWarranty = async (id, data) => (await api.put(`/api/warranties/${id}`, data)).data;
+export const deleteWarranty = async (id) => (await api.delete(`/api/warranties/${id}`)).data;
+export const getExpiringWarranties = async (withinDays = 45) =>
+  (await api.get('/api/warranties/expiring', { params: { within_days: withinDays } })).data;
+export const listWarrantyDocuments = async (warrantyId) => (await api.get(`/api/warranties/${warrantyId}/documents`)).data;
+export const uploadWarrantyDocument = async (warrantyId, documentType, title, file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return (await api.post(`/api/warranties/${warrantyId}/documents`, form, {
+    params: { document_type: documentType, title: title || undefined },
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })).data;
+};
+export const deleteWarrantyDocument = async (warrantyId, documentId) =>
+  (await api.delete(`/api/warranties/${warrantyId}/documents/${documentId}`)).data;
+
+// IOU / lending tracker
+export const listIOUs = async (statusFilter) =>
+  (await api.get('/api/ious/', { params: { status_filter: statusFilter || undefined } })).data;
+export const createIOU = async (data) => (await api.post('/api/ious/', data)).data;
+export const updateIOU = async (id, data) => (await api.put(`/api/ious/${id}`, data)).data;
+export const deleteIOU = async (id) => (await api.delete(`/api/ious/${id}`)).data;
+export const listIOUPayments = async (iouId) => (await api.get(`/api/ious/${iouId}/payments`)).data;
+export const recordIOUPayment = async (iouId, data) => (await api.post(`/api/ious/${iouId}/record-payment`, data)).data;
+
+// Credit card annual fee / fee-waiver tracker
+export const listCreditCardFees = async () => (await api.get('/api/credit-card-fees/')).data;
+export const createCreditCardFee = async (data) => (await api.post('/api/credit-card-fees/', data)).data;
+export const updateCreditCardFee = async (bankId, data) => (await api.put(`/api/credit-card-fees/${bankId}`, data)).data;
+export const deleteCreditCardFee = async (bankId) => (await api.delete(`/api/credit-card-fees/${bankId}`)).data;
+
+// Subscription price-creep detector
+export const getPriceChanges = async () => (await api.get('/api/watchers/price-changes')).data;
 
 export default api;

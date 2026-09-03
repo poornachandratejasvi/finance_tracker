@@ -33,6 +33,11 @@ import Vehicles from './pages/Vehicles.jsx';
 import DebtPayoff from './pages/DebtPayoff.jsx';
 import Packages from './pages/Packages.jsx';
 import CalendarPage from './pages/Calendar.jsx';
+import NetWorth from './pages/NetWorth.jsx';
+import AutopayMandates from './pages/AutopayMandates.jsx';
+import Insurance from './pages/Insurance.jsx';
+import Warranties from './pages/Warranties.jsx';
+import IOUs from './pages/IOUs.jsx';
 
 const queryClient = new QueryClient();
 
@@ -69,6 +74,11 @@ function App() {
                 <Route path="/investments" element={<ProtectedRoute><Layout><Investments /></Layout></ProtectedRoute>} />
                 <Route path="/packages" element={<ProtectedRoute><Layout><Packages /></Layout></ProtectedRoute>} />
                 <Route path="/calendar" element={<ProtectedRoute><Layout><CalendarPage /></Layout></ProtectedRoute>} />
+                <Route path="/net-worth" element={<ProtectedRoute><Layout><NetWorth /></Layout></ProtectedRoute>} />
+                <Route path="/autopay" element={<ProtectedRoute><Layout><AutopayMandates /></Layout></ProtectedRoute>} />
+                <Route path="/insurance" element={<ProtectedRoute><Layout><Insurance /></Layout></ProtectedRoute>} />
+                <Route path="/warranties" element={<ProtectedRoute><Layout><Warranties /></Layout></ProtectedRoute>} />
+                <Route path="/ious" element={<ProtectedRoute><Layout><IOUs /></Layout></ProtectedRoute>} />
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </Router>

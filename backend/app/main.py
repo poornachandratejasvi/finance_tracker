@@ -183,6 +183,10 @@ def _ensure_columns() -> None:
         # Recycle bin: NULL = not deleted; set on delete, cleared on restore, hard-purged after 30 days.
         _add_column_if_missing(columns, "deleted_at", "ALTER TABLE transactions ADD COLUMN deleted_at TIMESTAMP")
         _add_column_if_missing(columns, "paperless_document_id", "ALTER TABLE transactions ADD COLUMN paperless_document_id INTEGER")
+        # Manually tagged -- no reliable signal in bank data indicates which
+        # vehicle a fuel/service/toll charge belongs to. Powers each
+        # vehicle's spend summary (see vehicles.py's /spend-summary).
+        _add_column_if_missing(columns, "vehicle_id", "ALTER TABLE transactions ADD COLUMN vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE SET NULL")
 
     if "savings_goals" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("savings_goals")}
@@ -190,6 +194,14 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "roundup_to", "ALTER TABLE savings_goals ADD COLUMN roundup_to INTEGER DEFAULT 10")
         _add_column_if_missing(columns, "last_predictive_sweep_period", "ALTER TABLE savings_goals ADD COLUMN last_predictive_sweep_period VARCHAR(7)")
         _add_column_if_missing(columns, "monthly_target", "ALTER TABLE savings_goals ADD COLUMN monthly_target FLOAT")
+
+    if "balance_snapshots" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("balance_snapshots")}
+        # Additive-only extension for the Net Worth page -- see BalanceSnapshot's
+        # docstring/comment in models.py. Existing savings_total/credit_total/
+        # net_worth columns are untouched.
+        _add_column_if_missing(columns, "investments_total", "ALTER TABLE balance_snapshots ADD COLUMN investments_total FLOAT DEFAULT 0.0")
+        _add_column_if_missing(columns, "loan_total", "ALTER TABLE balance_snapshots ADD COLUMN loan_total FLOAT DEFAULT 0.0")
 
     if "users" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("users")}

@@ -8,6 +8,7 @@ import {
 } from '@mui/material';
 import {
   Edit, Delete, Refresh, Add, Comment, FileDownload, ContentCopy, DeleteSweep, CheckCircleOutline, AutoAwesome,
+  DirectionsCar,
 } from '@mui/icons-material';
 import api, {
   getTransactions, deleteTransaction,
@@ -765,6 +766,15 @@ function Transactions() {
                           </Box>
 
                           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 220, flexShrink: 0 }}>
+                            {t.vehicle_label && (
+                              <Chip
+                                icon={<DirectionsCar sx={{ fontSize: '14px !important' }} />}
+                                label={t.vehicle_label}
+                                size="small"
+                                variant="outlined"
+                                sx={{ height: 20 }}
+                              />
+                            )}
                             {(t.label_details || []).map((l) => (
                               <Chip
                                 key={l.id}

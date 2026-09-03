@@ -379,6 +379,11 @@ def get_net_worth(
             "savings_total": round(s.savings_total or 0, 2),
             "credit_total": round(s.credit_total or 0, 2),
             "net_worth": round(s.net_worth or 0, 2),
+            # Additive-only (see NetWorth.jsx) -- the three fields above keep their
+            # original bank-only meaning for the existing Dashboard widget.
+            "investments_total": round(s.investments_total or 0, 2),
+            "loan_total": round(s.loan_total or 0, 2),
+            "full_net_worth": round((s.savings_total or 0) + (s.investments_total or 0) - (s.credit_total or 0) - (s.loan_total or 0), 2),
         }
         for s in reversed(snaps)
     ]
@@ -406,6 +411,24 @@ def get_net_worth(
         else:
             savings += raw
     current = {"savings_total": round(savings, 2), "credit_total": round(credit, 2), "net_worth": round(savings - credit, 2)}
+
+    # Additive-only live figures for the Net Worth page -- computed separately so
+    # the existing 'current' keys above (used by the Dashboard widget) are untouched.
+    loan_total = 0.0
+    for b in db.query(Bank).filter(Bank.user_id == current_user.id, Bank.bank_type == "loan").all():
+        raw = b.current_balance if b.current_balance is not None else computed_net_by_bank.get(b.id)
+        if raw is not None:
+            loan_total += abs(raw)
+    investments_total = 0.0
+    try:
+        from app.services import investment_service
+        investments_total = sum(s["current_value"] for s in investment_service.all_account_summaries(db, current_user.id))
+    except Exception:
+        pass
+    current["investments_total"] = round(investments_total, 2)
+    current["loan_total"] = round(loan_total, 2)
+    current["full_net_worth"] = round(savings + investments_total - credit - loan_total, 2)
+
     return {"series": series, "current": current}
 
 

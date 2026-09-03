@@ -17,6 +17,7 @@ DEFAULT_PREFS = {
     "default_interval": "this_month",
     "hide_decimals": False,
     "auto_logout": False,
+    "digest_enabled": True,
 }
 
 

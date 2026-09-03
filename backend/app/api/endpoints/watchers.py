@@ -147,6 +147,22 @@ def detect_recurring_endpoint(
     return results
 
 
+@router.get("/price-changes")
+def detect_price_changes_endpoint(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)
+):
+    """Recurring patterns whose latest charge costs more than its prior history
+    -- e.g. a subscription that silently went up in price. See
+    recurring_detection.detect_price_changes for why this is a separate scan
+    from /detect-recurring."""
+    from app.models.models import Bank
+    from app.services.recurring_detection import detect_price_changes
+
+    flagged = detect_price_changes(db, current_user.id)
+    bank_names = {b.id: b.name for b in db.query(Bank).filter(Bank.user_id == current_user.id).all()}
+    return [{**r, "bank_name": bank_names.get(r["bank_id"])} for r in flagged]
+
+
 @router.post("/run-now")
 def run_watchers_now(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Manually create this period's Google Task for any of the caller's active

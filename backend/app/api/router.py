@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import auth, users, banks, transactions, labels, sync, logs, oauth, pdfs, dashboard, field_mapping, settings, csv_exports, api_tokens, ingest, goals, categories, currencies, analytics, filters, templates, backup, ai, rules, notifications, notification_rules, gmail_accounts, watchers, imports, reward_points, family_dashboard, search, investments, dashboard_widgets, receipts, vehicles, debt, gamification, metrics, summary, packages, subscriptions, calendar, external_lookups, credit_card_bills, push_tokens
+from app.api.endpoints import auth, users, banks, transactions, labels, sync, logs, oauth, pdfs, dashboard, field_mapping, settings, csv_exports, api_tokens, ingest, goals, categories, currencies, analytics, filters, templates, backup, ai, rules, notifications, notification_rules, gmail_accounts, watchers, imports, reward_points, family_dashboard, search, investments, dashboard_widgets, receipts, vehicles, debt, gamification, metrics, summary, packages, subscriptions, calendar, external_lookups, credit_card_bills, push_tokens, autopay_mandates, insurance, warranties, ious, credit_card_fees
 
 api_router = APIRouter()
 
@@ -50,3 +50,8 @@ api_router.include_router(calendar.router, prefix="/calendar", tags=["Calendar"]
 api_router.include_router(external_lookups.router, prefix="/external-lookups", tags=["External Lookups"])
 api_router.include_router(credit_card_bills.router, prefix="/credit-card-bills", tags=["Credit Card Bills"])
 api_router.include_router(push_tokens.router, prefix="/push-tokens", tags=["Push Tokens"])
+api_router.include_router(autopay_mandates.router, prefix="/autopay-mandates", tags=["Autopay Mandates"])
+api_router.include_router(insurance.router, prefix="/insurance", tags=["Insurance"])
+api_router.include_router(warranties.router, prefix="/warranties", tags=["Warranties"])
+api_router.include_router(ious.router, prefix="/ious", tags=["IOUs"])
+api_router.include_router(credit_card_fees.router, prefix="/credit-card-fees", tags=["Credit Card Fees"])
