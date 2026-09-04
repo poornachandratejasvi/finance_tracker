@@ -16,8 +16,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { fetchBalanceTrend, fetchCashflow, fetchComparison } from "../api/analytics";
 import { fetchDashboardSummary } from "../api/dashboard";
 import { getPredictions } from "../api/ai";
+import { listCategories } from "../api/categories";
 import { useTheme, ThemeColors } from "../context/ThemeContext";
-import { AnalyticsComparison, BalanceTrendResponse, CashflowResponse, DashboardSummary } from "../types";
+import { AnalyticsComparison, BalanceTrendResponse, CashflowResponse, Category, DashboardSummary } from "../types";
+import { categoryIconFor } from "../utils/categoryIcons";
 import { formatCurrency } from "../utils/format";
 import PeriodPager, { ResolvedPeriod } from "../components/PeriodPager";
 import { RootStackParamList, MetricKey } from "../navigation/RootNavigator";
@@ -66,6 +68,7 @@ export default function AnalyticsScreen() {
   const [balanceTrend, setBalanceTrend] = useState<BalanceTrendResponse | null>(null);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [outlook, setOutlook] = useState<number | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,16 +82,18 @@ export default function AnalyticsScreen() {
       const rangeStart = isoDate(monthStart(-5));
       const rangeEnd = isoDate(monthStart(1));
 
-      const [cf, bt, sm, pred] = await Promise.all([
+      const [cf, bt, sm, pred, cats] = await Promise.all([
         fetchCashflow(rangeStart, rangeEnd, "month"),
         fetchBalanceTrend(rangeStart, rangeEnd, "month"),
         fetchDashboardSummary(),
         getPredictions(30).catch(() => null),
+        listCategories().catch(() => []),
       ]);
       setCashflow(cf);
       setBalanceTrend(bt);
       setSummary(sm);
       setOutlook(pred ? pred.expected_expense - pred.expected_income : null);
+      setCategories(cats);
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Couldn't load analytics.");
     }
@@ -149,6 +154,21 @@ export default function AnalyticsScreen() {
   const incomeChangePct = incomeB > 0 ? Math.round(((incomeA - incomeB) / incomeB) * 100) : null;
   const cashflowNet = periodCashflow?.totals.net ?? 0;
 
+  // A plain-language headline instead of making the user piece it together
+  // from the metric grid -- the single most "user friendly" thing this
+  // screen can say up front.
+  const expenseA = periodComparison?.period_a.expense_total ?? 0;
+  const expenseB = periodComparison?.period_b.expense_total ?? 0;
+  const expenseChangePct = expenseB > 0 ? Math.round(((expenseA - expenseB) / expenseB) * 100) : null;
+  const spendingSummary =
+    period && expenseA > 0
+      ? expenseChangePct == null
+        ? `You spent ${formatCurrency(expenseA)} ${period.label.toLowerCase()}.`
+        : expenseChangePct === 0
+          ? `You spent ${formatCurrency(expenseA)} ${period.label.toLowerCase()} — same as last period.`
+          : `You spent ${formatCurrency(expenseA)} ${period.label.toLowerCase()} — ${Math.abs(expenseChangePct)}% ${expenseChangePct > 0 ? "more" : "less"} than last period.`
+      : null;
+
   const metrics: Array<{ key: MetricKey; label: string; value: string; icon: keyof typeof Ionicons.glyphMap; color: string; badge?: string }> = [
     { key: "balance", label: "Balance", value: formatCurrency(balanceTrend?.ending_balance ?? 0), icon: "analytics-outline", color: "#1565c0" },
     { key: "spending", label: "Spending", value: formatCurrency(periodCashflow?.totals.expense ?? 0), icon: "pie-chart-outline", color: "#c62828" },
@@ -174,6 +194,17 @@ export default function AnalyticsScreen() {
     >
       <Text style={styles.title}>Statistics</Text>
       {error && <Text style={styles.error}>{error}</Text>}
+
+      {spendingSummary && (
+        <View style={[styles.summaryCard, { borderColor: (expenseChangePct ?? 0) > 0 ? colors.danger : colors.primary }]}>
+          <Ionicons
+            name={(expenseChangePct ?? 0) > 0 ? "trending-up-outline" : "trending-down-outline"}
+            size={20}
+            color={(expenseChangePct ?? 0) > 0 ? colors.danger : colors.primary}
+          />
+          <Text style={styles.summaryText}>{spendingSummary}</Text>
+        </View>
+      )}
 
       <View style={styles.metricGrid}>
         {metrics.map((m) => (
@@ -272,12 +303,30 @@ export default function AnalyticsScreen() {
       {topExpenses.length > 0 && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Top expense categories ({period?.label?.toLowerCase() || "this period"})</Text>
-          {topExpenses.map((c) => (
-            <View key={c.category} style={styles.listRow}>
-              <Text style={styles.listLabel}>{c.category}</Text>
-              <Text style={styles.listValue}>{formatCurrency(c.amount)}</Text>
-            </View>
-          ))}
+          {(() => {
+            const totalTop = topExpenses.reduce((s, c) => s + c.amount, 0) || 1;
+            return topExpenses.map((c) => {
+              const meta = categories.find((cat) => cat.name === c.category);
+              const pct = Math.round((c.amount / totalTop) * 100);
+              return (
+                <View key={c.category} style={styles.categoryListRow}>
+                  <View style={[styles.categoryIcon, { backgroundColor: meta?.color || colors.primary }]}>
+                    <Ionicons name={categoryIconFor(meta?.icon)} size={14} color="#fff" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.categoryTopRow}>
+                      <Text style={styles.listLabel} numberOfLines={1}>{c.category}</Text>
+                      <Text style={styles.listValue}>{formatCurrency(c.amount)}</Text>
+                    </View>
+                    <View style={styles.categoryBarTrack}>
+                      <View style={[styles.categoryBarFill, { width: `${pct}%`, backgroundColor: meta?.color || colors.primary }]} />
+                    </View>
+                  </View>
+                  <Text style={styles.categoryPct}>{pct}%</Text>
+                </View>
+              );
+            });
+          })()}
         </View>
       )}
     </ScrollView>
@@ -318,6 +367,11 @@ const makeStyles = (c: ThemeColors) =>
     container: { padding: 16, paddingBottom: 32, backgroundColor: c.background },
     title: { fontSize: 20, fontWeight: "700", color: c.text, marginBottom: 12 },
     error: { color: c.danger, marginBottom: 12 },
+    summaryCard: {
+      flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: c.card,
+      borderRadius: 12, borderLeftWidth: 3, padding: 14, marginBottom: 16,
+    },
+    summaryText: { flex: 1, fontSize: 14, fontWeight: "600", color: c.text, lineHeight: 20 },
     card: { backgroundColor: c.card, borderRadius: 12, padding: 16, marginBottom: 14 },
     sectionTitle: { fontSize: 15, fontWeight: "700", marginBottom: 10, color: c.text },
     row: { flexDirection: "row", marginBottom: 8 },
@@ -329,20 +383,19 @@ const makeStyles = (c: ThemeColors) =>
     totalsRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 14 },
     totalItem: { fontSize: 12, color: c.text, fontWeight: "600" },
     meta: { fontSize: 12, color: c.textSecondary, marginTop: 10 },
-    listRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      paddingVertical: 6,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: c.border,
-    },
-    listLabel: { fontSize: 14, color: c.text },
-    listValue: { fontSize: 14, fontWeight: "600", color: c.text },
+    listLabel: { fontSize: 14, color: c.text, flexShrink: 1 },
+    listValue: { fontSize: 14, fontWeight: "700", color: c.text },
+    categoryListRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
+    categoryIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", marginRight: 10 },
+    categoryTopRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
+    categoryBarTrack: { height: 5, borderRadius: 3, backgroundColor: c.chipBg, overflow: "hidden" },
+    categoryBarFill: { height: 5, borderRadius: 3 },
+    categoryPct: { fontSize: 11, color: c.textSecondary, fontWeight: "700", marginLeft: 10, width: 32, textAlign: "right" },
     metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 },
     metricCard: { width: "47%", backgroundColor: c.card, borderRadius: 12, padding: 12 },
     metricTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
     metricLabel: { fontSize: 11, color: c.textSecondary, textTransform: "uppercase", fontWeight: "600", flexShrink: 1 },
     metricIcon: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center" },
-    metricValue: { fontSize: 17, fontWeight: "700", color: c.text },
+    metricValue: { fontSize: 19, fontWeight: "800", color: c.text },
     metricBadge: { fontSize: 11, fontWeight: "600", marginTop: 4 },
   });

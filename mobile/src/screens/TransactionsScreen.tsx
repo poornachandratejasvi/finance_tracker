@@ -22,6 +22,7 @@ import { listCategories } from "../api/categories";
 import { listLabels } from "../api/labels";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { Category, Label, Transaction } from "../types";
+import { categoryIconFor } from "../utils/categoryIcons";
 import { formatCurrency } from "../utils/format";
 import { getCachedTransactions, getCachedCategories, getCachedLabels, upsertTransactions, deleteCachedTransaction } from "../offline/db";
 import { useOffline } from "../offline/OfflineProvider";
@@ -95,7 +96,7 @@ export default function TransactionsScreen() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [range, setRange] = useState<RangeKey>("30d");
-  const [categoryColors, setCategoryColors] = useState<Record<string, string>>({});
+  const [categoryMeta, setCategoryMeta] = useState<Record<string, { color: string; icon: string | null }>>({});
   const [labelColors, setLabelColors] = useState<Record<string, string>>({});
   const { isOnline } = useOffline();
 
@@ -118,7 +119,7 @@ export default function TransactionsScreen() {
       } catch {
         labels = await getCachedLabels();
       }
-      setCategoryColors(Object.fromEntries(categories.map((c) => [c.name, c.color || colors.primary])));
+      setCategoryMeta(Object.fromEntries(categories.map((c) => [c.name, { color: c.color || colors.primary, icon: c.icon }])));
       setLabelColors(Object.fromEntries(labels.map((l) => [l.name, l.color || colors.primary])));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -272,7 +273,8 @@ export default function TransactionsScreen() {
         renderItem={({ item }) => (
           <TransactionRow
             txn={item}
-            categoryColor={item.category ? categoryColors[item.category] : undefined}
+            categoryColor={item.category ? categoryMeta[item.category]?.color : undefined}
+            categoryIcon={item.category ? categoryMeta[item.category]?.icon : undefined}
             labelColors={labelColors}
             onPress={() => navigation.navigate("EditTransaction", { transaction: item })}
             onDelete={() => onSwipeDelete(item)}
@@ -284,13 +286,10 @@ export default function TransactionsScreen() {
   );
 }
 
-function categoryBadgeLetter(category: string | null): string {
-  return category ? category.trim().charAt(0).toUpperCase() : "?";
-}
-
 function TransactionRow({
   txn,
   categoryColor,
+  categoryIcon,
   labelColors,
   onPress,
   onDelete,
@@ -298,6 +297,7 @@ function TransactionRow({
 }: {
   txn: Transaction;
   categoryColor?: string;
+  categoryIcon?: string | null;
   labelColors: Record<string, string>;
   onPress: () => void;
   onDelete: () => void;
@@ -326,7 +326,7 @@ function TransactionRow({
     <Swipeable renderRightActions={renderRightActions} renderLeftActions={renderLeftActions} overshootRight={false} overshootLeft={false}>
       <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
         <View style={[styles.badge, { backgroundColor: badgeColor }]}>
-          <Text style={styles.badgeText}>{categoryBadgeLetter(txn.category)}</Text>
+          <Ionicons name={categoryIconFor(categoryIcon)} size={17} color="#fff" />
         </View>
         <View style={styles.rowLeft}>
           <Text style={styles.description} numberOfLines={1}>
@@ -401,7 +401,7 @@ const makeStyles = (c: ThemeColors) =>
     row: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 10,
+      paddingVertical: 13,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: c.border,
       backgroundColor: c.background,
@@ -412,17 +412,16 @@ const makeStyles = (c: ThemeColors) =>
       justifyContent: "center",
     },
     swipeActionText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-    badge: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", marginRight: 12 },
-    badgeText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+    badge: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", marginRight: 12 },
     rowLeft: { flex: 1, paddingRight: 12 },
-    description: { fontSize: 15, fontWeight: "600", color: c.text },
+    description: { fontSize: 15, fontWeight: "700", color: c.text },
     meta: { fontSize: 12, color: c.textSecondary, marginTop: 2 },
     tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
     tag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
     tagText: { fontSize: 10, fontWeight: "700", color: "#fff" },
     offlineBanner: { backgroundColor: c.chipBg, borderRadius: 8, padding: 10, marginBottom: 8 },
     offlineBannerText: { color: c.textSecondary, fontSize: 12, textAlign: "center", fontWeight: "600" },
-    amount: { fontSize: 15, fontWeight: "700" },
+    amount: { fontSize: 16, fontWeight: "800" },
     error: { color: c.danger, textAlign: "center", marginTop: 40 },
     empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
   });

@@ -13,10 +13,13 @@ import {
   View,
 } from "react-native";
 
+import { Ionicons } from "@expo/vector-icons";
+
 import { getBudgetsConfig, getBudgetStatus, saveBudgetsConfig } from "../../api/budgets";
 import { listCategories } from "../../api/categories";
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { Budget, BudgetStatus, Category } from "../../types";
+import { categoryIconFor } from "../../utils/categoryIcons";
 import { formatCurrency } from "../../utils/format";
 
 interface EditableBudget extends Budget {
@@ -120,13 +123,16 @@ export default function BudgetsScreen() {
           <Text style={styles.sectionTitle}>{status.period} spend</Text>
           {status.budgets.map((b) => {
             const barColor = b.over ? colors.danger : b.pct >= 80 ? colors.warning : colors.primary;
+            const meta = categories.find((c) => c.name === b.category);
+            const dotColor = meta?.color || colors.primary;
             return (
               <View key={b.id} style={styles.statusRow}>
                 <View style={styles.statusHeader}>
+                  <View style={[styles.categoryIcon, { backgroundColor: dotColor }]}>
+                    <Ionicons name={categoryIconFor(meta?.icon)} size={13} color="#fff" />
+                  </View>
                   <Text style={styles.statusCategory}>{b.category}</Text>
-                  <Text style={styles.statusAmounts}>
-                    {formatCurrency(b.spent)} / {formatCurrency(b.monthly_limit)}
-                  </Text>
+                  <Text style={styles.statusPct}>{Math.round(b.pct)}%</Text>
                 </View>
                 <View style={styles.progressTrack}>
                   <View
@@ -136,6 +142,9 @@ export default function BudgetsScreen() {
                     ]}
                   />
                 </View>
+                <Text style={styles.statusAmounts}>
+                  {formatCurrency(b.spent)} of {formatCurrency(b.monthly_limit)}
+                </Text>
               </View>
             );
           })}
@@ -210,10 +219,12 @@ const makeStyles = (c: ThemeColors) =>
     container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
     card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 14 },
     sectionTitle: { fontSize: 15, fontWeight: "700", color: c.text, marginBottom: 10 },
-    statusRow: { marginBottom: 12 },
-    statusHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
-    statusCategory: { fontSize: 13, color: c.text, fontWeight: "600" },
-    statusAmounts: { fontSize: 12, color: c.textSecondary },
+    statusRow: { marginBottom: 16 },
+    statusHeader: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
+    categoryIcon: { width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", marginRight: 8 },
+    statusCategory: { fontSize: 14, color: c.text, fontWeight: "700", flex: 1 },
+    statusPct: { fontSize: 13, color: c.textSecondary, fontWeight: "700" },
+    statusAmounts: { fontSize: 12, color: c.textSecondary, marginTop: 6 },
     progressTrack: { height: 8, borderRadius: 4, backgroundColor: c.chipBg, overflow: "hidden" },
     progressFill: { height: 8, borderRadius: 4 },
     meta: { fontSize: 12, color: c.textSecondary, marginTop: 4 },
