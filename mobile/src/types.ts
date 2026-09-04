@@ -90,11 +90,25 @@ export interface NetWorthPoint {
   savings_total: number;
   credit_total: number;
   net_worth: number;
+  // Additive-only (see the Net Worth screen/page) -- the fields above keep
+  // their original bank-only meaning for the existing Dashboard widget.
+  investments_total: number;
+  loan_total: number;
+  full_net_worth: number;
+}
+
+export interface NetWorthCurrent {
+  savings_total: number;
+  credit_total: number;
+  net_worth: number;
+  investments_total: number;
+  loan_total: number;
+  full_net_worth: number;
 }
 
 export interface NetWorthResponse {
   series: NetWorthPoint[];
-  current: { savings_total: number; credit_total: number; net_worth: number } | null;
+  current: NetWorthCurrent | null;
 }
 
 export type DashboardWidgetType =
@@ -203,6 +217,11 @@ export interface UserPreferences {
   default_interval: string;
   hide_decimals: boolean;
   auto_logout: boolean;
+  digest_enabled?: boolean;
+  // HRA exemption inputs for the Tax Dashboard -- not on a payslip, so these
+  // stay a small manual preference rather than a whole new endpoint.
+  monthly_rent?: number;
+  city_metro?: boolean;
 }
 
 export interface Currency {
@@ -754,4 +773,220 @@ export interface InvestmentEntry {
   description: string | null;
   source: "manual" | "auto";
   created_at: string;
+}
+
+// ---- Autopay Mandates ----
+
+export type MandateFrequency = "weekly" | "monthly" | "yearly" | "other";
+export type MandateStatus = "active" | "paused" | "cancelled";
+
+export interface AutopayMandate {
+  id: number;
+  bank_id: number | null;
+  merchant_name: string;
+  upi_vpa: string | null;
+  max_amount: number | null;
+  frequency: MandateFrequency;
+  next_debit_date: string | null;
+  status: MandateStatus;
+  notes: string | null;
+}
+
+// ---- Insurance ----
+
+export type InsurancePolicyType = "health" | "life" | "home" | "other";
+export type PremiumFrequency = "monthly" | "quarterly" | "yearly";
+
+export interface InsurancePolicy {
+  id: number;
+  policy_type: InsurancePolicyType;
+  provider: string | null;
+  policy_number: string | null;
+  insured_name: string | null;
+  premium_amount: number | null;
+  premium_frequency: PremiumFrequency;
+  coverage_amount: number | null;
+  issued_date: string | null;
+  expiry_date: string | null;
+  days_until_expiry: number | null;
+  is_active: boolean;
+  notes: string | null;
+  document_count: number;
+}
+
+export interface PolicyDocument {
+  id: number;
+  document_type: string;
+  title: string | null;
+  url: string | null;
+  processing: boolean;
+  created_at: string | null;
+}
+
+// ---- Warranties ----
+
+export type WarrantyCategory = "electronics" | "appliance" | "furniture" | "other";
+
+export interface Warranty {
+  id: number;
+  item_name: string;
+  category: WarrantyCategory;
+  vendor: string | null;
+  purchase_date: string | null;
+  purchase_amount: number | null;
+  warranty_expiry: string | null;
+  warranty_days_until_expiry: number | null;
+  amc_expiry: string | null;
+  amc_days_until_expiry: number | null;
+  amc_provider: string | null;
+  notes: string | null;
+  document_count: number;
+}
+
+// ---- IOUs ----
+
+export type IouDirection = "lent" | "borrowed";
+export type IouStatus = "open" | "settled";
+
+export interface Iou {
+  id: number;
+  person_name: string;
+  direction: IouDirection;
+  principal_amount: number;
+  outstanding_amount: number;
+  iou_date: string;
+  due_date: string | null;
+  status: IouStatus;
+  notes: string | null;
+}
+
+export interface IouListResponse {
+  items: Iou[];
+  total_owed_to_me: number;
+  total_i_owe: number;
+}
+
+export interface IouPayment {
+  id: number;
+  amount: number;
+  payment_date: string;
+  notes: string | null;
+}
+
+// ---- Tax Dashboard ----
+
+export interface TaxSection {
+  limit: number;
+  utilized: number;
+  remaining: number;
+  breakdown: { label: string; amount: number }[];
+}
+
+export interface HraExemption {
+  configured: boolean;
+  monthly_rent: number;
+  city_metro: boolean;
+  months_on_file?: number;
+  basic_total?: number;
+  hra_received_total?: number;
+  rent_paid_total?: number;
+  exemption: number;
+}
+
+export interface TaxDashboard {
+  financial_year: string;
+  sections: {
+    "80c": TaxSection;
+    "80d": TaxSection;
+    "80ccd_1b": TaxSection;
+  };
+  hra_exemption: HraExemption | null;
+}
+
+// ---- Payslips ----
+
+export interface Payslip {
+  id: number;
+  month: string;
+  employee_name: string | null;
+  regime_type: string | null;
+  basic: number | null;
+  hra_received: number | null;
+  provident_fund: number | null;
+  income_tax_deducted: number | null;
+  other_earnings_total: number | null;
+  other_deductions_total: number | null;
+  total_earnings: number | null;
+  total_deductions: number | null;
+  net_pay: number | null;
+  document_url: string | null;
+}
+
+// ---- Shared Expenses ----
+
+export interface HouseholdMember {
+  id: number;
+  username: string;
+}
+
+export interface SharedExpenseShare {
+  id: number;
+  user_id: number;
+  username: string | null;
+  amount: number;
+  is_settled: boolean;
+  settled_at: string | null;
+}
+
+export interface SharedExpense {
+  id: number;
+  description: string;
+  total_amount: number;
+  expense_date: string | null;
+  paid_by_user_id: number;
+  paid_by_username: string | null;
+  shares: SharedExpenseShare[];
+}
+
+// ---- Packages ----
+
+export type PackageStatus = "ordered" | "shipped" | "out_for_delivery" | "delivered" | "unknown";
+
+export interface Package {
+  id: number;
+  source: "email" | "manual";
+  carrier: string;
+  merchant: string | null;
+  tracking_number: string | null;
+  order_id: string | null;
+  item_description: string | null;
+  status: PackageStatus;
+  expected_delivery_date: string | null;
+  actual_delivery_date: string | null;
+  tracking_url: string | null;
+  last_checked_at: string | null;
+  last_tracker_error: string | null;
+  notes: string | null;
+  created_at: string | null;
+}
+
+export interface Carrier {
+  key: string;
+  label: string;
+  has_live_tracking: boolean;
+  has_external_lookup: boolean;
+}
+
+// ---- Calendar ----
+
+export interface CalendarItem {
+  type: string;
+  id: number | null;
+  date: string | null;
+  title: string;
+  subtitle: string | null;
+  amount: number | null;
+  link: string | null;
+  is_overdue: boolean;
+  payment_status?: string;
 }

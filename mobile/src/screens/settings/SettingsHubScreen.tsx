@@ -23,6 +23,11 @@ const WALLET_ROWS: Row[] = [
   { key: "Labels", label: "Labels", icon: "bookmark-outline" },
   { key: "AutoRules", label: "Automatic Rules", icon: "flash-outline" },
   { key: "NotificationRules", label: "Notification Rules", icon: "notifications-outline" },
+  { key: "NetWorth", label: "Net Worth", icon: "trending-up-outline" },
+  { key: "IOUs", label: "IOUs", icon: "people-outline" },
+  { key: "TaxDashboard", label: "Tax Dashboard", icon: "receipt-outline" },
+  { key: "SharedExpenses", label: "Shared Expenses", icon: "people-circle-outline" },
+  { key: "AutopayMandates", label: "Autopay Mandates", icon: "repeat-outline" },
 ];
 
 const TOOLS_ROWS: Row[] = [
@@ -30,6 +35,10 @@ const TOOLS_ROWS: Row[] = [
   { key: "Goals", label: "Goals", icon: "flag-outline" },
   { key: "Vehicles", label: "Vehicles", icon: "car-outline" },
   { key: "DebtPayoff", label: "Debt Payoff", icon: "trending-down-outline" },
+  { key: "Insurance", label: "Insurance", icon: "medkit-outline" },
+  { key: "Warranties", label: "Warranties", icon: "shield-outline" },
+  { key: "Packages", label: "Packages", icon: "cube-outline" },
+  { key: "Calendar", label: "Calendar", icon: "calendar-outline" },
   { key: "Jobs", label: "Jobs", icon: "sync-outline" },
   { key: "Automation", label: "Automation", icon: "hardware-chip-outline" },
   { key: "AskAi", label: "Ask AI", icon: "chatbubble-ellipses-outline" },

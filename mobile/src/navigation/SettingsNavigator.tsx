@@ -39,7 +39,26 @@ import JobsScreen from "../screens/settings/JobsScreen";
 import AutomationScreen from "../screens/settings/AutomationScreen";
 import AskAiScreen from "../screens/settings/AskAiScreen";
 import RecycleBinScreen from "../screens/settings/RecycleBinScreen";
-import { Category, Label, AutoRule, NotificationRule, Currency, Template, AdminUser, Goal, Vehicle } from "../types";
+import NetWorthScreen from "../screens/settings/NetWorthScreen";
+import AutopayMandatesScreen from "../screens/settings/AutopayMandatesScreen";
+import AutopayMandateFormScreen from "../screens/settings/AutopayMandateFormScreen";
+import InsuranceScreen from "../screens/settings/InsuranceScreen";
+import InsuranceFormScreen from "../screens/settings/InsuranceFormScreen";
+import WarrantiesScreen from "../screens/settings/WarrantiesScreen";
+import WarrantyFormScreen from "../screens/settings/WarrantyFormScreen";
+import IOUsScreen from "../screens/settings/IOUsScreen";
+import IOUFormScreen from "../screens/settings/IOUFormScreen";
+import IOUPaymentFormScreen from "../screens/settings/IOUPaymentFormScreen";
+import TaxDashboardScreen from "../screens/settings/TaxDashboardScreen";
+import SharedExpensesScreen from "../screens/settings/SharedExpensesScreen";
+import SharedExpenseFormScreen from "../screens/settings/SharedExpenseFormScreen";
+import PackagesScreen from "../screens/settings/PackagesScreen";
+import PackageFormScreen from "../screens/settings/PackageFormScreen";
+import CalendarScreen from "../screens/settings/CalendarScreen";
+import {
+  Category, Label, AutoRule, NotificationRule, Currency, Template, AdminUser, Goal, Vehicle,
+  AutopayMandate, InsurancePolicy, Warranty, Iou,
+} from "../types";
 
 export type SettingsStackParamList = {
   SettingsHub: undefined;
@@ -80,6 +99,22 @@ export type SettingsStackParamList = {
   Automation: undefined;
   AskAi: undefined;
   RecycleBin: undefined;
+  NetWorth: undefined;
+  AutopayMandates: undefined;
+  AutopayMandateForm: { mandate?: AutopayMandate } | undefined;
+  Insurance: undefined;
+  InsuranceForm: { policy?: InsurancePolicy } | undefined;
+  Warranties: undefined;
+  WarrantyForm: { warranty?: Warranty } | undefined;
+  IOUs: undefined;
+  IOUForm: { iou?: Iou } | undefined;
+  IOUPaymentForm: { iou: Iou };
+  TaxDashboard: undefined;
+  SharedExpenses: undefined;
+  SharedExpenseForm: undefined;
+  Packages: undefined;
+  PackageForm: undefined;
+  Calendar: undefined;
 };
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>();
@@ -137,6 +172,22 @@ export default function SettingsNavigator() {
       <Stack.Screen name="Automation" component={AutomationScreen} options={{ title: "Automation" }} />
       <Stack.Screen name="AskAi" component={AskAiScreen} options={{ title: "Ask AI" }} />
       <Stack.Screen name="RecycleBin" component={RecycleBinScreen} options={{ title: "Recycle Bin" }} />
+      <Stack.Screen name="NetWorth" component={NetWorthScreen} options={{ title: "Net Worth" }} />
+      <Stack.Screen name="AutopayMandates" component={AutopayMandatesScreen} options={{ title: "Autopay Mandates" }} />
+      <Stack.Screen name="AutopayMandateForm" component={AutopayMandateFormScreen} options={{ title: "Mandate" }} />
+      <Stack.Screen name="Insurance" component={InsuranceScreen} options={{ title: "Insurance" }} />
+      <Stack.Screen name="InsuranceForm" component={InsuranceFormScreen} options={{ title: "Policy" }} />
+      <Stack.Screen name="Warranties" component={WarrantiesScreen} options={{ title: "Warranties" }} />
+      <Stack.Screen name="WarrantyForm" component={WarrantyFormScreen} options={{ title: "Warranty" }} />
+      <Stack.Screen name="IOUs" component={IOUsScreen} options={{ title: "IOUs" }} />
+      <Stack.Screen name="IOUForm" component={IOUFormScreen} options={{ title: "IOU" }} />
+      <Stack.Screen name="IOUPaymentForm" component={IOUPaymentFormScreen} options={{ title: "Record Payment" }} />
+      <Stack.Screen name="TaxDashboard" component={TaxDashboardScreen} options={{ title: "Tax Dashboard" }} />
+      <Stack.Screen name="SharedExpenses" component={SharedExpensesScreen} options={{ title: "Shared Expenses" }} />
+      <Stack.Screen name="SharedExpenseForm" component={SharedExpenseFormScreen} options={{ title: "Add Expense" }} />
+      <Stack.Screen name="Packages" component={PackagesScreen} options={{ title: "Packages" }} />
+      <Stack.Screen name="PackageForm" component={PackageFormScreen} options={{ title: "Add Package" }} />
+      <Stack.Screen name="Calendar" component={CalendarScreen} options={{ title: "Calendar" }} />
     </Stack.Navigator>
   );
 }
