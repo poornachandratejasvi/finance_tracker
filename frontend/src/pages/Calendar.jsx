@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Container, Typography, Paper, Box, Button, TextField, Alert, Chip,
   Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, useTheme,
@@ -8,7 +9,7 @@ import {
 import {
   Add, LocalShipping, Payments, EventBusy, Event, ChevronLeft, ChevronRight,
   ViewList, CalendarViewMonth, Today, Receipt, Notifications, CreditCard, Description,
-  DirectionsCar, Autorenew, HealthAndSafety, VerifiedUser, Handshake, CardGiftcard,
+  DirectionsCar, Autorenew, HealthAndSafety, VerifiedUser, Handshake, CardGiftcard, EventRepeat,
 } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import {
@@ -40,6 +41,7 @@ const TYPE_META = {
   iou_due: { color: '#bab0ac', Icon: Handshake, label: 'IOU due' },
   credit_card_fee: { color: '#f28e2b', Icon: CreditCard, label: 'Annual fee' },
   reward_points_expiry: { color: '#59a14f', Icon: CardGiftcard, label: 'Reward points expiry' },
+  planned_item_due: { color: '#4e79a7', Icon: EventRepeat, label: 'Planned payment' },
 };
 
 const typeMetaFor = (item) => {
@@ -64,6 +66,7 @@ const CATEGORIES = [
   { key: 'warranty', label: 'Warranties', color: TYPE_META.warranty_expiry.color, Icon: TYPE_META.warranty_expiry.Icon, match: (i) => i.type === 'warranty_expiry' || i.type === 'amc_expiry' },
   { key: 'iou', label: 'IOUs', color: TYPE_META.iou_due.color, Icon: TYPE_META.iou_due.Icon, match: (i) => i.type === 'iou_due' },
   { key: 'reward_points', label: 'Reward Points', color: TYPE_META.reward_points_expiry.color, Icon: TYPE_META.reward_points_expiry.Icon, match: (i) => i.type === 'reward_points_expiry' },
+  { key: 'planned', label: 'Planned Expenses', color: TYPE_META.planned_item_due.color, Icon: TYPE_META.planned_item_due.Icon, match: (i) => i.type === 'planned_item_due' },
 ];
 
 const fmtGroupHeading = (dateStr) => {
@@ -77,6 +80,7 @@ const fmtGroupHeading = (dateStr) => {
 
 export default function CalendarPage() {
   const theme = useTheme();
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [view, setView] = useState('month'); // 'month' | 'agenda'
   const [cursor, setCursor] = useState(new Date());
@@ -243,6 +247,12 @@ export default function CalendarPage() {
         )}
         {item.type === 'credit_card_due' && ['paid', 'auto_matched'].includes(item.payment_status) && (
           <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 700 }}>✓ Paid</Typography>
+        )}
+        {item.type === 'planned_item_due' && item.payment_status === 'open' && (
+          <Button size="small" onClick={() => navigate('/planned-expenses')}>Manage</Button>
+        )}
+        {item.type === 'planned_item_due' && ['matched', 'closed'].includes(item.payment_status) && (
+          <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 700 }}>✓ Settled</Typography>
         )}
       </Box>
     );

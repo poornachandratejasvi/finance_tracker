@@ -226,6 +226,12 @@ def create_or_reconcile_transaction(db, user_id: int, bank_id: int, trans_data: 
     except Exception:
         logger.warning("Post-statement balance adjustment failed for bank %s", bank_id, exc_info=True)
 
+    try:
+        from app.services.planned_item_service import try_automatch_for_transaction
+        try_automatch_for_transaction(db, transaction)
+    except Exception:
+        logger.warning("Planned-item auto-match failed for a new transaction", exc_info=True)
+
     return transaction, False
 
 

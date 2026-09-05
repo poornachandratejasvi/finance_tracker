@@ -1078,6 +1078,61 @@ class CreditCardBill(Base):
     )
 
 
+class PlannedItem(Base):
+    """A recurring or one-off planned payment (expense) or expected receipt
+    (income) the user wants tracked against real transactions -- e.g. rent,
+    an EMI, or a salary credit. `due_date` is the anchor date; recurring
+    occurrences are generated forward from it via calendar_service's
+    expand_occurrences(), same as Subscription/autopay mandates. See
+    PlannedItemOccurrence for the per-cycle settlement state."""
+    __tablename__ = "planned_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(150), nullable=False)
+    direction = Column(String(10), default="expense")  # expense|income
+    amount = Column(Float, nullable=True)
+    match_hint = Column(String(150), nullable=True)  # optional description substring to disambiguate candidates
+    due_date = Column(DateTime, nullable=False)
+    recurrence = Column(String(10), default="monthly")  # none|weekly|monthly|yearly
+    is_active = Column(Boolean, default=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")
+
+
+class PlannedItemOccurrence(Base):
+    """One row per real-world cycle of a PlannedItem -- kept as history (like
+    CreditCardBill), not overwritten. `expected_amount` is copied from the
+    parent PlannedItem when generated but independently editable, since a
+    real bill can vary cycle to cycle. Matched/closed via
+    planned_item_service.py, which mirrors credit_card_bill_service.py's
+    find_payment_candidates/run_auto_match/confirm/close shape. Deduped by
+    (planned_item_id, due_date)."""
+    __tablename__ = "planned_item_occurrences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    planned_item_id = Column(Integer, ForeignKey("planned_items.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    due_date = Column(DateTime, nullable=False, index=True)
+    expected_amount = Column(Float, nullable=True)
+    status = Column(String(10), default="open")  # open|matched|closed
+    matched_transaction_id = Column(Integer, ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    planned_item = relationship("PlannedItem")
+    user = relationship("User")
+    matched_transaction = relationship("Transaction")
+
+    __table_args__ = (
+        Index("ix_planned_item_occurrences_item_due", "planned_item_id", "due_date", unique=True),
+    )
+
+
 class PushToken(Base):
     """A device's push-notification token (Expo push token, covering both iOS
     and Android through one API) -- registered by the mobile app on launch,

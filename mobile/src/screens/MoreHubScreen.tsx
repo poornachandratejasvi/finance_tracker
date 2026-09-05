@@ -47,6 +47,7 @@ const TILES: Tile[] = [
   { key: "family-dashboard", label: "Family Dashboard", icon: "people-outline", color: "#8e24aa", go: (_, rn) => rn.navigate("BanksStack", { screen: "FamilyDashboard" }), adminOnly: true },
   { key: "calendar", label: "Calendar", icon: "calendar-outline", color: "#2e5aac", go: (_, rn) => rn.navigate("SettingsStack", { screen: "Calendar" }) },
   { key: "net-worth", label: "Net Worth", icon: "trending-up-outline", color: "#0b8043", go: (_, rn) => rn.navigate("SettingsStack", { screen: "NetWorth" }) },
+  { key: "planned-items", label: "Planned Expenses", icon: "checkmark-done-circle-outline", color: "#3949ab", go: (_, rn) => rn.navigate("SettingsStack", { screen: "PlannedItems" }) },
   { key: "ious", label: "IOUs", icon: "people-outline", color: "#ad1457", go: (_, rn) => rn.navigate("SettingsStack", { screen: "IOUs" }) },
   { key: "accounts", label: "Accounts & Statements", icon: "business-outline", color: "#283593", go: (_, rn) => rn.navigate("BanksStack", { screen: "BanksHub" }) },
   { key: "settings", label: "All Settings", icon: "settings-outline", color: "#37474f", go: (_, rn) => rn.navigate("SettingsStack", { screen: "SettingsHub" }) },

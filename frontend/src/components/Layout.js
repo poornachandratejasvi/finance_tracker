@@ -46,6 +46,7 @@ import PaymentsIcon from '@mui/icons-material/Payments';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import EventIcon from '@mui/icons-material/Event';
+import EventRepeatIcon from '@mui/icons-material/EventRepeat';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
@@ -74,6 +75,7 @@ const NAV_GROUPS = [
     { label: 'Debt Payoff', path: '/debt-payoff', icon: <PaymentsIcon /> },
     { label: 'Packages', path: '/packages', icon: <LocalShippingIcon /> },
     { label: 'Calendar', path: '/calendar', icon: <EventIcon /> },
+    { label: 'Planned Expenses', path: '/planned-expenses', icon: <EventRepeatIcon /> },
     { label: 'Net Worth', path: '/net-worth', icon: <ShowChartIcon /> },
     { label: 'Autopay Mandates', path: '/autopay', icon: <AutorenewIcon /> },
     { label: 'Insurance', path: '/insurance', icon: <HealthAndSafetyIcon /> },

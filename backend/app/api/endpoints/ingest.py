@@ -294,6 +294,12 @@ def _ingest_one(db: Session, user: User, record: dict, mapping: Optional[IngestM
     except Exception:
         pass
 
+    try:
+        from app.services.planned_item_service import try_automatch_for_transaction
+        try_automatch_for_transaction(db, txn)
+    except Exception:
+        pass
+
     db.commit()
     db.refresh(txn)
     TransactionService.apply_auto_labels(db, txn.id, txn.description)

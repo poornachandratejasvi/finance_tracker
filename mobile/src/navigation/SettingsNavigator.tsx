@@ -55,9 +55,12 @@ import SharedExpenseFormScreen from "../screens/settings/SharedExpenseFormScreen
 import PackagesScreen from "../screens/settings/PackagesScreen";
 import PackageFormScreen from "../screens/settings/PackageFormScreen";
 import CalendarScreen from "../screens/settings/CalendarScreen";
+import PlannedItemsScreen from "../screens/settings/PlannedItemsScreen";
+import PlannedItemFormScreen from "../screens/settings/PlannedItemFormScreen";
+import PlannedItemMatchScreen from "../screens/settings/PlannedItemMatchScreen";
 import {
   Category, Label, AutoRule, NotificationRule, Currency, Template, AdminUser, Goal, Vehicle,
-  AutopayMandate, InsurancePolicy, Warranty, Iou,
+  AutopayMandate, InsurancePolicy, Warranty, Iou, PlannedItem,
 } from "../types";
 
 export type SettingsStackParamList = {
@@ -115,6 +118,9 @@ export type SettingsStackParamList = {
   Packages: undefined;
   PackageForm: undefined;
   Calendar: undefined;
+  PlannedItems: undefined;
+  PlannedItemForm: { item?: PlannedItem } | undefined;
+  PlannedItemMatch: { item: PlannedItem };
 };
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>();
@@ -188,6 +194,9 @@ export default function SettingsNavigator() {
       <Stack.Screen name="Packages" component={PackagesScreen} options={{ title: "Packages" }} />
       <Stack.Screen name="PackageForm" component={PackageFormScreen} options={{ title: "Add Package" }} />
       <Stack.Screen name="Calendar" component={CalendarScreen} options={{ title: "Calendar" }} />
+      <Stack.Screen name="PlannedItems" component={PlannedItemsScreen} options={{ title: "Planned Expenses" }} />
+      <Stack.Screen name="PlannedItemForm" component={PlannedItemFormScreen} options={{ title: "Planned Item" }} />
+      <Stack.Screen name="PlannedItemMatch" component={PlannedItemMatchScreen} options={{ title: "Map Transaction" }} />
     </Stack.Navigator>
   );
 }

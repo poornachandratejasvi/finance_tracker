@@ -34,6 +34,7 @@ const TYPE_META: Record<string, { color: string; icon: keyof typeof Ionicons.gly
   amc_expiry: { color: "#79706e", icon: "shield-outline" },
   iou_due: { color: "#bab0ac", icon: "people-outline" },
   reward_points_expiry: { color: "#59a14f", icon: "gift-outline" },
+  planned_item_due: { color: "#4e79a7", icon: "checkmark-done-circle-outline" },
 };
 
 const CATEGORIES = [
@@ -47,6 +48,7 @@ const CATEGORIES = [
   { key: "warranty", label: "Warranties" },
   { key: "iou_due", label: "IOUs" },
   { key: "reward_points_expiry", label: "Reward Points" },
+  { key: "planned_item_due", label: "Planned Expenses" },
 ];
 
 function matchesCategory(item: CalendarItem, key: string): boolean {

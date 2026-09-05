@@ -367,6 +367,12 @@ def create_transaction(
     except Exception:
         pass
 
+    try:
+        from app.services.planned_item_service import try_automatch_for_transaction
+        try_automatch_for_transaction(db, transaction)
+    except Exception:
+        pass
+
     db.commit()
     db.refresh(transaction)
 

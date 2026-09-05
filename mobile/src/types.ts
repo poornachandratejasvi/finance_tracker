@@ -990,3 +990,50 @@ export interface CalendarItem {
   is_overdue: boolean;
   payment_status?: string;
 }
+
+// ---- Planned Expenses/Income ----
+
+export type PlannedDirection = "expense" | "income";
+export type PlannedRecurrence = "none" | "weekly" | "monthly" | "yearly";
+export type PlannedOccurrenceStatus = "open" | "matched" | "closed";
+
+export interface PlannedItemOccurrence {
+  id: number;
+  planned_item_id: number;
+  due_date: string;
+  expected_amount: number | null;
+  status: PlannedOccurrenceStatus;
+  matched_transaction_id: number | null;
+  closed_at: string | null;
+}
+
+export interface PlannedItem {
+  id: number;
+  name: string;
+  direction: PlannedDirection;
+  amount: number | null;
+  match_hint: string | null;
+  due_date: string;
+  recurrence: PlannedRecurrence;
+  is_active: boolean;
+  notes: string | null;
+  created_at: string | null;
+  current_occurrence: PlannedItemOccurrence | null;
+}
+
+export interface PlannedItemsSummary {
+  month: string;
+  planned_income: number;
+  planned_expense: number;
+  open_count: number;
+  total_count: number;
+}
+
+export interface PlannedItemCandidate {
+  id: number;
+  description: string;
+  amount: number;
+  transaction_type: string;
+  transaction_date: string | null;
+  bank_id: number | null;
+}

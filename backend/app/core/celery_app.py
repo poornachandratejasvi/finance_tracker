@@ -27,6 +27,7 @@ celery_app = Celery(
         "app.tasks.warranty_document_tasks", "app.tasks.digest_tasks",
         "app.tasks.nav_refresh_tasks", "app.tasks.fx_refresh_tasks",
         "app.tasks.anomaly_tasks", "app.tasks.payslip_document_tasks",
+        "app.tasks.planned_item_tasks",
     ],
 )
 
@@ -218,6 +219,14 @@ celery_app.conf.beat_schedule = {
     # 5-day-before window without spamming; idempotent per due date.
     "credit-card-bill-reminders-daily": {
         "task": "credit_card_bills.check_reminders",
+        "schedule": 24 * 60 * 60.0,
+    },
+    # Safety net for planned-expense/income auto-matching -- the live
+    # transaction-creation hooks already match most cases immediately; this
+    # catches import paths that skip those hooks and generates upcoming
+    # cycles ahead of time.
+    "planned-items-sync-daily": {
+        "task": "planned_items.sync_all",
         "schedule": 24 * 60 * 60.0,
     },
 }

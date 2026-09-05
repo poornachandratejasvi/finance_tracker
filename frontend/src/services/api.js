@@ -984,6 +984,22 @@ export const confirmBillPayment = async (billId, transactionId) =>
 export const markBillPaid = async (billId) =>
   (await api.post(`/api/credit-card-bills/${billId}/mark-paid`)).data;
 
+// Planned expenses/income (dedicated tab: per-cycle settlement + auto-match)
+export const listPlannedItems = async () => (await api.get('/api/planned-items/')).data;
+export const createPlannedItem = async (data) => (await api.post('/api/planned-items/', data)).data;
+export const updatePlannedItem = async (id, data) => (await api.put(`/api/planned-items/${id}`, data)).data;
+export const deletePlannedItem = async (id) => (await api.delete(`/api/planned-items/${id}`)).data;
+export const getPlannedItemOccurrences = async (id, limit = 12) =>
+  (await api.get(`/api/planned-items/${id}/occurrences`, { params: { limit } })).data;
+export const getPlannedItemCandidates = async (occurrenceId) =>
+  (await api.get(`/api/planned-items/occurrences/${occurrenceId}/candidates`)).data;
+export const confirmPlannedItemMatch = async (occurrenceId, transactionId) =>
+  (await api.post(`/api/planned-items/occurrences/${occurrenceId}/confirm`, { transaction_id: transactionId })).data;
+export const closePlannedItemOccurrence = async (occurrenceId) =>
+  (await api.post(`/api/planned-items/occurrences/${occurrenceId}/close`)).data;
+export const getPlannedItemsSummary = async (month) =>
+  (await api.get('/api/planned-items/summary', { params: month ? { month } : {} })).data;
+
 // Push notification token registration (mobile)
 export const registerPushToken = async (token, platform) =>
   (await api.post('/api/push-tokens/', { token, platform })).data;

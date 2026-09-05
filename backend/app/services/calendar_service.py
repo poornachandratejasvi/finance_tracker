@@ -345,5 +345,39 @@ def get_upcoming_items(db, user_id: int, days_ahead: int = 60, days_back: int = 
                 "is_overdue": entry.expiry_date < now,
             })
 
+    from app.models.models import PlannedItem, PlannedItemOccurrence
+    from app.services.planned_item_service import ensure_occurrences
+
+    planned_items = db.query(PlannedItem).filter(PlannedItem.user_id == user_id, PlannedItem.is_active == True).all()  # noqa: E712
+    for planned_item in planned_items:
+        ensure_occurrences(db, planned_item)
+    db.commit()
+
+    planned_rows = (
+        db.query(PlannedItemOccurrence, PlannedItem)
+        .join(PlannedItem, PlannedItemOccurrence.planned_item_id == PlannedItem.id)
+        .filter(
+            PlannedItemOccurrence.user_id == user_id,
+            or_(
+                and_(PlannedItemOccurrence.due_date >= window_start, PlannedItemOccurrence.due_date <= horizon),
+                # An unresolved one has no lower bound -- same "still overdue
+                # regardless of how long ago" treatment as an unpaid credit-card bill.
+                and_(PlannedItemOccurrence.due_date <= horizon, PlannedItemOccurrence.status == "open"),
+            ),
+        )
+        .all()
+    )
+    for occurrence, planned_item in planned_rows:
+        is_settled = occurrence.status in ("matched", "closed")
+        items.append({
+            "type": "planned_item_due", "id": occurrence.id, "date": occurrence.due_date,
+            "title": planned_item.name,
+            "subtitle": "Planned income" if planned_item.direction == "income" else "Planned expense",
+            "amount": occurrence.expected_amount, "link": None,
+            "is_overdue": occurrence.due_date < now and not is_settled,
+            "payment_status": occurrence.status,
+            "direction": planned_item.direction,
+        })
+
     items.sort(key=lambda i: i["date"])
     return items

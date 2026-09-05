@@ -24,6 +24,7 @@ const WALLET_ROWS: Row[] = [
   { key: "AutoRules", label: "Automatic Rules", icon: "flash-outline" },
   { key: "NotificationRules", label: "Notification Rules", icon: "notifications-outline" },
   { key: "NetWorth", label: "Net Worth", icon: "trending-up-outline" },
+  { key: "PlannedItems", label: "Planned Expenses", icon: "checkmark-done-circle-outline" },
   { key: "IOUs", label: "IOUs", icon: "people-outline" },
   { key: "TaxDashboard", label: "Tax Dashboard", icon: "receipt-outline" },
   { key: "SharedExpenses", label: "Shared Expenses", icon: "people-circle-outline" },

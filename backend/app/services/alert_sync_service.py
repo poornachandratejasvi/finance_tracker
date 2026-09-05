@@ -190,6 +190,12 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
                     except Exception:
                         logger.warning("Post-statement balance adjustment failed for bank %s", bank.id, exc_info=True)
 
+                    try:
+                        from app.services.planned_item_service import try_automatch_for_transaction
+                        try_automatch_for_transaction(db, transaction)
+                    except Exception:
+                        logger.warning("Planned-item auto-match failed for bank %s", bank.id, exc_info=True)
+
                     apply_auto_rules_and_notify(db, bank.user_id, transaction)
                     created += 1
 
