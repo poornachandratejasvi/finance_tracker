@@ -8,9 +8,9 @@ export async function getAIConfig(): Promise<AIConfig> {
 
 export interface AIConfigUpdatePayload {
   providers?: string[];
-  claude?: { model?: string };
-  gemini?: { model?: string };
-  ollama?: { model?: string; base_url?: string };
+  claude?: { models?: string[] };
+  gemini?: { models?: string[] };
+  ollama?: { models?: string[]; base_url?: string };
   features?: Partial<AIConfig["features"]>;
   claude_key?: string;
   gemini_key?: string;

@@ -22,9 +22,9 @@ KEYED_PROVIDERS = ["claude", "gemini"]  # ollama uses a base_url, no key
 
 DEFAULT_CONFIG = {
     "providers": [],  # ordered priority; empty = AI disabled
-    "claude": {"model": "claude-opus-4-8"},
-    "gemini": {"model": "gemini-1.5-flash"},
-    "ollama": {"model": "llama3.2", "base_url": "http://host.docker.internal:11434"},
+    "claude": {"models": ["claude-opus-4-8"]},
+    "gemini": {"models": ["gemini-1.5-flash"]},
+    "ollama": {"models": ["llama3.2"], "base_url": "http://host.docker.internal:11434"},
     "features": {
         "categorize": True, "insights": True, "predict": True,
         "query": True, "anomalies": True, "summary": True,
@@ -52,16 +52,24 @@ def get_config(db: Session, uid: int) -> dict:
         # migrate legacy single-provider shape
         if "providers" not in saved and saved.get("provider") in ALL_PROVIDERS:
             saved["providers"] = [saved["provider"]]
-        # legacy flat model fields
+        # legacy flat model fields (become a one-item priority list)
         if "claude_model" in saved:
-            cfg["claude"]["model"] = saved["claude_model"]
+            cfg["claude"]["models"] = [saved["claude_model"]] if saved["claude_model"] else []
         if "gemini_model" in saved:
-            cfg["gemini"]["model"] = saved["gemini_model"]
+            cfg["gemini"]["models"] = [saved["gemini_model"]] if saved["gemini_model"] else []
         if isinstance(saved.get("providers"), list):
             cfg["providers"] = [p for p in saved["providers"] if p in ALL_PROVIDERS]
         for prov in ALL_PROVIDERS:
             if isinstance(saved.get(prov), dict):
-                cfg[prov].update(saved[prov])
+                prov_saved = dict(saved[prov])
+                # migrate the pre-list "model" single-string shape into "models"
+                if "model" in prov_saved and "models" not in prov_saved:
+                    legacy_model = prov_saved.pop("model")
+                    if legacy_model:
+                        prov_saved["models"] = [legacy_model]
+                cfg[prov].update(prov_saved)
+                if isinstance(cfg[prov].get("models"), list):
+                    cfg[prov]["models"] = [m for m in cfg[prov]["models"] if isinstance(m, str) and m.strip()]
         if isinstance(saved.get("features"), dict):
             cfg["features"].update(saved["features"])
     return cfg
@@ -73,12 +81,20 @@ def set_config(db: Session, uid: int, patch: dict) -> dict:
         cfg["providers"] = [p for p in patch["providers"] if p in ALL_PROVIDERS]
     for prov in ALL_PROVIDERS:
         if isinstance(patch.get(prov), dict):
-            cfg[prov].update(patch[prov])
+            prov_patch = dict(patch[prov])
+            # legacy singular "model" -> a one-item priority list
+            if "model" in prov_patch and "models" not in prov_patch:
+                legacy_model = prov_patch.pop("model")
+                if legacy_model:
+                    prov_patch["models"] = [legacy_model]
+            if isinstance(prov_patch.get("models"), list):
+                prov_patch["models"] = [m for m in prov_patch["models"] if isinstance(m, str) and m.strip()]
+            cfg[prov].update(prov_patch)
     # legacy flat fields still accepted
     if patch.get("claude_model"):
-        cfg["claude"]["model"] = patch["claude_model"]
+        cfg["claude"]["models"] = [patch["claude_model"]]
     if patch.get("gemini_model"):
-        cfg["gemini"]["model"] = patch["gemini_model"]
+        cfg["gemini"]["models"] = [patch["gemini_model"]]
     if isinstance(patch.get("features"), dict):
         cfg["features"].update({k: bool(v) for k, v in patch["features"].items()})
     row = db.query(AppSetting).filter(AppSetting.key == _cfg_key(uid)).first()
@@ -238,54 +254,66 @@ def _ollama_complete(base_url: str, model: str, system: str, prompt: str, max_to
     return text, usage
 
 
-_MAX_MODEL_ATTEMPTS = 4  # the configured model, plus up to 3 fallbacks
+_MAX_DISCOVERED_FALLBACKS = 3  # extra live-discovered models tried after the user's own list is exhausted
 
 
 def _call_provider(db: Session, uid: int, provider: str, cfg: dict, system: str, prompt: str, max_tokens: int):
-    """Returns (text, model, usage). Tries the configured model first; if it
-    errors (a specific model tier can be deprecated, rate-limited, or
-    quota-exhausted independently of the API key itself still being valid),
-    fetches the provider's other available models and tries a few more
-    before giving up on this provider entirely and moving to the next
-    provider in the priority chain (handled by complete(), below)."""
+    """Returns (text, model, usage). Tries every model the user explicitly
+    configured for this provider, in their chosen priority order (a specific
+    model tier can be deprecated, rate-limited, or quota-exhausted
+    independently of the API key itself still being valid). Only once ALL of
+    those fail does it fetch the provider's other live-available models and
+    try a few more, before giving up on this provider entirely and moving to
+    the next provider in the priority chain (handled by complete(), below)."""
     if provider == "claude":
         key = get_key(db, uid, "claude")
         if not key:
             raise RuntimeError("Claude key not set")
         call = lambda model: _claude_complete(key, model, system, prompt, max_tokens)
-        configured_model = cfg["claude"].get("model")
+        configured_models = cfg["claude"].get("models") or []
     elif provider == "gemini":
         key = get_key(db, uid, "gemini")
         if not key:
             raise RuntimeError("Gemini key not set")
         call = lambda model: _gemini_complete(key, model, system, prompt, max_tokens)
-        configured_model = cfg["gemini"].get("model")
+        configured_models = cfg["gemini"].get("models") or []
     elif provider == "ollama":
         oc = cfg.get("ollama", {})
         call = lambda model: _ollama_complete(oc.get("base_url"), model, system, prompt, max_tokens)
-        configured_model = oc.get("model")
+        configured_models = oc.get("models") or []
     else:
         raise RuntimeError(f"Unknown provider {provider}")
 
-    candidates = [configured_model]
+    candidates = [m for m in configured_models if m]
     last_err = None
-    for attempt, model in enumerate(candidates):
-        if not model:
-            continue
+    discovered_fetched = False
+    if not candidates:
+        # No model explicitly configured for this provider at all -- fall
+        # straight through to live discovery instead of raising immediately.
+        discovered_fetched = True
+        try:
+            candidates = list_models(db, uid, provider)[:_MAX_DISCOVERED_FALLBACKS]
+        except Exception:
+            pass
+    i = 0
+    while i < len(candidates):
+        model = candidates[i]
+        i += 1
         try:
             text, usage = call(model)
             return text, model, usage
         except Exception as e:
             last_err = e
             logger.info("AI model %s/%s failed, trying next model: %s", provider, model, str(e)[:120])
-            if attempt == 0:
-                # Only fetch alternates once, on the first failure -- avoids
-                # hammering the provider's model-list endpoint on every retry.
+            if i >= len(candidates) and not discovered_fetched:
+                # The user's own list is exhausted -- fetch alternates once
+                # rather than hammering the provider's model-list endpoint.
+                discovered_fetched = True
                 try:
                     for m in list_models(db, uid, provider):
                         if m not in candidates:
                             candidates.append(m)
-                        if len(candidates) >= _MAX_MODEL_ATTEMPTS:
+                        if len(candidates) - len(configured_models) >= _MAX_DISCOVERED_FALLBACKS:
                             break
                 except Exception:
                     pass
@@ -317,6 +345,11 @@ def complete(db: Session, uid: int, system: str, prompt: str, max_tokens: int = 
     raise last_err or RuntimeError("All AI providers failed")
 
 
+def _primary_model(provider_cfg: dict) -> Optional[str]:
+    models = provider_cfg.get("models") or []
+    return models[0] if models else None
+
+
 def test_provider(db: Session, uid: int, provider: str, api_key: Optional[str] = None, model: Optional[str] = None) -> Tuple[bool, str]:
     cfg = get_config(db, uid)
     try:
@@ -324,15 +357,15 @@ def test_provider(db: Session, uid: int, provider: str, api_key: Optional[str] =
             key = api_key or get_key(db, uid, "claude")
             if not key:
                 return False, "No Claude API key."
-            out, _ = _claude_complete(key, model or cfg["claude"].get("model"), "You are a test.", "Reply with OK.", 20)
+            out, _ = _claude_complete(key, model or _primary_model(cfg["claude"]), "You are a test.", "Reply with OK.", 20)
         elif provider == "gemini":
             key = api_key or get_key(db, uid, "gemini")
             if not key:
                 return False, "No Gemini API key."
-            out, _ = _gemini_complete(key, model or cfg["gemini"].get("model"), "You are a test.", "Reply with OK.", 20)
+            out, _ = _gemini_complete(key, model or _primary_model(cfg["gemini"]), "You are a test.", "Reply with OK.", 20)
         elif provider == "ollama":
             oc = cfg.get("ollama", {})
-            out, _ = _ollama_complete(oc.get("base_url"), model or oc.get("model"), "You are a test.", "Reply with OK.", 20)
+            out, _ = _ollama_complete(oc.get("base_url"), model or _primary_model(oc), "You are a test.", "Reply with OK.", 20)
         else:
             return False, "Unknown provider"
         return True, f"Connected. Replied: {(out or 'OK').strip()[:40]}"

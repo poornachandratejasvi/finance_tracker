@@ -20,6 +20,7 @@ const PROVIDERS: Array<{ key: "claude" | "gemini" | "ollama"; label: string }> =
   { key: "gemini", label: "Gemini" },
   { key: "ollama", label: "Ollama (local)" },
 ];
+const providerLabel = (key: string) => PROVIDERS.find((p) => p.key === key)?.label || key;
 
 const FEATURES: Array<keyof AIConfig["features"]> = [
   "categorize",
@@ -34,6 +35,7 @@ export default function AIScreen() {
   const [config, setConfig] = useState<AIConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [keyInputs, setKeyInputs] = useState<{ claude?: string; gemini?: string }>({});
+  const [modelInputs, setModelInputs] = useState<{ claude?: string; gemini?: string; ollama?: string }>({});
   const [testing, setTesting] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -68,14 +70,57 @@ export default function AIScreen() {
     }
   };
 
-  const saveModel = async (provider: "claude" | "gemini" | "ollama", model: string) => {
+  const moveProvider = async (index: number, dir: -1 | 1) => {
     if (!config) return;
-    setConfig({ ...config, [provider]: { ...config[provider], model } });
+    const target = index + dir;
+    if (target < 0 || target >= config.providers.length) return;
+    const providers = [...config.providers];
+    [providers[index], providers[target]] = [providers[target], providers[index]];
+    setConfig({ ...config, providers });
     try {
-      await updateAIConfig({ [provider]: { model } } as any);
+      await updateAIConfig({ providers });
     } catch {
-      // silent; user can retry by re-typing
+      Alert.alert("Couldn't save", "Please try again.");
     }
+  };
+
+  // ---- Per-provider ordered model list (tried in order; if all fail, the
+  // server automatically falls back to live-discovered alternates) ----------
+  const saveModels = async (provider: "claude" | "gemini" | "ollama", models: string[]) => {
+    if (!config) return;
+    setConfig({ ...config, [provider]: { ...config[provider], models } });
+    try {
+      await updateAIConfig({ [provider]: { models } } as any);
+    } catch {
+      Alert.alert("Couldn't save", "Please try again.");
+    }
+  };
+
+  const moveModel = (provider: "claude" | "gemini" | "ollama", index: number, dir: -1 | 1) => {
+    if (!config) return;
+    const models = [...config[provider].models];
+    const target = index + dir;
+    if (target < 0 || target >= models.length) return;
+    [models[index], models[target]] = [models[target], models[index]];
+    saveModels(provider, models);
+  };
+
+  const removeModel = (provider: "claude" | "gemini" | "ollama", index: number) => {
+    if (!config) return;
+    const models = config[provider].models.filter((_, i) => i !== index);
+    saveModels(provider, models);
+  };
+
+  const addModel = (provider: "claude" | "gemini" | "ollama") => {
+    if (!config) return;
+    const value = (modelInputs[provider] || "").trim();
+    if (!value) return;
+    if (config[provider].models.includes(value)) {
+      setModelInputs((prev) => ({ ...prev, [provider]: "" }));
+      return;
+    }
+    saveModels(provider, [...config[provider].models, value]);
+    setModelInputs((prev) => ({ ...prev, [provider]: "" }));
   };
 
   const saveKey = async (provider: "claude" | "gemini") => {
@@ -127,12 +172,49 @@ export default function AIScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.hint}>
-        Enabled providers are tried in order; the first that succeeds is used.
+        Enabled providers are tried in this order; the first that succeeds is used. Within a
+        provider, its models are tried in the order below before falling back automatically.
       </Text>
+
+      {config.providers.length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Provider priority</Text>
+          {config.providers.map((key, idx) => (
+            <View key={key} style={styles.orderRow}>
+              <View style={styles.orderBadge}>
+                <Text style={styles.orderBadgeText}>{idx + 1}</Text>
+              </View>
+              <Text style={styles.orderLabel}>{providerLabel(key)}</Text>
+              <TouchableOpacity
+                style={styles.orderButton}
+                disabled={idx === 0}
+                onPress={() => moveProvider(idx, -1)}
+              >
+                <Text style={[styles.orderButtonText, idx === 0 && styles.orderButtonTextDisabled]}>▲</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.orderButton}
+                disabled={idx === config.providers.length - 1}
+                onPress={() => moveProvider(idx, 1)}
+              >
+                <Text
+                  style={[
+                    styles.orderButtonText,
+                    idx === config.providers.length - 1 && styles.orderButtonTextDisabled,
+                  ]}
+                >
+                  ▼
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
 
       {PROVIDERS.map(({ key, label }) => {
         const enabled = config.providers.includes(key);
         const keySet = key === "claude" ? config.claude_key_set : key === "gemini" ? config.gemini_key_set : true;
+        const models = config[key].models;
         return (
           <View key={key} style={styles.card}>
             <View style={styles.switchRow}>
@@ -140,12 +222,46 @@ export default function AIScreen() {
               <Switch value={enabled} onValueChange={() => toggleProvider(key)} />
             </View>
 
-            <Text style={styles.label}>Model</Text>
-            <TextInput
-              style={styles.input}
-              value={config[key].model}
-              onChangeText={(v) => saveModel(key, v)}
-            />
+            <Text style={styles.label}>Models (tried in order)</Text>
+            {models.length === 0 && (
+              <Text style={styles.emptyModels}>
+                No models added — live-discovered models will be tried automatically.
+              </Text>
+            )}
+            {models.map((m, idx) => (
+              <View key={`${m}-${idx}`} style={styles.orderRow}>
+                <View style={styles.orderBadge}>
+                  <Text style={styles.orderBadgeText}>{idx + 1}</Text>
+                </View>
+                <Text style={styles.orderLabel} numberOfLines={1}>{m}</Text>
+                <TouchableOpacity style={styles.orderButton} disabled={idx === 0} onPress={() => moveModel(key, idx, -1)}>
+                  <Text style={[styles.orderButtonText, idx === 0 && styles.orderButtonTextDisabled]}>▲</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.orderButton}
+                  disabled={idx === models.length - 1}
+                  onPress={() => moveModel(key, idx, 1)}
+                >
+                  <Text style={[styles.orderButtonText, idx === models.length - 1 && styles.orderButtonTextDisabled]}>▼</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.orderButton} onPress={() => removeModel(key, idx)}>
+                  <Text style={styles.removeButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+            <View style={styles.addRow}>
+              <TextInput
+                style={[styles.input, styles.addInput]}
+                value={modelInputs[key] || ""}
+                onChangeText={(v) => setModelInputs((prev) => ({ ...prev, [key]: v }))}
+                placeholder="Add a model name"
+                autoCapitalize="none"
+                onSubmitEditing={() => addModel(key)}
+              />
+              <TouchableOpacity style={styles.addButton} onPress={() => addModel(key)}>
+                <Text style={styles.addButtonText}>Add</Text>
+              </TouchableOpacity>
+            </View>
 
             {(key === "claude" || key === "gemini") && (
               <>
@@ -226,6 +342,35 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   switchRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  orderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 6,
+  },
+  orderBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#1b6b4c",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  orderBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  orderLabel: { flex: 1, fontSize: 13, color: "#333" },
+  orderButton: { paddingHorizontal: 6, paddingVertical: 2 },
+  orderButtonText: { fontSize: 13, color: "#1b6b4c", fontWeight: "700" },
+  orderButtonTextDisabled: { color: "#ccc" },
+  removeButtonText: { fontSize: 13, color: "#c0392b", fontWeight: "700" },
+  emptyModels: { fontSize: 12, color: "#888", marginTop: 2 },
+  addRow: { flexDirection: "row", gap: 8, marginTop: 8, alignItems: "center" },
+  addInput: { flex: 1 },
+  addButton: { backgroundColor: "#1b6b4c", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10 },
+  addButtonText: { color: "#fff", fontWeight: "600", fontSize: 13 },
   smallButton: {
     marginTop: 10,
     backgroundColor: "#1b6b4c",

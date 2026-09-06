@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import {
   AutoAwesome, Science, Save, VpnKey, CheckCircle, Refresh,
-  KeyboardArrowUp, KeyboardArrowDown,
+  KeyboardArrowUp, KeyboardArrowDown, Close,
 } from '@mui/icons-material';
 import { getAIConfig, updateAIConfig, testAI, getAIModels, getAIUsage, resetAIUsage } from '../../services/api';
 
@@ -65,19 +65,24 @@ export default function AIPanel() {
   // Ordered priority list of ENABLED providers.
   const [providers, setProviders] = useState([]);
 
-  // Per-provider model + loaded model list (null = not yet loaded) + status.
-  const [claudeModel, setClaudeModel] = useState(DEFAULT_CLAUDE_MODEL);
+  // Per-provider ORDERED priority list of chosen models (first = tried first),
+  // a "staged" pick for the add-model control, the live-loaded model list from
+  // the provider (null = not yet loaded), and status.
+  const [claudeModelList, setClaudeModelList] = useState([DEFAULT_CLAUDE_MODEL]);
+  const [claudeModel, setClaudeModel] = useState('');
   const [claudeModels, setClaudeModels] = useState(null);
   const [claudeLoadingModels, setClaudeLoadingModels] = useState(false);
   const [claudeModelMsg, setClaudeModelMsg] = useState(null);
 
-  const [geminiModel, setGeminiModel] = useState(DEFAULT_GEMINI_MODEL);
+  const [geminiModelList, setGeminiModelList] = useState([DEFAULT_GEMINI_MODEL]);
+  const [geminiModel, setGeminiModel] = useState('');
   const [geminiModels, setGeminiModels] = useState(null);
   const [geminiLoadingModels, setGeminiLoadingModels] = useState(false);
   const [geminiModelMsg, setGeminiModelMsg] = useState(null);
 
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState(DEFAULT_OLLAMA_BASE_URL);
-  const [ollamaModel, setOllamaModel] = useState(DEFAULT_OLLAMA_MODEL);
+  const [ollamaModelList, setOllamaModelList] = useState([DEFAULT_OLLAMA_MODEL]);
+  const [ollamaModel, setOllamaModel] = useState('');
   const [ollamaModels, setOllamaModels] = useState(null);
   const [ollamaLoadingModels, setOllamaLoadingModels] = useState(false);
   const [ollamaModelMsg, setOllamaModelMsg] = useState(null);
@@ -134,10 +139,13 @@ export default function AIPanel() {
       : [];
     setProviders(ordered);
 
-    setClaudeModel(cfg.claude?.model || DEFAULT_CLAUDE_MODEL);
-    setGeminiModel(cfg.gemini?.model || DEFAULT_GEMINI_MODEL);
-    setOllamaModel(cfg.ollama?.model || DEFAULT_OLLAMA_MODEL);
+    setClaudeModelList(cfg.claude?.models?.length ? cfg.claude.models : [DEFAULT_CLAUDE_MODEL]);
+    setGeminiModelList(cfg.gemini?.models?.length ? cfg.gemini.models : [DEFAULT_GEMINI_MODEL]);
+    setOllamaModelList(cfg.ollama?.models?.length ? cfg.ollama.models : [DEFAULT_OLLAMA_MODEL]);
     setOllamaBaseUrl(cfg.ollama?.base_url || DEFAULT_OLLAMA_BASE_URL);
+    setClaudeModel('');
+    setGeminiModel('');
+    setOllamaModel('');
 
     setFeatures(FEATURES.reduce((acc, f) => ({ ...acc, [f.key]: !!cfg.features?.[f.key] }), {}));
 
@@ -183,6 +191,27 @@ export default function AIPanel() {
     loadUsage();
   }, [load, loadUsage]);
 
+  // ---- Generic ordered-list helpers (shared by provider priority and each
+  // provider's model priority list) ------------------------------------------
+  const moveInList = (setList, index, dir) => {
+    setList((prev) => {
+      const target = index + dir;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
+  const removeFromList = (setList, index) => {
+    setList((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addToList = (setList, value) => {
+    if (!value) return;
+    setList((prev) => (prev.includes(value) ? prev : [...prev, value]));
+  };
+
   // ---- Provider enable / ordering ------------------------------------------
   const isEnabled = (id) => providers.includes(id);
 
@@ -192,15 +221,7 @@ export default function AIPanel() {
     );
   };
 
-  const moveProvider = (index, dir) => {
-    setProviders((prev) => {
-      const target = index + dir;
-      if (target < 0 || target >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  };
+  const moveProvider = (index, dir) => moveInList(setProviders, index, dir);
 
   // ---- Model loading --------------------------------------------------------
   const handleLoadModels = async (which) => {
@@ -246,23 +267,24 @@ export default function AIPanel() {
 
   // ---- Test connection ------------------------------------------------------
   const handleTest = async (which) => {
+    // Tests the PRIMARY (first-priority) model in each provider's list.
     const map = {
       claude: {
         setTesting: setClaudeTesting,
         setResult: setClaudeTest,
-        model: claudeModel,
+        model: claudeModelList[0],
         api_key: claudeAction === 'set' && claudeKey ? claudeKey : undefined,
       },
       gemini: {
         setTesting: setGeminiTesting,
         setResult: setGeminiTest,
-        model: geminiModel,
+        model: geminiModelList[0],
         api_key: geminiAction === 'set' && geminiKey ? geminiKey : undefined,
       },
       ollama: {
         setTesting: setOllamaTesting,
         setResult: setOllamaTest,
-        model: ollamaModel,
+        model: ollamaModelList[0],
         api_key: undefined,
       },
     };
@@ -290,9 +312,9 @@ export default function AIPanel() {
     try {
       const payload = {
         providers,
-        claude: { model: claudeModel },
-        gemini: { model: geminiModel },
-        ollama: { model: ollamaModel, base_url: ollamaBaseUrl },
+        claude: { models: claudeModelList },
+        gemini: { models: geminiModelList },
+        ollama: { models: ollamaModelList, base_url: ollamaBaseUrl },
         features,
       };
       // Only send a key when the user typed one; send '' to clear.
@@ -364,18 +386,64 @@ export default function AIPanel() {
       </Typography>
     );
 
-  // Model Select + Load models + Test, shared by all three providers.
-  const renderModelRow = ({ which, model, setModel, models, loadingModels, modelMsg, testing, testResult }) => {
-    const options = buildModelOptions(models, model);
+  // A small numbered, reorderable, removable list -- shared by the provider
+  // priority list and each provider's model priority list.
+  const renderOrderedList = ({ items, labelFor, onMove, onRemove, emptyText }) => {
+    if (!items.length) {
+      return <Typography variant="body2" color="text.secondary">{emptyText}</Typography>;
+    }
+    return (
+      <Stack spacing={1}>
+        {items.map((item, idx) => (
+          <Box
+            key={`${item}-${idx}`}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1,
+              border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1.5, py: 0.5,
+            }}
+          >
+            <Chip label={idx + 1} color="primary" size="small" sx={{ fontWeight: 600 }} />
+            <Typography variant="body2" sx={{ flexGrow: 1, wordBreak: 'break-word' }}>{labelFor(item)}</Typography>
+            <IconButton size="small" aria-label="Move up" disabled={idx === 0} onClick={() => onMove(idx, -1)}>
+              <KeyboardArrowUp fontSize="small" />
+            </IconButton>
+            <IconButton size="small" aria-label="Move down" disabled={idx === items.length - 1} onClick={() => onMove(idx, 1)}>
+              <KeyboardArrowDown fontSize="small" />
+            </IconButton>
+            <IconButton size="small" aria-label="Remove" color="error" onClick={() => onRemove(idx)}>
+              <Close fontSize="small" />
+            </IconButton>
+          </Box>
+        ))}
+      </Stack>
+    );
+  };
+
+  // Ordered model-priority list + an "add a model" picker (from the live-loaded
+  // list, or free-typed) + Load models + Test. Shared by all three providers.
+  // Models are tried in this order; if all fail, live-discovered alternates are
+  // tried automatically before moving to the next provider.
+  const renderModelRow = ({
+    which, modelList, setModelList, model, setModel, models, loadingModels, modelMsg, testing, testResult,
+  }) => {
+    const options = buildModelOptions(models, model).filter((m) => !modelList.includes(m));
     const labelId = `${which}-model-label`;
     return (
       <>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>Models (tried in order)</Typography>
+        {renderOrderedList({
+          items: modelList,
+          labelFor: (m) => m,
+          onMove: (idx, dir) => moveInList(setModelList, idx, dir),
+          onRemove: (idx) => removeFromList(setModelList, idx),
+          emptyText: 'No models added -- add at least one below, or live-discovered models will be tried automatically.',
+        })}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <FormControl size="small" sx={{ minWidth: 240, flexGrow: 1, maxWidth: 420 }}>
-            <InputLabel id={labelId}>Model</InputLabel>
+            <InputLabel id={labelId}>Add a model</InputLabel>
             <Select
               labelId={labelId}
-              label="Model"
+              label="Add a model"
               value={options.includes(model) ? model : ''}
               displayEmpty
               onChange={(e) => setModel(e.target.value)}
@@ -383,9 +451,17 @@ export default function AIPanel() {
               {options.map((m) => (
                 <MenuItem key={m} value={m}>{m}</MenuItem>
               ))}
-              {!options.length && <MenuItem value="" disabled>Load models to choose</MenuItem>}
+              {!options.length && <MenuItem value="" disabled>Load models, or type a name below</MenuItem>}
             </Select>
           </FormControl>
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={!model}
+            onClick={() => { addToList(setModelList, model); setModel(''); }}
+          >
+            Add
+          </Button>
           <Button
             variant="outlined"
             size="small"
@@ -399,12 +475,27 @@ export default function AIPanel() {
             variant="outlined"
             size="small"
             startIcon={testing ? <CircularProgress size={16} /> : <Science />}
-            disabled={testing}
+            disabled={testing || !modelList.length}
             onClick={() => handleTest(which)}
           >
             {testing ? 'Testing…' : 'Test'}
           </Button>
         </Box>
+        <TextField
+          size="small"
+          placeholder="Or type a model name and press Enter"
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && model) {
+              e.preventDefault();
+              addToList(setModelList, model);
+              setModel('');
+            }
+          }}
+          sx={{ maxWidth: 420 }}
+          fullWidth
+        />
         {modelMsg && (
           <Typography variant="caption" sx={{ color: modelMsg.ok ? 'success.main' : 'error.main' }}>
             {modelMsg.message}
@@ -463,48 +554,13 @@ export default function AIPanel() {
           ))}
         </Stack>
 
-        {providers.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            No providers enabled — AI features are turned off until you enable at least one.
-          </Typography>
-        ) : (
-          <Stack spacing={1}>
-            {providers.map((id, idx) => (
-              <Box
-                key={id}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  px: 1.5,
-                  py: 0.5,
-                }}
-              >
-                <Chip label={idx + 1} color="primary" size="small" sx={{ fontWeight: 600 }} />
-                <Typography variant="body2" sx={{ flexGrow: 1 }}>{providerLabel(id)}</Typography>
-                <IconButton
-                  size="small"
-                  aria-label="Move up"
-                  disabled={idx === 0}
-                  onClick={() => moveProvider(idx, -1)}
-                >
-                  <KeyboardArrowUp fontSize="small" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  aria-label="Move down"
-                  disabled={idx === providers.length - 1}
-                  onClick={() => moveProvider(idx, 1)}
-                >
-                  <KeyboardArrowDown fontSize="small" />
-                </IconButton>
-              </Box>
-            ))}
-          </Stack>
-        )}
+        {renderOrderedList({
+          items: providers,
+          labelFor: providerLabel,
+          onMove: moveProvider,
+          onRemove: (idx) => toggleProvider(providers[idx]),
+          emptyText: 'No providers enabled — AI features are turned off until you enable at least one.',
+        })}
       </Paper>
 
       {/* Claude */}
@@ -520,6 +576,8 @@ export default function AIPanel() {
           })}
           {renderModelRow({
             which: 'claude',
+            modelList: claudeModelList,
+            setModelList: setClaudeModelList,
             model: claudeModel,
             setModel: setClaudeModel,
             models: claudeModels,
@@ -544,6 +602,8 @@ export default function AIPanel() {
           })}
           {renderModelRow({
             which: 'gemini',
+            modelList: geminiModelList,
+            setModelList: setGeminiModelList,
             model: geminiModel,
             setModel: setGeminiModel,
             models: geminiModels,
@@ -575,6 +635,8 @@ export default function AIPanel() {
           />
           {renderModelRow({
             which: 'ollama',
+            modelList: ollamaModelList,
+            setModelList: setOllamaModelList,
             model: ollamaModel,
             setModel: setOllamaModel,
             models: ollamaModels,

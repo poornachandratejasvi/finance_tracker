@@ -305,9 +305,9 @@ export interface BackupStatus {
 
 export interface AIConfig {
   providers: string[];
-  claude: { model: string };
-  gemini: { model: string };
-  ollama: { model: string; base_url: string };
+  claude: { models: string[] };
+  gemini: { models: string[] };
+  ollama: { models: string[]; base_url: string };
   features: {
     categorize: boolean;
     insights: boolean;
