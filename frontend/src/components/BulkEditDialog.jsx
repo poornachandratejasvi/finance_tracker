@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -14,14 +14,30 @@ import {
   Typography,
   Chip
 } from '@mui/material';
-import api from '../services/api';
+import api, { bulkLabelTransactions } from '../services/api';
 
-const BulkEditDialog = ({ open, onClose, selectedTransactions, onSuccess }) => {
+const BulkEditDialog = ({ open, onClose, selectedTransactions, categories = [], labels = [], onSuccess }) => {
   const [category, setCategory] = useState('');
+  const [labelIds, setLabelIds] = useState([]);
+  const [duplicateFlag, setDuplicateFlag] = useState(''); // '' | 'true' | 'false'
   const [notes, setNotes] = useState('');
   const [customFields, setCustomFields] = useState({});
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldValue, setNewFieldValue] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Reset transient selections whenever the dialog is reopened for a new batch.
+  useEffect(() => {
+    if (open) {
+      setCategory('');
+      setLabelIds([]);
+      setDuplicateFlag('');
+      setNotes('');
+      setCustomFields({});
+      setNewFieldName('');
+      setNewFieldValue('');
+    }
+  }, [open]);
 
   const handleAddCustomField = () => {
     if (newFieldName && newFieldValue) {
@@ -40,24 +56,47 @@ const BulkEditDialog = ({ open, onClose, selectedTransactions, onSuccess }) => {
     setCustomFields(updated);
   };
 
+  const hasChanges = Boolean(
+    category || notes || labelIds.length || duplicateFlag !== '' || Object.keys(customFields).length > 0
+  );
+
   const handleBulkEdit = async () => {
+    setSaving(true);
     try {
       const updates = {};
-      
+
       if (category) updates.category = category;
       if (notes) updates.notes = notes;
+      if (duplicateFlag !== '') updates.is_duplicate = duplicateFlag === 'true';
       if (Object.keys(customFields).length > 0) updates.custom_fields = customFields;
 
-      await api.post('/api/transactions/bulk-edit', {
-        transaction_ids: selectedTransactions.map(t => t.id),
-        updates
-      });
+      const transactionIds = selectedTransactions.map(t => t.id);
+
+      if (Object.keys(updates).length > 0) {
+        await api.post('/api/transactions/bulk-edit', {
+          transaction_ids: transactionIds,
+          updates
+        });
+      }
+
+      // Labels are additive (there's no bulk "replace the label set" endpoint,
+      // same as the single-transaction Manage Labels dialog) -- one bulk-label
+      // call per selected label, applied to every selected transaction.
+      if (labelIds.length) {
+        await Promise.all(
+          labelIds.map((labelId) =>
+            bulkLabelTransactions({ transaction_ids: transactionIds, label_id: labelId })
+          )
+        );
+      }
 
       onSuccess && onSuccess();
       onClose();
     } catch (error) {
       console.error('Error bulk editing transactions:', error);
       alert('Failed to update transactions');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -68,13 +107,50 @@ const BulkEditDialog = ({ open, onClose, selectedTransactions, onSuccess }) => {
       </DialogTitle>
       <DialogContent>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-          <TextField
-            label="Category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            fullWidth
-            placeholder="Leave empty to keep existing"
-          />
+          <FormControl fullWidth>
+            <InputLabel>Category</InputLabel>
+            <Select
+              displayEmpty
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              label="Category"
+              renderValue={(val) => val || 'Leave empty to keep existing'}
+            >
+              <MenuItem value=""><em>Leave empty to keep existing</em></MenuItem>
+              {categories.map((c) => (
+                <MenuItem key={c.id} value={c.name}>{c.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth>
+            <InputLabel>Add Labels</InputLabel>
+            <Select
+              multiple
+              value={labelIds}
+              onChange={(e) => setLabelIds(e.target.value)}
+              label="Add Labels"
+              renderValue={(selected) => selected.map((id) => labels.find((l) => l.id === id)?.name || id).join(', ')}
+            >
+              {labels.map((label) => (
+                <MenuItem key={label.id} value={label.id}>{label.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth>
+            <InputLabel>Duplicate Flag</InputLabel>
+            <Select
+              displayEmpty
+              value={duplicateFlag}
+              onChange={(e) => setDuplicateFlag(e.target.value)}
+              label="Duplicate Flag"
+            >
+              <MenuItem value=""><em>Leave unchanged</em></MenuItem>
+              <MenuItem value="true">Mark as duplicate</MenuItem>
+              <MenuItem value="false">Unmark as duplicate</MenuItem>
+            </Select>
+          </FormControl>
 
           <TextField
             label="Notes"
@@ -128,9 +204,9 @@ const BulkEditDialog = ({ open, onClose, selectedTransactions, onSuccess }) => {
         <Button
           onClick={handleBulkEdit}
           variant="contained"
-          disabled={!category && !notes && Object.keys(customFields).length === 0}
+          disabled={!hasChanges || saving}
         >
-          Update All
+          {saving ? 'Updating…' : 'Update All'}
         </Button>
       </DialogActions>
     </Dialog>

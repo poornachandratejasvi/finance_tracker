@@ -955,6 +955,8 @@ function Transactions() {
         open={bulkEditOpen}
         onClose={() => setBulkEditOpen(false)}
         selectedTransactions={selectedTransactions}
+        categories={categories}
+        labels={labels}
         onSuccess={() => {
           setSuccess('Transactions updated successfully');
           setSelectedTransactions([]);
