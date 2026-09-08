@@ -132,17 +132,29 @@ api.interceptors.response.use(
     original._retry = true;
     isRefreshing = true;
     try {
-      const { data } = await axios.post<{ access_token: string }>(
+      const { data } = await axios.post<{ access_token: string; refresh_token: string }>(
         `${api.defaults.baseURL}/api/auth/refresh`,
         { refresh_token: refreshToken }
       );
-      await setTokens(data.access_token);
+      // The server rotates the refresh token on every use (sliding window) --
+      // persisting it here is what makes "stay logged in" actually work
+      // long-term instead of the session dying when the ORIGINAL refresh
+      // token's fixed expiry eventually passes.
+      await setTokens(data.access_token, data.refresh_token);
       flushQueue(null, data.access_token);
       original.headers.Authorization = `Bearer ${data.access_token}`;
       return api(original);
     } catch (refreshError) {
       flushQueue(refreshError, null);
-      await clearSession();
+      const refreshStatus = (refreshError as AxiosError)?.response?.status;
+      // Only a genuine rejection (refresh token expired/invalid/user
+      // deactivated) means the session is actually over. A network error,
+      // timeout, or the server being briefly unreachable/5xx must NOT clear
+      // the session -- the refresh token itself is still perfectly valid and
+      // the next attempt (or app relaunch) should just work.
+      if (refreshStatus === 401 || refreshStatus === 403) {
+        await clearSession();
+      }
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;

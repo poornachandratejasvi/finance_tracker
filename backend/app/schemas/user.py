@@ -38,11 +38,6 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
-class AccessToken(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
 class RefreshRequest(BaseModel):
     refresh_token: str
 

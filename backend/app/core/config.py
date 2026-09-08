@@ -33,7 +33,11 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    # Re-issued (sliding window) on every successful /api/auth/refresh -- see
+    # refresh_access_token() -- so any user who opens the app at least once
+    # within this window never actually hits the wall and stays logged in
+    # indefinitely under normal use.
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 90
     # Key used to encrypt sensitive data at rest (OAuth tokens, bank passwords).
     # Falls back to SECRET_KEY when left blank. Set explicitly to rotate independently.
     ENCRYPTION_KEY: str = ""

@@ -72,13 +72,25 @@ api.interceptors.response.use(
         refresh_token: refreshToken,
       });
       localStorage.setItem('access_token', data.access_token);
+      // The server rotates the refresh token on every use (sliding window) --
+      // persisting it is what keeps the session alive indefinitely under
+      // normal use instead of dying when the ORIGINAL refresh token's fixed
+      // expiry eventually passes.
+      localStorage.setItem('refresh_token', data.refresh_token);
       api.defaults.headers.common.Authorization = `Bearer ${data.access_token}`;
       processQueue(null, data.access_token);
       originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
       return api(originalRequest);
     } catch (refreshError) {
       processQueue(refreshError, null);
-      logoutAndRedirect();
+      // Only a genuine rejection (refresh token expired/invalid/user
+      // deactivated) means the session is actually over -- a network error,
+      // timeout, or the server being briefly unreachable/5xx must NOT log the
+      // user out, since the refresh token itself is still perfectly valid.
+      const refreshStatus = refreshError?.response?.status;
+      if (refreshStatus === 401 || refreshStatus === 403) {
+        logoutAndRedirect();
+      }
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;

@@ -15,7 +15,7 @@ from app.core.security import (
 from app.core.config import settings
 from app.core.rate_limit import is_rate_limited
 from app.models.models import User, UserRole
-from app.schemas.user import Token, AccessToken, RefreshRequest, LoginRequest, UserCreate, UserResponse
+from app.schemas.user import Token, RefreshRequest, LoginRequest, UserCreate, UserResponse
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -173,12 +173,15 @@ def login(
     }
 
 
-@router.post("/refresh", response_model=AccessToken)
+@router.post("/refresh", response_model=Token)
 def refresh_access_token(
     payload: RefreshRequest,
     db: Session = Depends(get_db)
 ):
-    """Exchange a valid refresh token for a new access token."""
+    """Exchange a valid refresh token for a new access token AND a new refresh
+    token (sliding window) -- every successful refresh pushes the refresh
+    token's expiry another REFRESH_TOKEN_EXPIRE_DAYS out, so a user who opens
+    the app at least once per window never actually gets logged out."""
     token_data = verify_token(payload.refresh_token, expected_type="refresh")
     user_id = token_data.get("sub")
     if user_id is None:
@@ -195,7 +198,8 @@ def refresh_access_token(
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
-    return {"access_token": access_token, "token_type": "bearer"}
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
 
 def get_current_user(

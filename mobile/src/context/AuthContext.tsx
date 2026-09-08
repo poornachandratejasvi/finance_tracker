@@ -44,17 +44,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           registerForPushNotificationsAsync();
           loadDisplayPrefs();
         } catch (err: any) {
-          if (!err?.response) {
-            // No server response at all -- offline/unreachable, not a rejected
-            // token. Fall back to the last-known profile so a no-internet launch
-            // still lands in the app (cached data) instead of forcing a login
-            // screen the user can't actually complete without connectivity.
+          if (err?.response?.status === 401 || err?.response?.status === 403) {
+            // The token (or its refresh, transparently attempted by the
+            // interceptor) was genuinely rejected -- logging out is correct.
+            setUser(null);
+          } else {
+            // No response at all (offline/unreachable), or a non-auth error
+            // (500, 429, a flaky connection mid-refresh, ...) -- none of these
+            // mean the session is actually invalid. Fall back to the
+            // last-known profile so a rough network moment never forces a
+            // login screen the user can't even complete without connectivity.
             const cached = await getCachedUser<User>();
             setUser(cached);
-          } else {
-            // A real response came back (401/403) -- the token is genuinely
-            // invalid/revoked, so logging out is correct here.
-            setUser(null);
           }
         }
       }
