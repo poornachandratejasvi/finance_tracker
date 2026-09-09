@@ -10,7 +10,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.poornachandratejasvi.financetracker",
       "buildNumber": "1.1.9",
-      "appleTeamId": "PLACEHOLDER_TEAM_ID",
+      "appleTeamId": "3QGTY2R458",
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.poornachandratejasvi.financetracker"
