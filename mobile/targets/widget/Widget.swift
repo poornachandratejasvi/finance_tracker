@@ -45,6 +45,22 @@ struct BalanceProvider: TimelineProvider {
     }
 }
 
+// WidgetKit requires a container background on iOS 17+ (StaticConfiguration
+// widgets get a warning/black box without it there), but .containerBackground
+// itself doesn't exist pre-17 -- and this extension's deployment target is
+// 16.4 (see expo-target.config.js's comment on why it can't be lower). Gate
+// it so the widget still compiles and looks fine on 16.x (plain .background()).
+private extension View {
+    @ViewBuilder
+    func widgetBackground() -> some View {
+        if #available(iOS 17.0, *) {
+            self.containerBackground(.fill.tertiary, for: .widget)
+        } else {
+            self.background()
+        }
+    }
+}
+
 struct BalanceWidgetEntryView: View {
     var entry: BalanceEntry
 
@@ -75,7 +91,7 @@ struct BalanceWidgetEntryView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .containerBackground(.fill.tertiary, for: .widget)
+        .widgetBackground()
     }
 
     private func formatted(_ value: Double) -> String {
