@@ -109,7 +109,7 @@ const makeStyles = (c: ThemeColors) =>
     title: { fontSize: 15, fontWeight: "700", color: c.text, padding: 16, paddingBottom: 8 },
     list: { paddingHorizontal: 16, flexGrow: 1 },
     empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 10 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 10 , ...c.cardShadow },
     description: { fontSize: 14, fontWeight: "600", color: c.text },
     meta: { fontSize: 12, color: c.textSecondary, marginTop: 4 },
     closeButton: { margin: 16, borderWidth: 1, borderColor: c.inputBorder, borderRadius: 8, paddingVertical: 14, alignItems: "center" },

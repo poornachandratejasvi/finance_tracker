@@ -239,7 +239,7 @@ const makeStyles = (c: ThemeColors) =>
       backgroundColor: c.card,
     },
     pickButtonText: { color: c.primary, fontWeight: "600", fontSize: 14 },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginTop: 16 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginTop: 16 , ...c.cardShadow },
     sectionTitle: { fontSize: 14, fontWeight: "700", color: c.text, marginBottom: 12 },
     mappingBlock: { marginBottom: 14 },
     mappingLabel: { fontSize: 12, fontWeight: "600", color: c.text, marginBottom: 6 },

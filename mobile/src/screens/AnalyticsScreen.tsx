@@ -28,7 +28,7 @@ import { RootStackParamList, MetricKey } from "../navigation/RootNavigator";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const CHART_HEIGHT = 110;
+const CHART_HEIGHT = 160;
 
 function monthStart(offsetMonths: number): Date {
   const d = new Date();
@@ -494,7 +494,7 @@ const makeStyles = (c: ThemeColors) =>
       borderRadius: 12, borderLeftWidth: 3, padding: 14, marginBottom: 16,
     },
     summaryText: { flex: 1, fontSize: 14, fontWeight: "600", color: c.text, lineHeight: 20 },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 16, marginBottom: 14 },
+    card: { backgroundColor: c.card, borderRadius: 18, padding: 16, marginBottom: 14, ...c.cardShadow },
     sectionTitle: { fontSize: 15, fontWeight: "700", marginBottom: 10, color: c.text },
     row: { flexDirection: "row", marginBottom: 8 },
     donutRow: { alignItems: "center", marginBottom: 12 },
@@ -512,7 +512,7 @@ const makeStyles = (c: ThemeColors) =>
     categoryBarFill: { height: 5, borderRadius: 3 },
     categoryPct: { fontSize: 11, color: c.textSecondary, fontWeight: "700", marginLeft: 10, width: 32, textAlign: "right" },
     metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 },
-    metricCard: { width: "47%", backgroundColor: c.card, borderRadius: 12, padding: 12 },
+    metricCard: { width: "47%", backgroundColor: c.card, borderRadius: 16, padding: 12, ...c.cardShadow },
     metricTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
     metricLabel: { fontSize: 11, color: c.textSecondary, textTransform: "uppercase", fontWeight: "600", flexShrink: 1 },
     metricIcon: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center" },

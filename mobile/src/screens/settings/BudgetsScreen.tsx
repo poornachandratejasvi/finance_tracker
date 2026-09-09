@@ -230,7 +230,7 @@ const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
     container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 14 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 14 , ...c.cardShadow },
     sectionTitle: { fontSize: 15, fontWeight: "700", color: c.text, marginBottom: 10 },
     statusRow: { marginBottom: 16 },
     statusHeader: { flexDirection: "row", alignItems: "center", marginBottom: 6 },

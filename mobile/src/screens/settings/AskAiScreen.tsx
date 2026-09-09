@@ -132,7 +132,7 @@ const makeStyles = (c: ThemeColors) =>
     bubble: { borderRadius: 12, padding: 12, marginBottom: 6 },
     questionBubble: { backgroundColor: c.primary, alignSelf: "flex-end", maxWidth: "85%" },
     questionText: { color: "#fff", fontSize: 14 },
-    answerBubble: { backgroundColor: c.card, alignSelf: "flex-start", maxWidth: "90%" },
+    answerBubble: { backgroundColor: c.card, alignSelf: "flex-start", maxWidth: "90%" , ...c.cardShadow },
     answerText: { color: c.text, fontSize: 14, lineHeight: 20 },
     configureLink: { color: c.warning, fontSize: 12, fontWeight: "600", marginTop: 8 },
     composer: {

@@ -122,7 +122,7 @@ const makeStyles = (c: ThemeColors) =>
     empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
     expiringBanner: { backgroundColor: c.chipBg, borderRadius: 10, padding: 12, marginBottom: 12 },
     expiringText: { color: c.warning, fontSize: 12, fontWeight: "600" },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 12 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 12 , ...c.cardShadow },
     name: { fontSize: 15, fontWeight: "700", color: c.text },
     meta: { fontSize: 12, color: c.textSecondary, marginTop: 2 },
     policyRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },

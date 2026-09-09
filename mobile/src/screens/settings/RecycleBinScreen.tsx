@@ -145,7 +145,7 @@ const makeStyles = (c: ThemeColors) =>
     hint: { fontSize: 12, color: c.textSecondary, padding: 16, paddingBottom: 0 },
     list: { padding: 16, flexGrow: 1 },
     empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 12 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 12 , ...c.cardShadow },
     cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
     description: { flex: 1, fontSize: 14, fontWeight: "600", color: c.text, marginRight: 8 },
     amount: { fontSize: 14, fontWeight: "700" },

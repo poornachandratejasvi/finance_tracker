@@ -116,7 +116,7 @@ const makeStyles = (c: ThemeColors) =>
       padding: 24, alignItems: "center",
     },
     emptyText: { color: c.textSecondary },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 12 },
+    card: { backgroundColor: c.card, borderRadius: 16, padding: 14, marginBottom: 12, ...c.cardShadow },
     cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
     cardTitle: { fontSize: 14, fontWeight: "700", color: c.text },
     controlText: { fontSize: 15, color: c.text, fontWeight: "700" },

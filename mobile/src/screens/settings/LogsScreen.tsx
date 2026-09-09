@@ -95,7 +95,7 @@ const makeStyles = (c: ThemeColors) =>
     center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
     container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
     statsRow: { flexDirection: "row", gap: 12, marginBottom: 20 },
-    stat: { flex: 1, backgroundColor: c.card, borderRadius: 10, padding: 12, alignItems: "center" },
+    stat: { flex: 1, backgroundColor: c.card, borderRadius: 10, padding: 12, alignItems: "center" , ...c.cardShadow },
     statValue: { fontSize: 18, fontWeight: "700", color: c.text },
     statLabel: { fontSize: 11, color: c.textSecondary, marginTop: 2 },
     section: { fontSize: 14, fontWeight: "700", marginBottom: 8, color: c.text },

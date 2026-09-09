@@ -502,7 +502,7 @@ const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
     container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 14 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 14 , ...c.cardShadow },
     sectionTitle: { fontSize: 15, fontWeight: "700", color: c.text },
     label: { fontSize: 13, fontWeight: "600", color: c.text, marginTop: 12, marginBottom: 6 },
     input: {
@@ -558,7 +558,7 @@ const makeStyles = (c: ThemeColors) =>
     },
     actionLink: { color: c.primary, fontWeight: "600", fontSize: 12 },
     modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 },
-    modalCard: { backgroundColor: c.card, borderRadius: 12, padding: 20 },
+    modalCard: { backgroundColor: c.card, borderRadius: 12, padding: 20 , ...c.cardShadow },
     modalTitle: { fontSize: 15, fontWeight: "700", marginBottom: 12, color: c.text },
     modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 16, marginTop: 18, alignItems: "center" },
     modalCancel: { color: c.textSecondary, fontWeight: "600" },

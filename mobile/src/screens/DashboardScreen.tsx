@@ -7,7 +7,9 @@ import {
   Text,
   View,
 } from "react-native";
-import Animated, { FadeInRight } from "react-native-reanimated";
+import Animated, { FadeIn, FadeInRight } from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 
 import { fetchDashboardSummary } from "../api/dashboard";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
@@ -88,6 +90,39 @@ export default function DashboardScreen() {
     >
       {error && <Text style={styles.error}>{error}</Text>}
 
+      {summary && (
+        <Animated.View entering={FadeIn.duration(400)}>
+          <LinearGradient
+            colors={colors.heroGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={[styles.heroCard, colors.cardShadow]}
+          >
+            <Text style={styles.heroLabel}>Available balance</Text>
+            <Text style={styles.heroValue} numberOfLines={1} adjustsFontSizeToFit>
+              {formatCurrency(summary.balances.savings_total - summary.balances.credit_total)}
+            </Text>
+            <View style={styles.heroStatsRow}>
+              <View style={styles.heroStat}>
+                <View style={styles.heroStatTop}>
+                  <Ionicons name="arrow-down-circle" size={14} color="#bdf5da" />
+                  <Text style={styles.heroStatLabel}>Income</Text>
+                </View>
+                <Text style={styles.heroStatValue}>{formatCurrency(summary.total_credit)}</Text>
+              </View>
+              <View style={styles.heroDivider} />
+              <View style={styles.heroStat}>
+                <View style={styles.heroStatTop}>
+                  <Ionicons name="arrow-up-circle" size={14} color="#ffd7d0" />
+                  <Text style={styles.heroStatLabel}>Expense</Text>
+                </View>
+                <Text style={styles.heroStatValue}>{formatCurrency(summary.total_debit)}</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </Animated.View>
+      )}
+
       {summary && summary.balances.banks.length > 0 && (
         <ScrollView
           horizontal
@@ -125,6 +160,15 @@ const makeStyles = (c: ThemeColors) =>
     center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
     container: { padding: 16, paddingBottom: 32, backgroundColor: c.background },
     error: { color: c.danger, marginBottom: 12 },
+    heroCard: { borderRadius: 24, padding: 20, marginBottom: 16 },
+    heroLabel: { color: "rgba(255,255,255,0.8)", fontSize: 13, fontWeight: "600", marginBottom: 6 },
+    heroValue: { color: "#ffffff", fontSize: 36, fontWeight: "800", marginBottom: 18 },
+    heroStatsRow: { flexDirection: "row", alignItems: "center" },
+    heroStat: { flex: 1 },
+    heroStatTop: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 3 },
+    heroStatLabel: { color: "rgba(255,255,255,0.75)", fontSize: 12, fontWeight: "600" },
+    heroStatValue: { color: "#ffffff", fontSize: 16, fontWeight: "700" },
+    heroDivider: { width: 1, height: 28, backgroundColor: "rgba(255,255,255,0.25)", marginHorizontal: 16 },
     // Fixed height + flexGrow/flexShrink:0 on the row, alignItems on its content --
     // same fix as the transactions range-chip row: without these, a horizontal
     // ScrollView's children can stretch to fill all available vertical space
@@ -136,6 +180,7 @@ const makeStyles = (c: ThemeColors) =>
       backgroundColor: c.card,
       borderRadius: 16,
       padding: 14,
+      ...c.cardShadow,
     },
     accountIcon: {
       width: 34,

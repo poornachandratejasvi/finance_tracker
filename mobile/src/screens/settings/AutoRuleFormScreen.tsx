@@ -295,7 +295,7 @@ const makeStyles = (c: ThemeColors) =>
     chipActive: { backgroundColor: c.primary },
     chipText: { color: c.text, fontSize: 13, textTransform: "capitalize" },
     chipTextActive: { color: "#fff", fontWeight: "600" },
-    keywordCard: { backgroundColor: c.card, borderRadius: 12, padding: 14 },
+    keywordCard: { backgroundColor: c.card, borderRadius: 12, padding: 14 , ...c.cardShadow },
     labelWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
     keywordChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: c.chipBg, marginBottom: 4 },
     keywordChipText: { color: c.text, fontSize: 13, fontWeight: "600" },

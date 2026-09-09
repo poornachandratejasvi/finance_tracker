@@ -15,6 +15,17 @@ export interface ThemeColors {
   inputBg: string;
   inputBorder: string;
   statusBarStyle: "light" | "dark";
+  // Diagonal gradient for hero/summary cards (Dashboard balance, Analytics
+  // top card) -- on-brand (derived from `primary`), but deep-to-vivid so
+  // white text stays readable across the whole card, not a flat fill.
+  heroGradient: [string, string];
+  cardShadow: {
+    shadowColor: string;
+    shadowOpacity: number;
+    shadowRadius: number;
+    shadowOffset: { width: number; height: number };
+    elevation: number;
+  };
 }
 
 const LIGHT: ThemeColors = {
@@ -30,6 +41,14 @@ const LIGHT: ThemeColors = {
   inputBg: "#ffffff",
   inputBorder: "#cccccc",
   statusBarStyle: "dark",
+  heroGradient: ["#0f5132", "#22a06b"],
+  cardShadow: {
+    shadowColor: "#0f2e20",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
 };
 
 const DARK: ThemeColors = {
@@ -45,6 +64,14 @@ const DARK: ThemeColors = {
   inputBg: "#1c1c1e",
   inputBorder: "#444444",
   statusBarStyle: "light",
+  heroGradient: ["#0b3d2c", "#178a5c"],
+  cardShadow: {
+    shadowColor: "#000000",
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
 };
 
 export type ThemeMode = "system" | "light" | "dark";

@@ -175,7 +175,7 @@ const makeStyles = (c: ThemeColors) =>
     container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
     hint: { fontSize: 12, color: c.textSecondary, marginBottom: 16 },
     empty: { color: c.textSecondary, textAlign: "center", marginTop: 20 },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 14 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 14 , ...c.cardShadow },
     cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
     email: { fontSize: 15, fontWeight: "700", flexShrink: 1, color: c.text },
     status: { fontSize: 12, fontWeight: "700", textTransform: "capitalize" },

@@ -127,7 +127,7 @@ const makeStyles = (c: ThemeColors) =>
     center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
     list: { padding: 16, flexGrow: 1 },
     empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 12 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 12 , ...c.cardShadow },
     rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
     name: { fontSize: 15, fontWeight: "700", color: c.text, flex: 1 },
     meta: { fontSize: 12, color: c.textSecondary, marginTop: 4 },

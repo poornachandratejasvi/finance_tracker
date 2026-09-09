@@ -196,7 +196,7 @@ const makeStyles = (c: ThemeColors) =>
       alignItems: "center",
     },
     smallButtonOutlineText: { color: c.danger, fontWeight: "600", fontSize: 13 },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 14 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 14, marginBottom: 14 , ...c.cardShadow },
     sectionTitle: { fontSize: 15, fontWeight: "700", color: c.text, marginBottom: 10 },
     empty: { color: c.textSecondary, textAlign: "center", marginTop: 8 },
     jobRow: { marginBottom: 12 },

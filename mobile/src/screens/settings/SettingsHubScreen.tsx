@@ -153,6 +153,7 @@ const makeStyles = (c: ThemeColors) =>
       backgroundColor: c.card,
       borderRadius: 12,
       overflow: "hidden",
+      ...c.cardShadow,
     },
     row: {
       flexDirection: "row",

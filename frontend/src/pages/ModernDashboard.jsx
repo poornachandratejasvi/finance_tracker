@@ -165,6 +165,17 @@ const dateTick = (gran) => (d) => {
 const ModernDashboard = () => {
   const theme = useTheme();
   const { getMeta: getCategoryMeta } = useCategoryMeta();
+  // Every content card on this page used Paper variant="outlined" -- a flat
+  // border with zero shadow, MUI's plainest look, and the reason the page felt
+  // flat next to the gradient hero cards. MuiCard already gets a nice soft
+  // shadow globally (see ThemeContext.js), so reuse those exact values here
+  // instead of introducing a third look.
+  const cardSx = {
+    border: 'none',
+    boxShadow: theme.palette.mode === 'light'
+      ? '0 1px 2px rgba(16,24,40,0.04), 0 8px 24px rgba(16,24,40,0.06)'
+      : '0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35)',
+  };
 
   // Reference data (loaded once).
   const [banks, setBanks] = useState([]);
@@ -530,8 +541,8 @@ const ModernDashboard = () => {
       const gradTo = alpha(valueColor, 0);
       return (
         <Paper
-          variant="outlined"
           sx={{
+            ...cardSx,
             p: 2.75, flex: '1 1 230px', minWidth: 230, borderRadius: 4,
             position: 'relative', overflow: 'hidden',
             backgroundImage: `linear-gradient(135deg, ${gradFrom}, ${gradTo} 65%)`,
@@ -717,7 +728,7 @@ const ModernDashboard = () => {
       const data = otherTotal > 0 ? [...shown, { name: 'Other', value: otherTotal, color: theme.palette.grey[500] }] : shown;
       const total = data.reduce((s, d) => s + d.value, 0);
       return (
-        <Paper variant="outlined" sx={{ p: 3, borderRadius: 4, mb: 2.5 }}>
+        <Paper sx={{ ...cardSx, p: 3, borderRadius: 4, mb: 2.5 }}>
           <Box display="flex" alignItems="center" gap={1} mb={2}>
             <DonutLarge color="primary" />
             <Box>
@@ -810,14 +821,16 @@ const ModernDashboard = () => {
     return (
       <Box>
         <Box display="flex" gap={2} flexWrap="wrap" mb={3}>
-          <Paper variant="outlined" sx={{
+          <Paper sx={{
+            ...cardSx,
             p: 2.75, flex: '1 1 260px', minWidth: 260, borderRadius: 4,
             backgroundImage: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.22 : 0.14)}, ${alpha(theme.palette.primary.main, 0)} 65%)`,
           }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 800, fontSize: 11.5 }}>Ending Balance</Typography>
             <Typography variant="h4" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', mt: 0.5 }}>{money(balance.ending_balance || 0)}</Typography>
           </Paper>
-          <Paper variant="outlined" sx={{
+          <Paper sx={{
+            ...cardSx,
             p: 2.75, flex: '1 1 260px', minWidth: 260, borderRadius: 4,
             backgroundImage: `linear-gradient(135deg, ${alpha(up ? theme.palette.success.main : theme.palette.error.main, theme.palette.mode === 'dark' ? 0.22 : 0.14)}, transparent 65%)`,
           }}>
@@ -1044,8 +1057,8 @@ const ModernDashboard = () => {
       <Box>
         {/* Forecast hero card */}
         <Paper
-          variant="outlined"
           sx={{
+            ...cardSx,
             p: 2.75, mb: 3, borderRadius: 4, position: 'relative', overflow: 'hidden',
             backgroundImage: `linear-gradient(135deg, ${forecastGradFrom}, ${alpha(forecastColor, 0)} 65%)`,
           }}
@@ -1087,7 +1100,7 @@ const ModernDashboard = () => {
         </Paper>
 
         {/* Trending categories */}
-        <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, mb: 3, borderRadius: 3 }}>
+        <Paper sx={{ ...cardSx, p: { xs: 2, md: 2.5 }, mb: 3, borderRadius: 3 }}>
           <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>Trending categories (last 6 months)</Typography>
           {topMovers.length === 0 ? (
             <Typography variant="body2" color="text.secondary">Not enough history yet to spot a trend.</Typography>
@@ -1119,7 +1132,7 @@ const ModernDashboard = () => {
         </Paper>
 
         {/* Day-of-week spending pattern */}
-        <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, borderRadius: 3 }}>
+        <Paper sx={{ ...cardSx, p: { xs: 2, md: 2.5 }, borderRadius: 3 }}>
           <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>Spending by day of week (last 180 days)</Typography>
           {insightsPatterns.busiest_day && (
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -1164,7 +1177,7 @@ const ModernDashboard = () => {
       <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start', flexDirection: { xs: 'column', md: 'row' }, p: { xs: 2, md: 3 } }}>
       {/* LEFT: My filter + FilterSidebar */}
       <Box sx={{ width: { xs: '100%', md: 'auto' }, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+        <Paper sx={{ ...cardSx, p: 2, borderRadius: 2 }}>
           <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>My filter</Typography>
           <FormControl size="small" fullWidth sx={{ mb: 1 }}>
             <InputLabel>Saved filters</InputLabel>
@@ -1209,7 +1222,7 @@ const ModernDashboard = () => {
 
       {/* RIGHT: period selector + tabs + content */}
       <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
-        <Paper variant="outlined" sx={{ p: 1.5, mb: 2, borderRadius: 2 }}>
+        <Paper sx={{ ...cardSx, p: 1.5, mb: 2, borderRadius: 2 }}>
           <MonthPager period={period} onChange={setPeriod} />
           <Tabs
             value={tab}
@@ -1224,7 +1237,7 @@ const ModernDashboard = () => {
 
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
-        <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 }, borderRadius: 2, minHeight: 400 }}>
+        <Paper sx={{ ...cardSx, p: { xs: 2, md: 3 }, borderRadius: 2, minHeight: 400 }}>
           {tab === 0 && (
             <Box display="flex" justifyContent="flex-end" mb={1}>
               <MuiTooltip title="Report options">

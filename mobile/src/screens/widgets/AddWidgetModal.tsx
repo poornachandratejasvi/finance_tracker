@@ -42,7 +42,7 @@ export default function AddWidgetModal({
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 20 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 20 , ...c.cardShadow },
     title: { fontSize: 15, fontWeight: "700", color: c.text, marginBottom: 12 },
     row: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
     rowTitle: { fontSize: 14, fontWeight: "600", color: c.text },

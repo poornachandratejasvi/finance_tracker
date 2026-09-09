@@ -164,7 +164,7 @@ const makeStyles = (c: ThemeColors) =>
     empty: { color: c.textSecondary, textAlign: "center", marginTop: 40 },
     sectionHeader: { backgroundColor: c.background, paddingVertical: 8 },
     sectionHeaderText: { fontSize: 12, fontWeight: "700", color: c.textSecondary, textTransform: "uppercase" },
-    row: { flexDirection: "row", alignItems: "center", backgroundColor: c.card, borderRadius: 10, padding: 12, marginBottom: 8 },
+    row: { flexDirection: "row", alignItems: "center", backgroundColor: c.card, borderRadius: 10, padding: 12, marginBottom: 8 , ...c.cardShadow },
     iconCircle: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
     itemTitle: { fontSize: 14, fontWeight: "600", color: c.text },
     itemSubtitle: { fontSize: 12, color: c.textSecondary, marginTop: 2 },

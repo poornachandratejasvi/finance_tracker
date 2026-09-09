@@ -206,7 +206,7 @@ const makeStyles = (c: ThemeColors) =>
     },
     addButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
     modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 },
-    modalCard: { backgroundColor: c.card, borderRadius: 12, padding: 20 },
+    modalCard: { backgroundColor: c.card, borderRadius: 12, padding: 20 , ...c.cardShadow },
     modalTitle: { fontSize: 16, fontWeight: "700", marginBottom: 12, color: c.text },
     input: {
       borderWidth: 1,

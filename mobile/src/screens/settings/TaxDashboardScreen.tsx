@@ -240,7 +240,7 @@ const makeStyles = (c: ThemeColors) =>
     headerRow: { marginBottom: 8 },
     seniorRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
     seniorLabel: { fontSize: 13, color: c.text, flex: 1, marginRight: 8 },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 16, marginBottom: 16 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 16, marginBottom: 16 , ...c.cardShadow },
     rowTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 },
     sectionTitle: { fontSize: 15, fontWeight: "700", color: c.text, marginBottom: 4 },
     bigValue: { fontSize: 22, fontWeight: "800", color: c.text },

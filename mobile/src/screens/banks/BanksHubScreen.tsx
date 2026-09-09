@@ -68,7 +68,7 @@ export default function BanksHubScreen({ navigation }: Props) {
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     container: { padding: 16, paddingBottom: 48, backgroundColor: c.background },
-    list: { backgroundColor: c.card, borderRadius: 12, overflow: "hidden" },
+    list: { backgroundColor: c.card, borderRadius: 12, overflow: "hidden" , ...c.cardShadow },
     row: {
       flexDirection: "row",
       alignItems: "center",

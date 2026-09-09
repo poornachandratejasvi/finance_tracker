@@ -234,7 +234,7 @@ const makeStyles = (c: ThemeColors) =>
     actions: { flexDirection: "row", gap: 12 },
     actionLink: { color: c.primary, fontWeight: "600", fontSize: 12 },
     modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 24 },
-    modalCard: { backgroundColor: c.card, borderRadius: 12, padding: 20 },
+    modalCard: { backgroundColor: c.card, borderRadius: 12, padding: 20 , ...c.cardShadow },
     modalTitle: { fontSize: 15, fontWeight: "700", marginBottom: 12, color: c.text },
     input: {
       borderWidth: 1,

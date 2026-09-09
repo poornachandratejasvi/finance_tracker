@@ -222,7 +222,7 @@ const makeStyles = (c: ThemeColors) =>
     container: { padding: 16, paddingBottom: 24 },
     title: { fontSize: 22, fontWeight: "700", color: c.text, marginBottom: 4 },
     hint: { fontSize: 13, color: c.textSecondary, marginBottom: 16 },
-    card: { backgroundColor: c.card, borderRadius: 12, padding: 16, marginBottom: 14 },
+    card: { backgroundColor: c.card, borderRadius: 12, padding: 16, marginBottom: 14 , ...c.cardShadow },
     headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
     meta: { fontSize: 12, color: c.textSecondary },
     bigValue: { fontSize: 26, fontWeight: "700", color: c.text, marginTop: 4 },
