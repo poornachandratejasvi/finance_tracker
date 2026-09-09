@@ -225,6 +225,39 @@ def _standard_chartered(sender, subject, body, received_date=None):
     return None
 
 
+def _pluxee(sender, subject, body, received_date=None):
+    # Pluxee (meal/benefits prepaid card) payment confirmation. Only the
+    # "payment made" template is covered -- no sample of a reload/credit alert
+    # has been seen yet, so one isn't guessed at here (per this module's own
+    # convention: an unmatched template degrades to None, not a wrong guess).
+    # The body has no year in its date line ("13:12,9 Sep"), so the email's own
+    # received_date supplies it -- same fallback idea as _standard_chartered's
+    # no-date template, just for the year component only.
+    m = re.search(
+        r"made a payment of\s*₹\s*([\d,]+\.\d{2})\s+at\s+(.+?)\s*\.\s+Please call",
+        body,
+    )
+    if not m:
+        return None
+    amount, merchant = m.group(1), m.group(2).strip()
+    year = received_date.year if received_date else datetime.now().year
+    date_match = re.search(r"(\d{1,2}:\d{2}),\s*(\d{1,2})\s+(\w{3})\b", body)
+    transaction_date = None
+    if date_match:
+        time_str, day, mon = date_match.groups()
+        transaction_date = _parse_date(f"{day} {mon} {year}", time_str)
+    if transaction_date is None and received_date:
+        transaction_date = received_date.replace(tzinfo=None)
+    card_match = re.search(r"\d{6}-x+-(\d{4})", body, re.IGNORECASE)
+    return {
+        "amount": _amount(amount),
+        "transaction_type": "debit",
+        "description": merchant,
+        "transaction_date": transaction_date,
+        "card_hint": card_match.group(1) if card_match else None,
+    }
+
+
 # (sender substring match, parser function) — checked in order, first match wins.
 # Sender substrings are the ACTUAL alert-sending addresses observed in the inbox,
 # which are frequently different from the statement-email sender configured on
@@ -244,6 +277,7 @@ ALERT_PARSERS = [
     ("alerts@yesbank.in", _yes_bank),
     ("hsbc@mail.hsbc.co.in", _hsbc),
     ("alerts.in@sc.com", _standard_chartered),
+    ("cardinfo@services.pluxee.in", _pluxee),
 ]
 
 
