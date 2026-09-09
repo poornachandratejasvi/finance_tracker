@@ -9,13 +9,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.poornachandratejasvi.financetracker",
-      "buildNumber": "1.1.10",
-      "appleTeamId": "3QGTY2R458",
-      "entitlements": {
-        "com.apple.security.application-groups": [
-          "group.com.poornachandratejasvi.financetracker"
-        ]
-      }
+      "buildNumber": "1.1.10"
     },
     "android": {
       "package": "com.poornachandratejasvi.financetracker",
@@ -26,14 +20,6 @@
       "versionCode": 10
     },
     "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "ios": {
-            "deploymentTarget": "16.4"
-          }
-        }
-      ],
       "./plugins/withAppIntents",
       "./plugins/withSmsReceiver",
       "expo-sharing",
@@ -59,7 +45,6 @@
           "color": "#1b6b4c"
         }
       ],
-      "@bacons/apple-targets",
       [
         "react-native-android-widget",
         {

@@ -1,24 +1,18 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import Animated, { FadeInRight } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
 
 import { fetchDashboardSummary } from "../api/dashboard";
-import { fetchCashflow } from "../api/analytics";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
 import { DashboardSummary } from "../types";
-import { formatCurrency, todayIsoDate } from "../utils/format";
-import { isLiveActivitySupported, startTodaySpendActivity, endTodaySpendActivity } from "../utils/liveActivity";
-import { syncIosWidgetData } from "../widgets/iosWidgetSync";
+import { formatCurrency } from "../utils/format";
 import DashboardWidgets from "./widgets/DashboardWidgets";
 import FloatingAddButton from "../components/FloatingAddButton";
 
@@ -46,8 +40,6 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [trackingToday, setTrackingToday] = useState(false);
-  const [togglingActivity, setTogglingActivity] = useState(false);
 
   // Only used for the account carousel now -- the "Net this period"/
   // "Balances"/"Top categories" cards this used to also feed were dropped in
@@ -60,32 +52,10 @@ export default function DashboardScreen() {
     try {
       const data = await fetchDashboardSummary();
       setSummary(data);
-      // Home-screen widget snapshot -- iOS only (Android's widget refreshes
-      // itself independently via a headless task, see widgetTaskHandler.ts).
-      const savingsTotal = data.balances.savings_total - data.balances.credit_total;
-      syncIosWidgetData(savingsTotal, data.total_debit);
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Couldn't load the dashboard.");
     }
   }, []);
-
-  const toggleTodaySpendActivity = async () => {
-    setTogglingActivity(true);
-    try {
-      if (trackingToday) {
-        endTodaySpendActivity();
-        setTrackingToday(false);
-      } else {
-        const today = todayIsoDate();
-        const cf = await fetchCashflow(today, today, "day").catch(() => null);
-        const spentToday = cf?.totals.expense ?? 0;
-        const started = startTodaySpendActivity(spentToday, "₹");
-        setTrackingToday(started);
-      }
-    } finally {
-      setTogglingActivity(false);
-    }
-  };
 
   useEffect(() => {
     (async () => {
@@ -117,27 +87,6 @@ export default function DashboardScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       {error && <Text style={styles.error}>{error}</Text>}
-
-      {Platform.OS === "ios" && (
-        <TouchableOpacity
-          style={styles.activityToggle}
-          onPress={toggleTodaySpendActivity}
-          disabled={togglingActivity}
-        >
-          <Ionicons
-            name={trackingToday ? "radio-button-on" : "radio-button-off-outline"}
-            size={18}
-            color={trackingToday ? colors.primary : colors.textSecondary}
-          />
-          <Text style={styles.activityToggleText}>
-            {togglingActivity
-              ? "Updating…"
-              : trackingToday
-                ? "Stop tracking today's spending"
-                : "Track today's spending (Live Activity)"}
-          </Text>
-        </TouchableOpacity>
-      )}
 
       {summary && summary.balances.banks.length > 0 && (
         <ScrollView
@@ -199,15 +148,4 @@ const makeStyles = (c: ThemeColors) =>
     accountIconText: { color: "#fff", fontWeight: "700", fontSize: 14 },
     accountName: { fontSize: 12, color: c.textSecondary, marginBottom: 3 },
     accountBalance: { fontSize: 17, fontWeight: "800" },
-    activityToggle: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      backgroundColor: c.card,
-      borderRadius: 10,
-      paddingVertical: 10,
-      paddingHorizontal: 12,
-      marginBottom: 16,
-    },
-    activityToggleText: { fontSize: 13, fontWeight: "600", color: c.text },
   });
