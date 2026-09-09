@@ -15,6 +15,11 @@ Pod::Spec.new do |s|
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
+  # Shared with the widget extension (see targets/widget/pods.rb) -- kept in
+  # its own dependency-free pod specifically so the extension never has to
+  # link this pod (and therefore never links ExpoModulesCore/React Native,
+  # which App Extensions cannot use).
+  s.dependency 'TodaySpendActivityKit'
 
   s.source_files = "**/*.{h,m,mm,swift,hpp,cpp}"
 end

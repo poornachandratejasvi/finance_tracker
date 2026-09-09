@@ -1,7 +1,7 @@
 import WidgetKit
 import SwiftUI
 import ActivityKit
-import FinancetrackerNative
+import TodaySpendActivityKit
 
 private let appGroup = "group.com.poornachandratejasvi.financetracker"
 
@@ -101,10 +101,14 @@ struct BalanceWidget: Widget {
 }
 
 // MARK: - Live Activity / Dynamic Island ("Track today's spending")
-// TodaySpendAttributes lives in the FinancetrackerNative pod (imported
-// above), not as a plain shared source file -- see that file's comment for
-// why ActivityKit needs the identical compiled type in both this extension
-// and the main app (FinancetrackerNativeModule.swift, same pod).
+// TodaySpendAttributes lives in the dependency-free TodaySpendActivityKit pod
+// (imported above), not as a plain shared source file and not in
+// FinancetrackerNative -- this extension must never link FinancetrackerNative,
+// since it depends on ExpoModulesCore -> React Native, which cannot run
+// inside an App Extension. See TodaySpendAttributes.swift's comment for why
+// ActivityKit needs the identical compiled type in both this extension and
+// the main app (FinancetrackerNativeModule.swift, which depends on this same
+// pod).
 
 struct TodaySpendLiveActivity: Widget {
     var body: some WidgetConfiguration {

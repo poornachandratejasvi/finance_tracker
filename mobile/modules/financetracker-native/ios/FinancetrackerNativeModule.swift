@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import ActivityKit
+import TodaySpendActivityKit
 
 // iOS side of the shared "FinancetrackerNative" module (see the Android
 // Kotlin implementation for the SMS-related functions -- those have no iOS
