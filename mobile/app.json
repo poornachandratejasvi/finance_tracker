@@ -2,14 +2,18 @@
   "expo": {
     "name": "Finance Tracker",
     "slug": "finance-tracker-mobile",
-    "version": "1.1.4",
+    "version": "1.1.3",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.poornachandratejasvi.financetracker",
-      "buildNumber": "1.1.4"
+      "buildNumber": "1.1.3",
+      "appleTeamId": "PLACEHOLDER_TEAM_ID",
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.poornachandratejasvi.financetracker"]
+      }
     },
     "android": {
       "package": "com.poornachandratejasvi.financetracker",
@@ -17,7 +21,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1b6b4c"
       },
-      "versionCode": 4
+      "versionCode": 3
     },
     "plugins": [
       [
@@ -51,6 +55,24 @@
         {
           "icon": "./assets/adaptive-icon.png",
           "color": "#1b6b4c"
+        }
+      ],
+      "@bacons/apple-targets",
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "Balance",
+              "label": "Finance Tracker Balance",
+              "description": "Your total balance and this month's spend, at a glance.",
+              "minWidth": "180dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 3,
+              "targetCellHeight": 2,
+              "updatePeriodMillis": 1800000
+            }
+          ]
         }
       ]
     ]
