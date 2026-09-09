@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
+import Animated, { FadeInRight } from "react-native-reanimated";
 
 import { fetchDashboardSummary } from "../api/dashboard";
 import { ThemeColors, useTheme } from "../context/ThemeContext";
@@ -93,8 +94,8 @@ export default function DashboardScreen() {
           style={styles.accountRow}
           contentContainerStyle={styles.accountRowContent}
         >
-          {summary.balances.banks.map((b) => (
-            <View key={b.bank_id} style={styles.accountCard}>
+          {summary.balances.banks.map((b, i) => (
+            <Animated.View key={b.bank_id} entering={FadeInRight.delay(i * 70).springify()} style={styles.accountCard}>
               <View style={[styles.accountIcon, { backgroundColor: bankTypeColor(b.bank_type) }]}>
                 <Text style={styles.accountIconText}>{(b.bank_name || "?").charAt(0).toUpperCase()}</Text>
               </View>
@@ -105,7 +106,7 @@ export default function DashboardScreen() {
               >
                 {formatCurrency(b.current_balance)}
               </Text>
-            </View>
+            </Animated.View>
           ))}
         </ScrollView>
       )}

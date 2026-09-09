@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 
 import { Ionicons } from "@expo/vector-icons";
 
@@ -135,12 +136,7 @@ export default function BudgetsScreen() {
                   <Text style={styles.statusPct}>{Math.round(b.pct)}%</Text>
                 </View>
                 <View style={styles.progressTrack}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { width: `${Math.min(100, b.pct)}%`, backgroundColor: barColor },
-                    ]}
-                  />
+                  <AnimatedProgressFill pct={Math.min(100, b.pct)} color={barColor} />
                 </View>
                 <Text style={styles.statusAmounts}>
                   {formatCurrency(b.spent)} of {formatCurrency(b.monthly_limit)}
@@ -213,6 +209,23 @@ export default function BudgetsScreen() {
   );
 }
 
+// Animates from 0 to its target width on mount/change -- a hook can't live
+// inside the .map() above (rules of hooks), hence this tiny extracted component.
+function AnimatedProgressFill({ pct, color }: { pct: number; color: string }) {
+  const width = useSharedValue(0);
+
+  useEffect(() => {
+    width.value = withTiming(pct, { duration: 700 });
+  }, [pct, width]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    width: `${width.value}%`,
+    backgroundColor: color,
+  }));
+
+  return <Animated.View style={[{ height: 8, borderRadius: 4 }, animatedStyle]} />;
+}
+
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
     center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: c.background },
@@ -226,7 +239,6 @@ const makeStyles = (c: ThemeColors) =>
     statusPct: { fontSize: 13, color: c.textSecondary, fontWeight: "700" },
     statusAmounts: { fontSize: 12, color: c.textSecondary, marginTop: 6 },
     progressTrack: { height: 8, borderRadius: 4, backgroundColor: c.chipBg, overflow: "hidden" },
-    progressFill: { height: 8, borderRadius: 4 },
     meta: { fontSize: 12, color: c.textSecondary, marginTop: 4 },
     editRow: { marginBottom: 16, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
     chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },

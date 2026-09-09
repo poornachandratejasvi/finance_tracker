@@ -7,11 +7,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
+import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
+import { BarChart, LineChart, PieChart } from "react-native-gifted-charts";
 
 import { fetchBalanceTrend, fetchCashflow, fetchComparison, fetchCategoryTrends, fetchSpendingForecast, fetchSpendingPatterns } from "../api/analytics";
 import { fetchDashboardSummary } from "../api/dashboard";
@@ -22,6 +23,7 @@ import { AnalyticsComparison, BalanceTrendResponse, CashflowResponse, Category, 
 import { categoryIconFor } from "../utils/categoryIcons";
 import { formatCurrency } from "../utils/format";
 import PeriodPager, { ResolvedPeriod } from "../components/PeriodPager";
+import ScalePressable from "../components/ScalePressable";
 import { RootStackParamList, MetricKey } from "../navigation/RootNavigator";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -149,14 +151,11 @@ export default function AnalyticsScreen() {
     );
   }
 
-  const maxCashflow =
-    cashflow?.series.reduce((m, p) => Math.max(m, p.income, p.expense), 1) || 1;
-  const maxBalance = balanceTrend?.series.reduce((m, p) => Math.max(m, Math.abs(p.balance)), 1) || 1;
-
   const topExpenses = (periodComparison?.period_a.expense_by_category || [])
     .slice()
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 6);
+  const totalTopExpenses = topExpenses.reduce((s, c) => s + c.amount, 0) || 1;
 
   const incomeA = periodComparison?.period_a.income_total ?? 0;
   const incomeB = periodComparison?.period_b.income_total ?? 0;
@@ -216,59 +215,55 @@ export default function AnalyticsScreen() {
       )}
 
       <View style={styles.metricGrid}>
-        {metrics.map((m) => (
-          <TouchableOpacity
-            key={m.key}
-            style={styles.metricCard}
-            activeOpacity={0.7}
-            onPress={() => rootNavigation.navigate("MetricDetail", { metric: m.key })}
-          >
-            <View style={styles.metricTop}>
-              <Text style={styles.metricLabel} numberOfLines={1}>{m.label}</Text>
-              <View style={[styles.metricIcon, { backgroundColor: m.color }]}>
-                <Ionicons name={m.icon} size={14} color="#fff" />
+        {metrics.map((m, i) => (
+          <Animated.View key={m.key} entering={FadeInDown.delay(i * 60).springify()} style={{ width: "47%" }}>
+            <ScalePressable
+              style={[styles.metricCard, { width: "100%" }]}
+              onPress={() => rootNavigation.navigate("MetricDetail", { metric: m.key })}
+            >
+              <View style={styles.metricTop}>
+                <Text style={styles.metricLabel} numberOfLines={1}>{m.label}</Text>
+                <View style={[styles.metricIcon, { backgroundColor: m.color }]}>
+                  <Ionicons name={m.icon} size={14} color="#fff" />
+                </View>
               </View>
-            </View>
-            <Text style={styles.metricValue} numberOfLines={1}>{m.value}</Text>
-            {m.badge && (
-              <Text style={[styles.metricBadge, { color: m.badge.startsWith("-") ? colors.danger : colors.primary }]}>
-                {m.badge} vs previous
-              </Text>
-            )}
-          </TouchableOpacity>
+              <Text style={styles.metricValue} numberOfLines={1}>{m.value}</Text>
+              {m.badge && (
+                <Text style={[styles.metricBadge, { color: m.badge.startsWith("-") ? colors.danger : colors.primary }]}>
+                  {m.badge} vs previous
+                </Text>
+              )}
+            </ScalePressable>
+          </Animated.View>
         ))}
       </View>
 
       <Text style={styles.title}>Last 6 months</Text>
 
       {cashflow && (
-        <View style={styles.card}>
+        <Animated.View entering={FadeIn.duration(400)} style={styles.card}>
           <Text style={styles.sectionTitle}>Cash flow</Text>
           <View style={styles.row}>
             <Legend label="Income" color={colors.primary} />
             <Legend label="Expense" color={colors.danger} />
           </View>
-          <View style={styles.chartRow}>
-            {cashflow.series.map((p) => (
-              <View key={p.date} style={styles.chartCol}>
-                <View style={styles.barPair}>
-                  <View
-                    style={[
-                      styles.bar,
-                      { height: (p.income / maxCashflow) * CHART_HEIGHT, backgroundColor: colors.primary },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.bar,
-                      { height: (p.expense / maxCashflow) * CHART_HEIGHT, backgroundColor: colors.danger },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.chartLabel}>{monthLabel(p.date)}</Text>
-              </View>
-            ))}
-          </View>
+          <BarChart
+            data={cashflow.series.flatMap((p) => [
+              { value: p.income, frontColor: colors.primary, spacing: 2, label: monthLabel(p.date) },
+              { value: p.expense, frontColor: colors.danger, spacing: 18 },
+            ])}
+            height={CHART_HEIGHT}
+            barWidth={14}
+            barBorderRadius={4}
+            noOfSections={3}
+            hideRules
+            hideYAxisText
+            xAxisThickness={0}
+            yAxisThickness={0}
+            xAxisLabelTextStyle={{ color: colors.textSecondary, fontSize: 10 }}
+            isAnimated
+            animationDuration={500}
+          />
           <View style={styles.totalsRow}>
             <Text style={styles.totalItem}>Income {formatCurrency(cashflow.totals.income)}</Text>
             <Text style={styles.totalItem}>Expense {formatCurrency(cashflow.totals.expense)}</Text>
@@ -278,69 +273,86 @@ export default function AnalyticsScreen() {
               Net {formatCurrency(cashflow.totals.net)}
             </Text>
           </View>
-        </View>
+        </Animated.View>
       )}
 
       {balanceTrend && (
-        <View style={styles.card}>
+        <Animated.View entering={FadeIn.duration(400).delay(80)} style={styles.card}>
           <Text style={styles.sectionTitle}>Balance trend</Text>
-          <View style={styles.chartRow}>
-            {balanceTrend.series.map((p) => (
-              <View key={p.date} style={styles.chartCol}>
-                <View style={styles.barPair}>
-                  <View
-                    style={[
-                      styles.bar,
-                      {
-                        height: Math.max(4, (Math.abs(p.balance) / maxBalance) * CHART_HEIGHT),
-                        backgroundColor: p.balance >= 0 ? colors.primary : colors.danger,
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.chartLabel}>{monthLabel(p.date)}</Text>
-              </View>
-            ))}
-          </View>
+          <LineChart
+            data={balanceTrend.series.map((p) => ({ value: p.balance, label: monthLabel(p.date) }))}
+            height={CHART_HEIGHT}
+            color={balanceTrend.ending_balance >= 0 ? colors.primary : colors.danger}
+            thickness={2.5}
+            curved
+            areaChart
+            startFillColor={balanceTrend.ending_balance >= 0 ? colors.primary : colors.danger}
+            endFillColor={colors.background}
+            startOpacity={0.3}
+            endOpacity={0.02}
+            hideDataPoints
+            hideRules
+            hideYAxisText
+            xAxisThickness={0}
+            yAxisThickness={0}
+            xAxisLabelTextStyle={{ color: colors.textSecondary, fontSize: 10 }}
+            isAnimated
+            animationDuration={600}
+          />
           <Text style={styles.meta}>
             Ending balance {formatCurrency(balanceTrend.ending_balance)} · Net change{" "}
             {formatCurrency(balanceTrend.net_change)}
           </Text>
-        </View>
+        </Animated.View>
       )}
 
       {topExpenses.length > 0 && (
-        <View style={styles.card}>
+        <Animated.View entering={FadeIn.duration(400).delay(160)} style={styles.card}>
           <Text style={styles.sectionTitle}>Top expense categories ({period?.label?.toLowerCase() || "this period"})</Text>
-          {(() => {
-            const totalTop = topExpenses.reduce((s, c) => s + c.amount, 0) || 1;
-            return topExpenses.map((c) => {
-              const meta = categories.find((cat) => cat.name === c.category);
-              const pct = Math.round((c.amount / totalTop) * 100);
-              return (
-                <View key={c.category} style={styles.categoryListRow}>
-                  <View style={[styles.categoryIcon, { backgroundColor: meta?.color || colors.primary }]}>
-                    <Ionicons name={categoryIconFor(meta?.icon)} size={14} color="#fff" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.categoryTopRow}>
-                      <Text style={styles.listLabel} numberOfLines={1}>{c.category}</Text>
-                      <Text style={styles.listValue}>{formatCurrency(c.amount)}</Text>
-                    </View>
-                    <View style={styles.categoryBarTrack}>
-                      <View style={[styles.categoryBarFill, { width: `${pct}%`, backgroundColor: meta?.color || colors.primary }]} />
-                    </View>
-                  </View>
-                  <Text style={styles.categoryPct}>{pct}%</Text>
+          <View style={styles.donutRow}>
+            <PieChart
+              data={topExpenses.map((c) => ({
+                value: c.amount,
+                color: categories.find((cat) => cat.name === c.category)?.color || colors.primary,
+              }))}
+              donut
+              radius={56}
+              innerRadius={38}
+              innerCircleColor={colors.card}
+              centerLabelComponent={() => (
+                <View style={{ alignItems: "center" }}>
+                  <Text style={styles.donutCenterValue}>{formatCurrency(totalTopExpenses)}</Text>
+                  <Text style={styles.donutCenterLabel}>total</Text>
                 </View>
-              );
-            });
-          })()}
-        </View>
+              )}
+            />
+          </View>
+          {topExpenses.map((c) => {
+            const meta = categories.find((cat) => cat.name === c.category);
+            const pct = Math.round((c.amount / totalTopExpenses) * 100);
+            return (
+              <View key={c.category} style={styles.categoryListRow}>
+                <View style={[styles.categoryIcon, { backgroundColor: meta?.color || colors.primary }]}>
+                  <Ionicons name={categoryIconFor(meta?.icon)} size={14} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.categoryTopRow}>
+                    <Text style={styles.listLabel} numberOfLines={1}>{c.category}</Text>
+                    <Text style={styles.listValue}>{formatCurrency(c.amount)}</Text>
+                  </View>
+                  <View style={styles.categoryBarTrack}>
+                    <View style={[styles.categoryBarFill, { width: `${pct}%`, backgroundColor: meta?.color || colors.primary }]} />
+                  </View>
+                </View>
+                <Text style={styles.categoryPct}>{pct}%</Text>
+              </View>
+            );
+          })}
+        </Animated.View>
       )}
 
       {spendingForecast && (
-        <View style={styles.card}>
+        <Animated.View entering={FadeIn.duration(400).delay(240)} style={styles.card}>
           <Text style={styles.sectionTitle}>Next month forecast</Text>
           <Text style={[styles.forecastValue, { color: spendingForecast.forecast_amount == null ? colors.textSecondary : colors.warning }]}>
             {spendingForecast.forecast_amount == null ? "Not enough data yet" : formatCurrency(spendingForecast.forecast_amount)}
@@ -357,18 +369,17 @@ export default function AnalyticsScreen() {
               ))}
             </View>
           )}
-        </View>
+        </Animated.View>
       )}
 
       {categoryTrends && categoryTrends.categories.some((c) => c.change_pct != null) && (
-        <View style={styles.card}>
+        <Animated.View entering={FadeIn.duration(400).delay(320)} style={styles.card}>
           <Text style={styles.sectionTitle}>Trending categories (last 6 months)</Text>
           {categoryTrends.categories
             .filter((c) => c.change_pct != null)
             .slice(0, 8)
             .map((c) => {
               const meta = categories.find((cat) => cat.name === c.category);
-              const maxMonth = Math.max(1, ...c.monthly);
               const up = (c.change_pct ?? 0) > 0;
               const trendColor = up ? colors.danger : colors.primary;
               return (
@@ -381,15 +392,28 @@ export default function AnalyticsScreen() {
                     <Text style={styles.meta}>{formatCurrency(c.total)} total</Text>
                   </View>
                   <View style={styles.trendSparkline}>
-                    {c.monthly.map((v, i) => (
-                      <View
-                        key={i}
-                        style={[
-                          styles.trendBar,
-                          { height: Math.max(2, (v / maxMonth) * 28), backgroundColor: trendColor },
-                        ]}
-                      />
-                    ))}
+                    <LineChart
+                      data={c.monthly.map((v) => ({ value: v }))}
+                      height={28}
+                      width={100}
+                      color={trendColor}
+                      thickness={2}
+                      curved
+                      areaChart
+                      startFillColor={trendColor}
+                      endFillColor={colors.card}
+                      startOpacity={0.25}
+                      endOpacity={0.02}
+                      hideDataPoints
+                      hideRules
+                      hideYAxisText
+                      hideAxesAndRules
+                      xAxisThickness={0}
+                      yAxisThickness={0}
+                      disableScroll
+                      initialSpacing={0}
+                      endSpacing={0}
+                    />
                   </View>
                   <Text style={[styles.trendPct, { color: trendColor }]}>
                     {up ? "+" : ""}{c.change_pct}%
@@ -397,38 +421,35 @@ export default function AnalyticsScreen() {
                 </View>
               );
             })}
-        </View>
+        </Animated.View>
       )}
 
       {spendingPatterns && (
-        <View style={styles.card}>
+        <Animated.View entering={FadeIn.duration(400).delay(400)} style={styles.card}>
           <Text style={styles.sectionTitle}>Spending by day of week (last 180 days)</Text>
           {spendingPatterns.busiest_day && (
             <Text style={styles.meta}>You spend the most on {spendingPatterns.busiest_day}s.</Text>
           )}
-          <View style={[styles.chartRow, { marginTop: 12 }]}>
-            {spendingPatterns.pattern.map((p) => {
-              const maxDay = Math.max(1, ...spendingPatterns.pattern.map((x) => x.total));
-              return (
-                <View key={p.day} style={styles.chartCol}>
-                  <View style={styles.barPair}>
-                    <View
-                      style={[
-                        styles.bar,
-                        {
-                          width: 16,
-                          height: Math.max(4, (p.total / maxDay) * CHART_HEIGHT),
-                          backgroundColor: p.day === spendingPatterns.busiest_day ? colors.primary : colors.chipBg,
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.chartLabel}>{p.day.slice(0, 3)}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
+          <BarChart
+            data={spendingPatterns.pattern.map((p) => ({
+              value: p.total,
+              label: p.day.slice(0, 3),
+              frontColor: p.day === spendingPatterns.busiest_day ? colors.primary : colors.chipBg,
+            }))}
+            height={CHART_HEIGHT}
+            barWidth={20}
+            spacing={18}
+            barBorderRadius={4}
+            noOfSections={3}
+            hideRules
+            hideYAxisText
+            xAxisThickness={0}
+            yAxisThickness={0}
+            xAxisLabelTextStyle={{ color: colors.textSecondary, fontSize: 10 }}
+            isAnimated
+            animationDuration={500}
+          />
+        </Animated.View>
       )}
     </ScrollView>
 
@@ -476,11 +497,9 @@ const makeStyles = (c: ThemeColors) =>
     card: { backgroundColor: c.card, borderRadius: 12, padding: 16, marginBottom: 14 },
     sectionTitle: { fontSize: 15, fontWeight: "700", marginBottom: 10, color: c.text },
     row: { flexDirection: "row", marginBottom: 8 },
-    chartRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
-    chartCol: { alignItems: "center", flex: 1 },
-    barPair: { flexDirection: "row", alignItems: "flex-end", height: CHART_HEIGHT, gap: 3 },
-    bar: { width: 10, borderRadius: 3, minHeight: 2 },
-    chartLabel: { fontSize: 10, color: c.textSecondary, marginTop: 6 },
+    donutRow: { alignItems: "center", marginBottom: 12 },
+    donutCenterValue: { fontSize: 13, fontWeight: "800", color: c.text },
+    donutCenterLabel: { fontSize: 10, color: c.textSecondary },
     totalsRow: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 14 },
     totalItem: { fontSize: 12, color: c.text, fontWeight: "600" },
     meta: { fontSize: 12, color: c.textSecondary, marginTop: 10 },
@@ -505,7 +524,6 @@ const makeStyles = (c: ThemeColors) =>
     forecastChipText: { fontSize: 12, color: c.text, fontWeight: "600" },
     trendRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
     trendLabelCol: { flex: 1, minWidth: 0, marginRight: 8 },
-    trendSparkline: { flexDirection: "row", alignItems: "flex-end", gap: 2, height: 28, marginRight: 8 },
-    trendBar: { width: 6, borderRadius: 2 },
+    trendSparkline: { width: 100, height: 28, marginRight: 8 },
     trendPct: { fontSize: 12, fontWeight: "700", width: 48, textAlign: "right" },
   });

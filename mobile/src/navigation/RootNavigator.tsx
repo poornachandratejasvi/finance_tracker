@@ -45,6 +45,7 @@ export type RootStackParamList = {
 export type TabParamList = {
   Dashboard: undefined;
   Transactions: undefined;
+  AddTab: undefined;
   Analytics: undefined;
   More: undefined;
 };
@@ -63,6 +64,43 @@ function tabIcon(name: keyof typeof Ionicons.glyphMap, focusedName: keyof typeof
 function tabLabel(text: string) {
   return ({ color }: { focused: boolean; color: string }) => (
     <Text style={{ color, fontSize: 11, fontWeight: "600", marginTop: 2 }}>{text}</Text>
+  );
+}
+
+// Never actually rendered -- AddTab's tabPress is always intercepted (see its
+// listeners below) and pushes the real "Add" modal on the root stack instead.
+function EmptyPlaceholderScreen() {
+  return null;
+}
+
+// The protruding center "+" button: absolutely positioned within its own flex
+// slot so it can escape the tab bar's height without disturbing the other 4
+// tabs' layout -- the one deliberate exception to "the bar itself stays in
+// normal layout flow, not position:absolute" (see tabBarStyle below), scoped
+// to just this one button.
+function AddTabButton({ color }: { color: string }) {
+  return (
+    <View style={{ flex: 1, alignItems: "center" }}>
+      <View
+        style={{
+          position: "absolute",
+          top: -(TAB_BAR_HEIGHT / 2 + 6),
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: color,
+          alignItems: "center",
+          justifyContent: "center",
+          elevation: 6,
+          shadowColor: "#000",
+          shadowOpacity: 0.25,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 3 },
+        }}
+      >
+        <Ionicons name="add" size={30} color="#fff" />
+      </View>
+    </View>
   );
 }
 
@@ -146,6 +184,23 @@ function AppTabs({ navigation }: any) {
             </View>
           ),
         }}
+      />
+      <Tab.Screen
+        name="AddTab"
+        component={EmptyPlaceholderScreen}
+        options={{
+          tabBarLabel: () => null,
+          tabBarButton: (props) => (
+            <TouchableOpacity
+              style={props.style}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate("Add")}
+            >
+              <AddTabButton color={colors.primary} />
+            </TouchableOpacity>
+          ),
+        }}
+        listeners={{ tabPress: (e) => e.preventDefault() }}
       />
       <Tab.Screen
         name="Analytics"
