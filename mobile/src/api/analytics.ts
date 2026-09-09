@@ -1,5 +1,14 @@
 import { api } from "./client";
-import { AnalyticsComparison, BalanceTrendResponse, CashflowResponse, HeatmapResponse, TopMerchantsResponse } from "../types";
+import {
+  AnalyticsComparison,
+  BalanceTrendResponse,
+  CashflowResponse,
+  HeatmapResponse,
+  TopMerchantsResponse,
+  CategoryTrendsResponse,
+  SpendingForecast,
+  SpendingPatternsResponse,
+} from "../types";
 
 export interface AnalyticsFilters {
   bank_id?: string;
@@ -73,5 +82,20 @@ export async function fetchTopMerchants(
   const { data } = await api.get<TopMerchantsResponse>("/api/analytics/top-merchants", {
     params: { start_date: startDate, end_date: endDate, limit },
   });
+  return data;
+}
+
+export async function fetchCategoryTrends(months: number = 6): Promise<CategoryTrendsResponse> {
+  const { data } = await api.get<CategoryTrendsResponse>("/api/analytics/category-trends", { params: { months } });
+  return data;
+}
+
+export async function fetchSpendingForecast(): Promise<SpendingForecast> {
+  const { data } = await api.get<SpendingForecast>("/api/analytics/forecast");
+  return data;
+}
+
+export async function fetchSpendingPatterns(days: number = 180): Promise<SpendingPatternsResponse> {
+  const { data } = await api.get<SpendingPatternsResponse>("/api/analytics/spending-patterns", { params: { days } });
   return data;
 }

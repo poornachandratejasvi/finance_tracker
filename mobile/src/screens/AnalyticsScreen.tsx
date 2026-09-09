@@ -13,12 +13,12 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 
-import { fetchBalanceTrend, fetchCashflow, fetchComparison } from "../api/analytics";
+import { fetchBalanceTrend, fetchCashflow, fetchComparison, fetchCategoryTrends, fetchSpendingForecast, fetchSpendingPatterns } from "../api/analytics";
 import { fetchDashboardSummary } from "../api/dashboard";
 import { getPredictions } from "../api/ai";
 import { listCategories } from "../api/categories";
 import { useTheme, ThemeColors } from "../context/ThemeContext";
-import { AnalyticsComparison, BalanceTrendResponse, CashflowResponse, Category, DashboardSummary } from "../types";
+import { AnalyticsComparison, BalanceTrendResponse, CashflowResponse, Category, DashboardSummary, CategoryTrendsResponse, SpendingForecast, SpendingPatternsResponse } from "../types";
 import { categoryIconFor } from "../utils/categoryIcons";
 import { formatCurrency } from "../utils/format";
 import PeriodPager, { ResolvedPeriod } from "../components/PeriodPager";
@@ -69,6 +69,9 @@ export default function AnalyticsScreen() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [outlook, setOutlook] = useState<number | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryTrends, setCategoryTrends] = useState<CategoryTrendsResponse | null>(null);
+  const [spendingForecast, setSpendingForecast] = useState<SpendingForecast | null>(null);
+  const [spendingPatterns, setSpendingPatterns] = useState<SpendingPatternsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,18 +85,24 @@ export default function AnalyticsScreen() {
       const rangeStart = isoDate(monthStart(-5));
       const rangeEnd = isoDate(monthStart(1));
 
-      const [cf, bt, sm, pred, cats] = await Promise.all([
+      const [cf, bt, sm, pred, cats, trends, forecast, patterns] = await Promise.all([
         fetchCashflow(rangeStart, rangeEnd, "month"),
         fetchBalanceTrend(rangeStart, rangeEnd, "month"),
         fetchDashboardSummary(),
         getPredictions(30).catch(() => null),
         listCategories().catch(() => []),
+        fetchCategoryTrends(6).catch(() => null),
+        fetchSpendingForecast().catch(() => null),
+        fetchSpendingPatterns(180).catch(() => null),
       ]);
       setCashflow(cf);
       setBalanceTrend(bt);
       setSummary(sm);
       setOutlook(pred ? pred.expected_expense - pred.expected_income : null);
       setCategories(cats);
+      setCategoryTrends(trends);
+      setSpendingForecast(forecast);
+      setSpendingPatterns(patterns);
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Couldn't load analytics.");
     }
@@ -329,6 +338,98 @@ export default function AnalyticsScreen() {
           })()}
         </View>
       )}
+
+      {spendingForecast && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Next month forecast</Text>
+          <Text style={[styles.forecastValue, { color: spendingForecast.forecast_amount == null ? colors.textSecondary : colors.warning }]}>
+            {spendingForecast.forecast_amount == null ? "Not enough data yet" : formatCurrency(spendingForecast.forecast_amount)}
+          </Text>
+          <Text style={styles.meta}>
+            {formatCurrency(spendingForecast.current_month_so_far)} spent so far · {spendingForecast.confidence} confidence
+          </Text>
+          {spendingForecast.categories.length > 0 && (
+            <View style={styles.forecastChipRow}>
+              {spendingForecast.categories.map((c) => (
+                <View key={c.category} style={styles.forecastChip}>
+                  <Text style={styles.forecastChipText}>{c.category} ~{formatCurrency(c.forecast_amount)}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {categoryTrends && categoryTrends.categories.some((c) => c.change_pct != null) && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Trending categories (last 6 months)</Text>
+          {categoryTrends.categories
+            .filter((c) => c.change_pct != null)
+            .slice(0, 8)
+            .map((c) => {
+              const meta = categories.find((cat) => cat.name === c.category);
+              const maxMonth = Math.max(1, ...c.monthly);
+              const up = (c.change_pct ?? 0) > 0;
+              const trendColor = up ? colors.danger : colors.primary;
+              return (
+                <View key={c.category} style={styles.trendRow}>
+                  <View style={[styles.categoryIcon, { backgroundColor: meta?.color || colors.primary }]}>
+                    <Ionicons name={categoryIconFor(meta?.icon)} size={14} color="#fff" />
+                  </View>
+                  <View style={styles.trendLabelCol}>
+                    <Text style={styles.listLabel} numberOfLines={1}>{c.category}</Text>
+                    <Text style={styles.meta}>{formatCurrency(c.total)} total</Text>
+                  </View>
+                  <View style={styles.trendSparkline}>
+                    {c.monthly.map((v, i) => (
+                      <View
+                        key={i}
+                        style={[
+                          styles.trendBar,
+                          { height: Math.max(2, (v / maxMonth) * 28), backgroundColor: trendColor },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                  <Text style={[styles.trendPct, { color: trendColor }]}>
+                    {up ? "+" : ""}{c.change_pct}%
+                  </Text>
+                </View>
+              );
+            })}
+        </View>
+      )}
+
+      {spendingPatterns && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Spending by day of week (last 180 days)</Text>
+          {spendingPatterns.busiest_day && (
+            <Text style={styles.meta}>You spend the most on {spendingPatterns.busiest_day}s.</Text>
+          )}
+          <View style={[styles.chartRow, { marginTop: 12 }]}>
+            {spendingPatterns.pattern.map((p) => {
+              const maxDay = Math.max(1, ...spendingPatterns.pattern.map((x) => x.total));
+              return (
+                <View key={p.day} style={styles.chartCol}>
+                  <View style={styles.barPair}>
+                    <View
+                      style={[
+                        styles.bar,
+                        {
+                          width: 16,
+                          height: Math.max(4, (p.total / maxDay) * CHART_HEIGHT),
+                          backgroundColor: p.day === spendingPatterns.busiest_day ? colors.primary : colors.chipBg,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.chartLabel}>{p.day.slice(0, 3)}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
     </ScrollView>
 
       <View style={styles.pagerDock}>
@@ -398,4 +499,13 @@ const makeStyles = (c: ThemeColors) =>
     metricIcon: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center" },
     metricValue: { fontSize: 19, fontWeight: "800", color: c.text },
     metricBadge: { fontSize: 11, fontWeight: "600", marginTop: 4 },
+    forecastValue: { fontSize: 24, fontWeight: "800", marginBottom: 4 },
+    forecastChipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+    forecastChip: { backgroundColor: c.chipBg, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+    forecastChipText: { fontSize: 12, color: c.text, fontWeight: "600" },
+    trendRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
+    trendLabelCol: { flex: 1, minWidth: 0, marginRight: 8 },
+    trendSparkline: { flexDirection: "row", alignItems: "flex-end", gap: 2, height: 28, marginRight: 8 },
+    trendBar: { width: 6, borderRadius: 2 },
+    trendPct: { fontSize: 12, fontWeight: "700", width: 48, textAlign: "right" },
   });

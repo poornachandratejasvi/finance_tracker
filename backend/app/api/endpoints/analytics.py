@@ -21,6 +21,7 @@ from app.api.endpoints.auth import get_current_active_user
 from app.utils.parsing import parse_csv_list as _parse_csv_list
 from app.services.currency_service import get_rate_map, get_base_currency
 from app.services.recurring_detection import _signature as _merchant_signature
+from app.services import insights_service
 
 router = APIRouter()
 
@@ -357,3 +358,29 @@ def top_merchants(
     for m in ranked:
         m["total"] = round(m["total"], 2)
     return {"merchants": ranked}
+
+
+@router.get("/category-trends")
+def category_trends(
+    months: int = Query(6, ge=2, le=12),
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user),
+):
+    """Per-category monthly spend trend, sorted by biggest movers first."""
+    return insights_service.category_trends(db, current_user.id, months)
+
+
+@router.get("/forecast")
+def spending_forecast(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user),
+):
+    """A simple recency-weighted projection of next month's spend, overall and per top category."""
+    return insights_service.spending_forecast(db, current_user.id)
+
+
+@router.get("/spending-patterns")
+def spending_patterns(
+    days: int = Query(180, ge=28, le=366),
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user),
+):
+    """Average/total spend by day-of-week over the last N days."""
+    return insights_service.spending_patterns(db, current_user.id, days)

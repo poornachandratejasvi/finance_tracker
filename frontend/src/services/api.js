@@ -841,6 +841,18 @@ export const getTopMerchants = async (params = {}) => {
   const response = await api.get('/api/analytics/top-merchants', { params });
   return response.data;
 };
+export const getCategoryTrends = async (months = 6) => {
+  const response = await api.get('/api/analytics/category-trends', { params: { months } });
+  return response.data;
+};
+export const getSpendingForecast = async () => {
+  const response = await api.get('/api/analytics/forecast');
+  return response.data;
+};
+export const getSpendingPatterns = async (days = 180) => {
+  const response = await api.get('/api/analytics/spending-patterns', { params: { days } });
+  return response.data;
+};
 
 // Saved filters ("My filter")
 export const getSavedFilters = async (scope) => {

@@ -80,6 +80,9 @@ import {
   getAnalyticsComparisonMulti,
   getAnalyticsCashflow,
   getAnalyticsBalanceTrend,
+  getCategoryTrends,
+  getSpendingForecast,
+  getSpendingPatterns,
   getSavedFilters,
   createSavedFilter,
   deleteSavedFilter,
@@ -97,6 +100,7 @@ const TABS = [
   'Balance Trend',
   'Cash flow',
   'Advanced Charts and Reports',
+  'Insights',
 ];
 
 // Local YYYY-MM-DD (avoids the UTC shift that toISOString() introduces).
@@ -201,6 +205,9 @@ const ModernDashboard = () => {
   const [balance, setBalance] = useState(null);
   const [cashflow, setCashflow] = useState(null);
   const [advData, setAdvData] = useState(null);
+  const [insightsTrends, setInsightsTrends] = useState(null);
+  const [insightsForecast, setInsightsForecast] = useState(null);
+  const [insightsPatterns, setInsightsPatterns] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -369,12 +376,24 @@ const ModernDashboard = () => {
           ...base,
         });
         setCashflow(res);
-      } else {
+      } else if (tab === 3) {
         const params = { start_date: periods.curStart, end_date: periods.curEnd, granularity: advGran, ...base };
         const res = advType === 'Balance'
           ? await getAnalyticsBalanceTrend(params)
           : await getAnalyticsCashflow(params);
         setAdvData(res);
+      } else {
+        // Insights -- fixed windows (6mo trend, 180-day pattern), independent
+        // of the month/period selector above the tabs and unfiltered (no
+        // per-account/category scoping) for this first pass.
+        const [trends, forecast, patterns] = await Promise.all([
+          getCategoryTrends(6),
+          getSpendingForecast(),
+          getSpendingPatterns(180),
+        ]);
+        setInsightsTrends(trends);
+        setInsightsForecast(forecast);
+        setInsightsPatterns(patterns);
       }
     } catch (_) {
       setError('Failed to load analytics data.');
@@ -1006,11 +1025,132 @@ const ModernDashboard = () => {
     );
   };
 
+  // Insights: category trend sparklines (biggest movers first), a simple
+  // next-month spend forecast, and a day-of-week spending pattern -- all from
+  // the new insights_service.py endpoints. Deliberately its own fixed windows
+  // (not tied to the month/period selector above the tabs) and unfiltered.
+  const renderInsights = () => {
+    if (!insightsTrends || !insightsForecast || !insightsPatterns) return null;
+
+    const forecastColor = insightsForecast.forecast_amount == null
+      ? theme.palette.text.secondary
+      : theme.palette.warning.main;
+    const forecastGradFrom = alpha(forecastColor, theme.palette.mode === 'dark' ? 0.22 : 0.14);
+
+    const topMovers = insightsTrends.categories.filter((c) => c.change_pct != null).slice(0, 8);
+    const maxDayTotal = Math.max(1, ...insightsPatterns.pattern.map((p) => p.total));
+
+    return (
+      <Box>
+        {/* Forecast hero card */}
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2.75, mb: 3, borderRadius: 4, position: 'relative', overflow: 'hidden',
+            backgroundImage: `linear-gradient(135deg, ${forecastGradFrom}, ${alpha(forecastColor, 0)} 65%)`,
+          }}
+        >
+          <Box display="flex" alignItems="center" gap={1.25} mb={1.5}>
+            <Box sx={{
+              width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              bgcolor: forecastColor, color: '#fff', flexShrink: 0,
+            }}>
+              <TrendingUp sx={{ fontSize: 20 }} />
+            </Box>
+            <Box>
+              <Typography variant="caption" sx={{ color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 800, fontSize: 11.5 }}>
+                Next month forecast
+              </Typography>
+              <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>
+                {insightsForecast.confidence} confidence · based on recent months
+              </Typography>
+            </Box>
+          </Box>
+          <Typography variant="h4" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums', color: forecastColor, lineHeight: 1.15 }}>
+            {insightsForecast.forecast_amount == null ? 'Not enough data yet' : money(insightsForecast.forecast_amount)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {money(insightsForecast.current_month_so_far)} spent so far this month
+          </Typography>
+          {insightsForecast.categories.length > 0 && (
+            <Box display="flex" gap={1} flexWrap="wrap" mt={2}>
+              {insightsForecast.categories.map((c) => (
+                <Box key={c.category} sx={{
+                  px: 1.25, py: 0.6, borderRadius: 2, bgcolor: alpha(theme.palette.text.primary, 0.06),
+                  fontSize: 12.5,
+                }}>
+                  <strong>{c.category}</strong>&nbsp;~{money(c.forecast_amount)}
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Paper>
+
+        {/* Trending categories */}
+        <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, mb: 3, borderRadius: 3 }}>
+          <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>Trending categories (last 6 months)</Typography>
+          {topMovers.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">Not enough history yet to spot a trend.</Typography>
+          ) : (
+            <Stack spacing={1.5}>
+              {topMovers.map((c) => {
+                const sparkData = c.monthly.map((v, i) => ({ i, v }));
+                const up = c.change_pct > 0;
+                const color = up ? theme.palette.error.main : theme.palette.success.main;
+                return (
+                  <Box key={c.category} display="flex" alignItems="center" gap={2}>
+                    <Box sx={{ minWidth: 0, flex: '1 1 160px' }}>
+                      <Typography variant="body2" fontWeight={600} noWrap>{c.category}</Typography>
+                      <Typography variant="caption" color="text.secondary">{money(c.total)} total</Typography>
+                    </Box>
+                    <Box sx={{ width: 100, height: 32, flexShrink: 0 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={sparkData}>
+                          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2.25} dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Box>
+                    <Box sx={{ width: 76, flexShrink: 0, textAlign: 'right' }}>{pctPill(c.change_pct, 'small')}</Box>
+                  </Box>
+                );
+              })}
+            </Stack>
+          )}
+        </Paper>
+
+        {/* Day-of-week spending pattern */}
+        <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, borderRadius: 3 }}>
+          <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>Spending by day of week (last 180 days)</Typography>
+          {insightsPatterns.busiest_day && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              You spend the most on <strong>{insightsPatterns.busiest_day}s</strong>.
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1.5, height: 140 }}>
+            {insightsPatterns.pattern.map((p) => (
+              <Box key={p.day} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.75 }}>
+                <Box
+                  sx={{
+                    width: '100%', maxWidth: 40, borderRadius: 1.5,
+                    height: `${Math.max(4, (p.total / maxDayTotal) * 100)}px`,
+                    bgcolor: p.day === insightsPatterns.busiest_day ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.35),
+                  }}
+                />
+                <Typography variant="caption" color="text.secondary">{p.day.slice(0, 3)}</Typography>
+              </Box>
+            ))}
+          </Box>
+        </Paper>
+      </Box>
+    );
+  };
+
   const renderActiveTab = () => {
     if (tab === 0) return renderComparison();
     if (tab === 1) return renderBalanceTrend();
     if (tab === 2) return renderCashflow();
-    return renderAdvanced();
+    if (tab === 3) return renderAdvanced();
+    return renderInsights();
   };
 
   return (

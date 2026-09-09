@@ -588,6 +588,42 @@ export interface TopMerchantsResponse {
   merchants: TopMerchant[];
 }
 
+export interface CategoryTrend {
+  category: string;
+  monthly: number[];
+  total: number;
+  change_pct: number | null;
+}
+
+export interface CategoryTrendsResponse {
+  months: string[];
+  categories: CategoryTrend[];
+}
+
+export interface ForecastCategory {
+  category: string;
+  forecast_amount: number;
+}
+
+export interface SpendingForecast {
+  forecast_amount: number | null;
+  current_month_so_far: number;
+  confidence: "low" | "medium" | "high";
+  categories: ForecastCategory[];
+}
+
+export interface SpendingPatternDay {
+  day: string;
+  total: number;
+  average: number;
+  count: number;
+}
+
+export interface SpendingPatternsResponse {
+  pattern: SpendingPatternDay[];
+  busiest_day: string | null;
+}
+
 export interface SpendingAnomaly {
   description: string;
   amount: number;
