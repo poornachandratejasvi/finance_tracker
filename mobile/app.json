@@ -2,14 +2,14 @@
   "expo": {
     "name": "Finance Tracker",
     "slug": "finance-tracker-mobile",
-    "version": "1.1.9",
+    "version": "1.1.10",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.poornachandratejasvi.financetracker",
-      "buildNumber": "1.1.9",
+      "buildNumber": "1.1.10",
       "appleTeamId": "3QGTY2R458",
       "entitlements": {
         "com.apple.security.application-groups": [
@@ -23,7 +23,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1b6b4c"
       },
-      "versionCode": 9
+      "versionCode": 10
     },
     "plugins": [
       [
