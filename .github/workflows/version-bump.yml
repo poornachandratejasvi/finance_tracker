@@ -1,0 +1,76 @@
+name: Auto Version Bump
+
+# Every real push to main becomes a proper versioned release: the patch digit
+# in mobile/app.json (source of truth) bumps, the same version string is
+# mirrored into mobile/package.json, frontend/package.json, and the backend's
+# APP_VERSION, and the result is committed + tagged vX.Y.Z. That tag push is
+# what docker-build.yml's `tags: ['v*.*.*']` trigger is watching for, so it
+# automatically produces proper semver-tagged images (vX.Y.Z / X.Y / X) on
+# top of the existing latest/sha tags -- no changes needed there.
+#
+# To bump minor/major instead of patch for a specific release, edit the
+# version in mobile/app.json yourself in that push (e.g. "1.2.0") -- this
+# workflow only ever increments whatever patch digit it finds, so a manual
+# minor/major bump is picked up and patch-bumped from there on the next push.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    # Guard against the bump commit re-triggering itself in an infinite loop.
+    if: "!startsWith(github.event.head_commit.message, 'chore: bump version')"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # The default GITHUB_TOKEN deliberately can't trigger other
+          # workflows (anti-loop protection) -- a tag pushed with it would
+          # silently NOT fire docker-build.yml's `tags: ['v*.*.*']` build,
+          # defeating the point of tagging a release. A real PAT is required
+          # so the resulting commit/tag push cascades normally.
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - name: Bump version everywhere
+        id: bump
+        run: |
+          set -euo pipefail
+
+          current=$(jq -r '.expo.version' mobile/app.json)
+          IFS='.' read -r major minor patch <<< "$current"
+          new_patch=$((patch + 1))
+          new_version="${major}.${minor}.${new_patch}"
+
+          current_code=$(jq -r '.expo.android.versionCode // 0' mobile/app.json)
+          new_code=$((current_code + 1))
+
+          jq --arg v "$new_version" --argjson c "$new_code" \
+            '.expo.version = $v | .expo.android.versionCode = $c | .expo.ios.buildNumber = $v' \
+            mobile/app.json > mobile/app.json.tmp
+          mv mobile/app.json.tmp mobile/app.json
+
+          jq --arg v "$new_version" '.version = $v' mobile/package.json > mobile/package.json.tmp
+          mv mobile/package.json.tmp mobile/package.json
+
+          jq --arg v "$new_version" '.version = $v' frontend/package.json > frontend/package.json.tmp
+          mv frontend/package.json.tmp frontend/package.json
+
+          sed -i "s/APP_VERSION: str = \"[^\"]*\"/APP_VERSION: str = \"${new_version}\"/" backend/app/core/config.py
+
+          echo "new_version=${new_version}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and tag
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mobile/app.json mobile/package.json frontend/package.json backend/app/core/config.py
+          git commit -m "chore: bump version to v${{ steps.bump.outputs.new_version }}"
+          git tag "v${{ steps.bump.outputs.new_version }}"
+          git push origin HEAD:main
+          git push origin "v${{ steps.bump.outputs.new_version }}"
