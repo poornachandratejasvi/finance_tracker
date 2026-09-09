@@ -5,7 +5,12 @@ Pod::Spec.new do |s|
   s.description    = 'Local Expo module: iOS Live Activity (Dynamic Island) start/update/end bridge.'
   s.author         = 'Finance Tracker'
   s.homepage       = 'https://github.com/poornachandratejasvi/finance_tracker'
-  s.platforms      = { :ios => '16.1' }
+  # Matches app.json's expo-build-properties ios.deploymentTarget -- CocoaPods
+  # compiles this pod at the app-wide target regardless of what's declared
+  # here, so keep them in sync to avoid confusion (see the matching comment
+  # in targets/widget/expo-target.config.js, where this mismatch actually
+  # broke a build).
+  s.platforms      = { :ios => '16.4' }
   s.source         = { :path => '.' }
   s.static_framework = true
 

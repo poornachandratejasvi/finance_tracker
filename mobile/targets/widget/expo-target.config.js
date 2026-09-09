@@ -8,7 +8,14 @@
 module.exports = (config) => ({
   type: "widget",
   displayName: "Finance Tracker",
-  deploymentTarget: "16.1",
+  // Must match (or exceed) the app-wide deploymentTarget set by
+  // expo-build-properties in app.json, and the FinancetrackerNative pod's own
+  // platform floor (mobile/modules/financetracker-native/ios/*.podspec) --
+  // CocoaPods compiles that pod at the app's global deployment target (16.4)
+  // regardless of its own podspec's lower floor, so a widget extension built
+  // at anything lower fails with "compiling for iOS 16.1, but module
+  // 'FinancetrackerNative' has a minimum deployment target of iOS 16.4".
+  deploymentTarget: "16.4",
   entitlements: {
     "com.apple.security.application-groups":
       config.ios.entitlements["com.apple.security.application-groups"],
