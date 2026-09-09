@@ -12,7 +12,7 @@ import {
 import {
   getBackupStatus, runBackup, getBackupHistory, getBackupConfig,
   saveBackupConfig, disconnectDrive, downloadBackup, getDriveAuthUrl, startSync,
-  restoreBackup, restoreBackupUpload,
+  restoreBackup, restoreBackupUpload, downloadTransactionsCsv,
 } from '../../services/api';
 import { formatDate } from '../../utils/format';
 import { useAuth } from '../../contexts/AuthContext';
@@ -53,6 +53,7 @@ export default function BackupPanel() {
 
   const [runDest, setRunDest] = useState('local');
   const [running, setRunning] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
   const [savingCfg, setSavingCfg] = useState(false);
   const [driveBackingUp, setDriveBackingUp] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -195,6 +196,18 @@ export default function BackupPanel() {
       setError(apiError(e, 'Backup failed.'));
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleExportCsv = async () => {
+    setExportingCsv(true);
+    setError('');
+    try {
+      await downloadTransactionsCsv();
+    } catch (e) {
+      setError(apiError(e, 'Could not export transactions.'));
+    } finally {
+      setExportingCsv(false);
     }
   };
 
@@ -377,6 +390,14 @@ export default function BackupPanel() {
             </Typography>
           )}
         </Stack>
+        <Divider sx={{ my: 2 }} />
+        <Button
+          variant="outlined"
+          startIcon={exportingCsv ? <CircularProgress size={16} color="inherit" /> : <Download />}
+          disabled={exportingCsv} onClick={handleExportCsv}
+        >
+          {exportingCsv ? 'Exporting…' : 'Download all transactions (CSV)'}
+        </Button>
       </Paper>
 
       {/* Schedule / config */}

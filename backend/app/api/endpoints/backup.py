@@ -12,12 +12,14 @@ by the signed state (reused from the oauth module) which binds the flow to a use
 Every other route requires an authenticated active user.
 """
 import os
+import csv
+import io
 import json
 import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -29,7 +31,7 @@ from app.core.time_utils import utcnow
 from app.api.endpoints.auth import get_current_active_user
 # Reuse the signed, user-bound OAuth state helpers from the oauth module.
 from app.api.endpoints.oauth import _make_oauth_state, _read_oauth_state
-from app.models.models import User, UserRole, AppSetting
+from app.models.models import User, UserRole, AppSetting, Transaction, Bank
 from app.services import backup_service
 
 router = APIRouter()
@@ -255,6 +257,54 @@ def backup_history(
 ):
     """Return the user's backup history, newest first."""
     return _get_history(db, current_user.id)
+
+
+@router.get("/transactions-csv")
+def download_transactions_csv(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """A flat CSV of every transaction across every one of the user's banks --
+    distinct from csv_exports.py, which only re-exports a single parsed PDF
+    statement. This is a plain personal-data-portability export, so it reads
+    straight from the Transaction table rather than needing any PDF/statement
+    to exist first."""
+    rows = (
+        db.query(Transaction, Bank.name)
+        .join(Bank, Bank.id == Transaction.bank_id)
+        .filter(Transaction.user_id == current_user.id)
+        .order_by(Transaction.transaction_date.asc())
+        .all()
+    )
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "Date", "Bank", "Type", "Amount", "Description", "Category",
+        "Reference Number", "Currency", "Notes", "Balance", "Source", "Confirmed",
+    ])
+    for txn, bank_name in rows:
+        writer.writerow([
+            txn.transaction_date.strftime("%Y-%m-%d %H:%M:%S") if txn.transaction_date else "",
+            bank_name,
+            txn.transaction_type.value if txn.transaction_type else "",
+            txn.amount,
+            txn.description,
+            txn.category or "",
+            txn.reference_number or "",
+            txn.currency_code or "",
+            txn.notes or "",
+            txn.balance if txn.balance is not None else "",
+            txn.source or "",
+            "Yes" if txn.is_confirmed else "No",
+        ])
+
+    filename = f"transactions_{utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _safe_local_path(filename: str) -> str:

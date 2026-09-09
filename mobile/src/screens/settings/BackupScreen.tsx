@@ -24,6 +24,7 @@ import {
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { BackupHistoryEntry, BackupStatus } from "../../types";
 import { formatDateTime } from "../../utils/format";
+import { downloadAndShare } from "../../utils/download";
 
 const FREQUENCIES: Array<BackupStatus["config"]["frequency"]> = ["hourly", "daily", "weekly"];
 
@@ -36,6 +37,7 @@ export default function BackupScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [running, setRunning] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -107,6 +109,17 @@ export default function BackupScreen() {
       Alert.alert("Backup failed", "Please try again.");
     } finally {
       setRunning(false);
+    }
+  };
+
+  const onExportTransactionsCsv = async () => {
+    setExportingCsv(true);
+    try {
+      await downloadAndShare("/api/backup/transactions-csv", "transactions.csv");
+    } catch {
+      Alert.alert("Couldn't export", "Please try again.");
+    } finally {
+      setExportingCsv(false);
     }
   };
 
@@ -187,6 +200,18 @@ export default function BackupScreen() {
 
       <TouchableOpacity style={[styles.button, running && styles.buttonDisabled]} onPress={onRunBackup} disabled={running}>
         {running ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Run Backup Now</Text>}
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.smallButtonOutline, { marginTop: 10 }, exportingCsv && styles.buttonDisabled]}
+        onPress={onExportTransactionsCsv}
+        disabled={exportingCsv}
+      >
+        {exportingCsv ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <Text style={styles.smallButtonOutlineText}>Download all transactions (CSV)</Text>
+        )}
       </TouchableOpacity>
 
       <Text style={styles.section}>History</Text>

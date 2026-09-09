@@ -911,6 +911,22 @@ export const downloadBackup = async (filename) => {
   a.remove();
   window.URL.revokeObjectURL(url);
 };
+// Same blob-download recipe as downloadBackup -- the endpoint needs the bearer
+// token, so a plain <a href> would 401.
+export const downloadTransactionsCsv = async () => {
+  const res = await api.get('/api/backup/transactions-csv', { responseType: 'blob' });
+  const disposition = res.headers['content-disposition'] || '';
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : 'transactions.csv';
+  const url = window.URL.createObjectURL(new Blob([res.data]));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
 // Restore — DESTRUCTIVE, replaces the entire app database. Admin-only on the server.
 export const restoreBackup = async (filename) => (await api.post('/api/backup/restore', { filename })).data;
 export const restoreBackupUpload = async (file) => {
