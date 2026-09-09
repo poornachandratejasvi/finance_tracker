@@ -249,12 +249,18 @@ def _pluxee(sender, subject, body, received_date=None):
     if transaction_date is None and received_date:
         transaction_date = received_date.replace(tzinfo=None)
     card_match = re.search(r"\d{6}-x+-(\d{4})", body, re.IGNORECASE)
+    # Pluxee never sends a PDF statement -- this alert is the only balance
+    # signal that will ever arrive for the account, and it states the
+    # resulting balance outright. See alert_sync_service.py's handling of
+    # this optional key.
+    balance_match = re.search(r"Updated Account Balance\s*₹\s*([\d,]+\.\d{2})", body)
     return {
         "amount": _amount(amount),
         "transaction_type": "debit",
         "description": merchant,
         "transaction_date": transaction_date,
         "card_hint": card_match.group(1) if card_match else None,
+        "updated_balance": _amount(balance_match.group(1)) if balance_match else None,
     }
 
 

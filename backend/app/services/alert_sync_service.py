@@ -149,6 +149,17 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
                 has_attachment=False, email_type='alert', is_processed=True,
             ))
 
+            # Special case: some accounts (e.g. Pluxee) never send a PDF statement --
+            # the alert email itself is the ONLY balance signal that will ever arrive,
+            # and it states the resulting balance directly rather than a delta to
+            # apply. Trust it outright (like a mini statement) instead of trying to
+            # derive/adjust a balance from the transaction amount, same as any other
+            # bank without a manual override (see Bank.balance_source).
+            if parsed and parsed.get("updated_balance") is not None and bank.balance_source != "manual":
+                bank.current_balance = parsed["updated_balance"]
+                bank.balance_updated_at = parsed["transaction_date"] or msg.get('date')
+                bank.balance_source = "auto"
+
             if parsed and not _already_confirmed(db, bank.user_id, bank.id, parsed):
                 # Gmail is the highest-priority real-time source (see
                 # transaction_hooks._SOURCE_PRIORITY) -- if an SMS/Shortcut-ingest
