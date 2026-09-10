@@ -7,10 +7,11 @@ client lets the user adjust that mapping and posts the same columns/rows back to
 (create_or_reconcile_transaction + apply_auto_rules_and_notify) that PDF/Gmail
 ingestion already uses, tagged with source="import".
 """
+import difflib
 import io
 import re
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 from dateutil import parser as date_parser
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.api.endpoints.auth import get_current_active_user, require_write_access
 from app.core.database import get_db
-from app.models.models import Bank, Transaction, User
+from app.models.models import Bank, Currency, Transaction, User
 from app.services.transaction_hooks import apply_auto_rules_and_notify, create_or_reconcile_transaction
 from app.services.transaction_service import TransactionService
 
@@ -35,6 +36,14 @@ FIELD_HINTS = {
     "type": ["type", "dr/cr", "debit/credit", "transaction type"],
     "category": ["category"],
     "notes": ["notes", "memo", "comments"],
+    # Optional -- only relevant for a CSV covering multiple accounts/currencies
+    # (an export from another app), where each row needs to be routed to a
+    # different one of the user's own Banks rather than the single bank_id
+    # every other field maps into by default. "Card" is folded in here too --
+    # a card-type column is really just another clue for which Bank a row
+    # belongs to, not a separate concept.
+    "bank": ["bank", "account", "account name", "card", "card type", "wallet"],
+    "currency": ["currency", "ccy"],
 }
 DEBIT_HINTS = ("debit", "dr", "withdrawal", "expense")
 CREDIT_HINTS = ("credit", "cr", "deposit", "income")
@@ -169,13 +178,24 @@ class ImportMapping(BaseModel):
     type: Optional[str] = None
     category: Optional[str] = None
     notes: Optional[str] = None
+    # Optional -- see FIELD_HINTS's comment on "bank". When set, each row's
+    # value in this column is looked up in value_map.bank (below) to pick that
+    # row's actual target bank, instead of every row going to the one bank_id.
+    bank: Optional[str] = None
+    currency: Optional[str] = None
+
+
+class ImportValueMap(BaseModel):
+    bank: Optional[Dict[str, int]] = None
+    currency: Optional[Dict[str, str]] = None
 
 
 class ImportCommitRequest(BaseModel):
-    bank_id: int
+    bank_id: int  # fallback target for rows whose bank value isn't in value_map (or mapping.bank is unset)
     columns: List[str]
     rows: List[List[str]]
     mapping: ImportMapping
+    value_map: Optional[ImportValueMap] = None
     date_format: Optional[str] = None
     skip_duplicates: bool = True
 
@@ -184,6 +204,74 @@ class ImportCommitResponse(BaseModel):
     created: int
     skipped_duplicates: int
     errors: List[dict]
+
+
+class ValueSuggestion(BaseModel):
+    value: str
+    suggested_id: Optional[int] = None      # Bank.id, when target == "bank"
+    suggested_code: Optional[str] = None    # Currency.code, when target == "currency"
+    suggested_label: str = ""
+    score: float = 0.0
+    auto_matched: bool = False              # score cleared a "confident enough" bar
+
+
+class SuggestValueMapRequest(BaseModel):
+    values: List[str]
+    target: str  # "bank" | "currency"
+
+
+# Below this, a suggestion is shown but not pre-selected -- the user picks
+# explicitly rather than trusting a weak guess (e.g. "HDFC" vs "HSBC" scoring
+# ~0.6 on a naive ratio would be a bad silent default).
+_AUTO_MATCH_THRESHOLD = 0.72
+
+
+@router.post("/suggest-value-map", response_model=List[ValueSuggestion])
+def suggest_value_map(
+    payload: SuggestValueMapRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Best-guess a target Bank/Currency for each distinct value found in a
+    mapped CSV column, via plain string similarity (difflib, stdlib -- no new
+    dependency, and this only ever runs over a handful of distinct values, not
+    every row). The client still shows every suggestion for confirmation;
+    auto_matched only controls whether it's pre-selected."""
+    if payload.target not in ("bank", "currency"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "target must be 'bank' or 'currency'")
+
+    suggestions: List[ValueSuggestion] = []
+
+    if payload.target == "bank":
+        banks = db.query(Bank).filter(Bank.user_id == current_user.id).all()
+        candidates = [(b.id, b.name) for b in banks]
+    else:
+        currencies = db.query(Currency).filter(Currency.user_id == current_user.id).all()
+        candidates = [(c.code, f"{c.code} — {c.name}" if c.name else c.code) for c in currencies]
+
+    for raw_value in payload.values:
+        value = (raw_value or "").strip()
+        best_key, best_label, best_score = None, "", 0.0
+        for key, label in candidates:
+            score = difflib.SequenceMatcher(None, value.lower(), str(key).lower()).ratio()
+            label_score = difflib.SequenceMatcher(None, value.lower(), label.lower()).ratio()
+            score = max(score, label_score)
+            if score > best_score:
+                best_key, best_label, best_score = key, label, score
+
+        auto_matched = best_score >= _AUTO_MATCH_THRESHOLD
+        if payload.target == "bank":
+            suggestions.append(ValueSuggestion(
+                value=raw_value, suggested_id=best_key if auto_matched else None,
+                suggested_label=best_label, score=round(best_score, 3), auto_matched=auto_matched,
+            ))
+        else:
+            suggestions.append(ValueSuggestion(
+                value=raw_value, suggested_code=best_key if auto_matched else None,
+                suggested_label=best_label, score=round(best_score, 3), auto_matched=auto_matched,
+            ))
+
+    return suggestions
 
 
 @router.post("/commit", response_model=ImportCommitResponse)
@@ -195,6 +283,21 @@ def commit_import(
     bank = db.query(Bank).filter(Bank.id == payload.bank_id, Bank.user_id == current_user.id).first()
     if not bank:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Bank not found")
+
+    # Validate every bank_id referenced by value_map up front (not per-row) --
+    # a value_map is client-supplied, so this is the only thing standing
+    # between an import and writing transactions into a bank the caller
+    # doesn't own.
+    bank_value_map: Dict[str, int] = (payload.value_map.bank if payload.value_map and payload.value_map.bank else {})
+    currency_value_map: Dict[str, str] = (payload.value_map.currency if payload.value_map and payload.value_map.currency else {})
+    if bank_value_map:
+        referenced_ids = set(bank_value_map.values()) | {payload.bank_id}
+        owned_ids = {
+            r[0] for r in db.query(Bank.id).filter(Bank.id.in_(referenced_ids), Bank.user_id == current_user.id).all()
+        }
+        not_owned = referenced_ids - owned_ids
+        if not_owned:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, f"value_map references a bank you don't own: {sorted(not_owned)}")
 
     col_index = {c: i for i, c in enumerate(payload.columns)}
     for field_name, col in [
@@ -246,6 +349,18 @@ def commit_import(
             category_raw = (_cell(row, payload.mapping.category) or "").strip()
             notes_raw = (_cell(row, payload.mapping.notes) or "").strip()
 
+            # Per-row bank: only relevant when a bank/account column was mapped
+            # and this row's raw value has an entry in value_map -- otherwise
+            # every row falls back to the single bank_id, exactly like before
+            # this feature existed.
+            row_bank_id = payload.bank_id
+            bank_raw = (_cell(row, payload.mapping.bank) or "").strip()
+            if bank_raw and bank_raw in bank_value_map:
+                row_bank_id = bank_value_map[bank_raw]
+
+            currency_raw = (_cell(row, payload.mapping.currency) or "").strip()
+            currency_code = currency_value_map.get(currency_raw) if currency_raw else None
+
             from app.services.categorization import resolve_category
             trans_data = {
                 "transaction_date": txn_date,
@@ -254,9 +369,10 @@ def commit_import(
                 "transaction_type": txn_type,
                 "category": category_raw or resolve_category(db, current_user.id, description),
                 "notes": notes_raw or None,
+                "currency_code": currency_code,
             }
             transaction, _reconciled = create_or_reconcile_transaction(
-                db, current_user.id, bank.id, trans_data, source="import"
+                db, current_user.id, row_bank_id, trans_data, source="import"
             )
             apply_auto_rules_and_notify(db, current_user.id, transaction)
             created += 1

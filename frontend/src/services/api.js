@@ -536,6 +536,13 @@ export const commitImport = async (payload) => {
   const response = await api.post('/api/imports/commit', payload);
   return response.data;
 };
+// Best-guess a target Bank/Currency for each distinct raw value found in a
+// mapped column (e.g. a "Bank"/"Account"/"Card" column) -- used by the
+// "map values" step, not the initial column mapping.
+export const suggestValueMap = async (values, target) => {
+  const response = await api.post('/api/imports/suggest-value-map', { values, target });
+  return response.data;
+};
 
 // Reward points
 export const getRewardPoints = async (bankId) => {
