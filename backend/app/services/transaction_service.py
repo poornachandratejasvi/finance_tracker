@@ -177,7 +177,23 @@ class TransactionService:
             'Bills & Utilities': ['electricity', 'water', 'gas', 'mobile', 'internet', 'bill'],
             'Entertainment': ['movie', 'netflix', 'prime', 'spotify', 'game'],
             'Healthcare': ['hospital', 'pharmacy', 'medical', 'doctor', 'clinic'],
-            'Transfer': ['upi', 'imps', 'neft', 'rtgs', 'transfer'],
+            # Checked before 'Transfer' below -- almost every modern Indian bank
+            # transaction description is prefixed "UPI_..." regardless of what
+            # it actually is (a merchant payment, a bill, an insurance premium),
+            # so a real payee name here must win over the generic rail keyword.
+            'Financial expenses': [
+                'insurance', 'lombard', 'lom gic', 'bajaj allianz', 'hdfc ergo', 'tata aig',
+                'star health', 'niva bupa', 'care health', 'religare', 'sbi life',
+                'icici pru', 'hdfc life', 'max life', 'lic ', 'chola ms',
+                'universal sompo', 'go digit', 'acko', 'policybazaar',
+                'new india assurance', 'oriental insurance', 'national insurance',
+            ],
+            # 'upi' deliberately excluded here -- it's a payment-rail prefix, not
+            # a signal that money moved between the user's own accounts (a real
+            # "Transfer"), and matching it swallowed every UPI merchant payment
+            # into this bucket before any of the more specific ones above got a
+            # chance to run.
+            'Transfer': ['imps', 'neft', 'rtgs', 'transfer'],
             'ATM Withdrawal': ['atm', 'withdrawal', 'cash'],
         }
 

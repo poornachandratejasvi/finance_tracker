@@ -77,7 +77,10 @@ DEFAULT_CATEGORY_RULES = {
     "Investments": ["ZERODHA", "GROWW", "UPSTOX", "KUVERA", "MUTUAL FUND", "SIP", "DEMAT"],
     "Income": ["SALARY", "SAL CREDIT", "DIVIDEND", "CASHBACK", "INTEREST CREDIT"],
     "Communication, PC": ["GOOGLE ", "MICROSOFT", "ADOBE", "GITHUB", "APPLE.COM", "OPENAI"],
-    "Financial expenses": ["GST", "SERVICE CHARGE", "PROCESSING FEE", "LIC ", "INSURANCE PREMIUM", "ANNUAL FEE"],
+    "Financial expenses": ["GST", "SERVICE CHARGE", "PROCESSING FEE", "LIC ", "INSURANCE PREMIUM", "ANNUAL FEE",
+                           "LOMBARD", "LOM GIC", "BAJAJ ALLIANZ", "HDFC ERGO", "TATA AIG", "STAR HEALTH", "NIVA BUPA",
+                           "CARE HEALTH", "RELIGARE", "SBI LIFE", "ICICI PRU", "HDFC LIFE", "MAX LIFE",
+                           "CHOLA MS", "UNIVERSAL SOMPO", "GO DIGIT", "ACKO", "POLICYBAZAAR"],
 }
 
 # icon values are KEYS resolved to a MUI icon component on the frontend
