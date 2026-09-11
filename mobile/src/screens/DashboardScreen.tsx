@@ -41,6 +41,22 @@ function bankTypeColor(type: string | null): string {
   return BANK_TYPE_COLORS[(type || "").toLowerCase()] || "#546e7a";
 }
 
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+// This calendar month, 1st through today -- used to scope the hero card's
+// Income/Expense mini-stats. "Available balance" itself is intentionally NOT
+// scoped this way (see load()): it comes from balances.savings_total/
+// credit_total, which the backend computes from each bank's own stored
+// current_balance regardless of date filters, since it's a running total,
+// not a period figure.
+function currentMonthRange(): { start_date: string; end_date: string } {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  return { start_date: isoDate(start), end_date: isoDate(now) };
+}
+
 export default function DashboardScreen() {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
@@ -59,7 +75,7 @@ export default function DashboardScreen() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const data = await fetchDashboardSummary();
+      const data = await fetchDashboardSummary(currentMonthRange());
       setSummary(data);
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Couldn't load the dashboard.");
@@ -113,6 +129,7 @@ export default function DashboardScreen() {
               <Text style={styles.heroValue} numberOfLines={1} adjustsFontSizeToFit>
                 {formatCurrency(summary.balances.savings_total - summary.balances.credit_total)}
               </Text>
+              <Text style={styles.heroStatsCaption}>This month</Text>
               <View style={styles.heroStatsRow}>
                 <ScalePressable
                   style={styles.heroStat}
@@ -187,6 +204,7 @@ const makeStyles = (c: ThemeColors) =>
     heroTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
     heroLabel: { color: "rgba(255,255,255,0.8)", fontSize: 13, fontWeight: "600", marginBottom: 6 },
     heroValue: { color: "#ffffff", fontSize: 36, fontWeight: "800", marginBottom: 18 },
+    heroStatsCaption: { color: "rgba(255,255,255,0.55)", fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 },
     heroStatsRow: { flexDirection: "row", alignItems: "center" },
     heroStat: { flex: 1 },
     heroStatTop: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 3 },
