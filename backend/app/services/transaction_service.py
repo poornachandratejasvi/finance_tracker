@@ -171,16 +171,14 @@ class TransactionService:
         keyword buckets below (most real-world merchants) as if it had been
         deliberately categorized, instead of leaving it visibly unclassified."""
         categories = {
-            'Food & Dining': ['restaurant', 'food', 'zomato', 'swiggy', 'cafe', 'pizza', 'burger'],
-            'Shopping': ['amazon', 'flipkart', 'myntra', 'shopping', 'mall', 'store'],
-            'Transportation': ['uber', 'ola', 'metro', 'fuel', 'petrol', 'parking'],
-            'Bills & Utilities': ['electricity', 'water', 'gas', 'mobile', 'internet', 'bill'],
-            'Entertainment': ['movie', 'netflix', 'prime', 'spotify', 'game'],
-            'Healthcare': ['hospital', 'pharmacy', 'medical', 'doctor', 'clinic'],
-            # Checked before 'Transfer' below -- almost every modern Indian bank
-            # transaction description is prefixed "UPI_..." regardless of what
-            # it actually is (a merchant payment, a bill, an insurance premium),
-            # so a real payee name here must win over the generic rail keyword.
+            # Checked FIRST, ahead of every other bucket -- insurance-company
+            # names are specific enough to never collide with a real Food/
+            # Shopping/etc. merchant, whereas some of those buckets' own
+            # keywords are dangerously generic (Shopping's bare 'store', for
+            # instance, matches the "... Miscellaneous Stores" suffix some
+            # bank statement templates append even to an insurance payment --
+            # confirmed against a real transaction that this bucket needs to
+            # win that collision, not lose it).
             'Financial expenses': [
                 'insurance', 'lombard', 'lom gic', 'bajaj allianz', 'hdfc ergo', 'tata aig',
                 'star health', 'niva bupa', 'care health', 'religare', 'sbi life',
@@ -188,6 +186,12 @@ class TransactionService:
                 'universal sompo', 'go digit', 'acko', 'policybazaar',
                 'new india assurance', 'oriental insurance', 'national insurance',
             ],
+            'Food & Dining': ['restaurant', 'food', 'zomato', 'swiggy', 'cafe', 'pizza', 'burger'],
+            'Shopping': ['amazon', 'flipkart', 'myntra', 'shopping', 'mall', 'store'],
+            'Transportation': ['uber', 'ola', 'metro', 'fuel', 'petrol', 'parking'],
+            'Bills & Utilities': ['electricity', 'water', 'gas', 'mobile', 'internet', 'bill'],
+            'Entertainment': ['movie', 'netflix', 'prime', 'spotify', 'game'],
+            'Healthcare': ['hospital', 'pharmacy', 'medical', 'doctor', 'clinic'],
             # 'upi' deliberately excluded here -- it's a payment-rail prefix, not
             # a signal that money moved between the user's own accounts (a real
             # "Transfer"), and matching it swallowed every UPI merchant payment
