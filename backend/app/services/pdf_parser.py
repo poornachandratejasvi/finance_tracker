@@ -922,6 +922,17 @@ class PDFParser:
         if not description or not re.search(r'[A-Za-z]', description):
             return None
 
+        # SBI e-statements append a date-stamped "Balance Summary"/account-info
+        # recap page after the real transaction table, which itself contains a
+        # genuine two-decimal amount (the account's own balance figure) trailing
+        # a stray D/C letter -- shape-wise indistinguishable from a real
+        # transaction line to the regex above. Reject on the boilerplate wording
+        # that only ever appears in that recap section, never in an actual
+        # transaction description (confirmed against real statements where this
+        # was silently inflating/deflating the account balance every month).
+        if PDFParser._SBI_SUMMARY_PAGE_MARKERS_RE.search(description):
+            return None
+
         amount = PDFParser._parse_amount(amount_str)
         if amount <= 0:
             return None
@@ -1008,6 +1019,16 @@ class PDFParser:
     # "Page 1 of 5", "Continued on next page", carried-forward/brought-forward markers).
     _PAGE_ARTIFACT_RE = re.compile(
         r'(page\s*\d+\s*(?:\||of|/)\s*\d+|continued\s+on|carried\s+forward|brought\s+forward|b/f|c/f)',
+        re.IGNORECASE,
+    )
+
+    # Wording that only ever appears in SBI's date-stamped "Balance Summary"/
+    # account-info recap page, never in a real transaction description -- see
+    # _parse_sbi_transaction_line's use of this.
+    _SBI_SUMMARY_PAGE_MARKERS_RE = re.compile(
+        r'(balance\s+summary|kyc\s+status|nominee\s+registered|home\s+branch|'
+        r'transaction\s+accounts|my\s+accounts|my\s+information|my\s+home\s+branch|'
+        r'please\s+do\s+not\s+share|available\s+balance\s+status|mode\s+of\s+operation)',
         re.IGNORECASE,
     )
 
