@@ -10,7 +10,8 @@ keyword-based search instead of reusing that query.
 """
 import json
 import logging
-from typing import List
+import re
+from typing import List, Optional
 
 from app.models.models import Bank, BankEmail, GmailAccount, Transaction
 from app.services.gmail_service import GmailService, credentials_from_dict
@@ -18,6 +19,20 @@ from app.services.alert_email_service import parse_alert_email
 from app.services.transaction_hooks import apply_auto_rules_and_notify, dedupe_incoming_pending
 
 logger = logging.getLogger(__name__)
+
+# Matches the "From: Display Name <address@domain>" line Outlook/Exchange
+# inserts as plain text at the top of a forwarded message's body (e.g. "From:
+# Pluxee IN <noreply-cardinfo@services.pluxee.in>"). Used as a fallback when
+# the Gmail envelope sender doesn't match any configured bank -- some accounts
+# only ever receive certain bank alerts at a work inbox and manually forward
+# them to the Gmail account this app actually watches, at which point the
+# envelope sender becomes the forwarder's own address, not the bank's.
+_FORWARDED_FROM_RE = re.compile(r"From:\s*(?:[^<\n]*)<([\w.+-]+@[\w.-]+)>", re.IGNORECASE)
+
+
+def _extract_forwarded_sender(body: str) -> Optional[str]:
+    match = _FORWARDED_FROM_RE.search(body or "")
+    return match.group(1) if match else None
 
 # Broad on purpose — narrowed afterward in Python by matching the sender's domain
 # against each bank's already-configured sender_email/sender_emails (see
@@ -36,7 +51,11 @@ logger = logging.getLogger(__name__)
 # a narrow, sender-scoped carve-out instead of loosening the blanket filter.
 ALERT_KEYWORDS_QUERY = (
     '(-has:attachment (debited OR credited OR "has been spent" OR "has been used" '
-    'OR "card swipe" OR spent OR "debit by transfer" OR "credit by transfer")) '
+    'OR "card swipe" OR spent OR "debit by transfer" OR "credit by transfer" '
+    # Pluxee's own wording ("You've made a payment of...") doesn't contain any of
+    # the phrases above -- without this it would never even be fetched, regardless
+    # of sender/forwarding handling below.
+    'OR "made a payment")) '
     'OR (from:alerts.in@sc.com (credited OR debited OR credit OR debit))'
 )
 
@@ -114,6 +133,24 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
             sender = msg.get('sender', '')
             sender_domain = sender.split('@')[-1].rstrip('>').lower() if '@' in sender else ''
             bank = next((b for d, b in domain_to_bank.items() if sender_domain and sender_domain.endswith(d)), None)
+
+            # No match on the envelope sender -- check for a manually-forwarded
+            # copy (envelope sender is the forwarder, e.g. a work inbox, not the
+            # bank) before giving up. If the forwarded body's own "From:" line
+            # resolves to a configured bank, use THAT address as `sender` from
+            # here on so parse_alert_email's sender-substring dispatch still
+            # matches correctly.
+            if not bank:
+                forwarded_sender = _extract_forwarded_sender(msg.get('body', '') or '')
+                if forwarded_sender:
+                    forwarded_domain = forwarded_sender.split('@')[-1].lower()
+                    forwarded_bank = next(
+                        (b for d, b in domain_to_bank.items() if forwarded_domain.endswith(d)), None
+                    )
+                    if forwarded_bank:
+                        bank = forwarded_bank
+                        sender = forwarded_sender
+
             if not bank:
                 # An alert-keyword match from a sender domain no configured bank owns.
                 # Previously this was a silent `continue` -- no log, no record, no way
