@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { DashboardWidget, DashboardWidgetType } from "../../types";
@@ -77,7 +78,7 @@ export default function DashboardWidgets() {
           if (!meta) return null;
           const Content = meta.Content;
           return (
-            <View key={w.id} style={styles.card}>
+            <Animated.View key={w.id} entering={FadeInDown.delay(i * 80).springify().damping(16)} style={styles.card}>
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>{meta.label}</Text>
                 {editing && (
@@ -95,7 +96,7 @@ export default function DashboardWidgets() {
                 )}
               </View>
               <Content widget={w} onWidgetUpdated={handleWidgetUpdated} />
-            </View>
+            </Animated.View>
           );
         })
       )}

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
+import { BarChart, LineChart } from "react-native-gifted-charts";
 
 import { fetchDashboardSummary, fetchNetWorth } from "../../api/dashboard";
 import { fetchCashflow, fetchBalanceTrend, fetchHeatmap, fetchTopMerchants } from "../../api/analytics";
@@ -15,14 +17,16 @@ import { getWidgetFormulaValue, updateDashboardWidget, FormulaValue } from "../.
 import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { formatCurrency, formatDate, formatDateTime } from "../../utils/format";
 import { Bank, DashboardWidget } from "../../types";
+import AnimatedBarFill from "../../components/AnimatedBarFill";
 
 // Every widget content component fetches its own data on mount, independent
 // of the others, against an EXISTING endpoint (dashboard/summary,
 // analytics/*, investments, reward-points, budget status) -- no new
-// aggregation logic here, just presentation. Charts are plain View bars
-// (matching AnalyticsScreen.tsx's existing pattern) since this app has no
-// chart library dependency and adding one is unnecessary native-dependency
-// risk for a bar chart.
+// aggregation logic here, just presentation. Trend charts use
+// react-native-gifted-charts (same library AnalyticsScreen.tsx uses) for
+// real animated bars/lines instead of hand-rolled static Views; flat
+// proportional bars use the shared AnimatedBarFill so nothing here just
+// pops in at full size.
 
 const CHART_HEIGHT = 90;
 
@@ -115,7 +119,7 @@ function BarRow({ label, value, max, color }: { label: string; value: number; ma
         <Text style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}>{formatCurrency(value)}</Text>
       </View>
       <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.chipBg, overflow: "hidden" }}>
-        <View style={{ height: 6, borderRadius: 3, width: `${Math.min(100, (value / max) * 100)}%`, backgroundColor: color }} />
+        <AnimatedBarFill pct={(value / max) * 100} color={color} height={6} />
       </View>
     </View>
   );
@@ -131,16 +135,16 @@ export function SpendingByCategoryContent() {
   const max = Math.max(...rows.map((r) => Math.abs(r.total_amount)), 1);
   return (
     <View style={{ gap: 6 }}>
-      {rows.map((r) => (
-        <View key={r.category}>
+      {rows.map((r, i) => (
+        <Animated.View key={r.category} entering={FadeIn.duration(350).delay(i * 60)}>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
             <Text style={{ color: colors.text, fontSize: 13 }} numberOfLines={1}>{r.category}</Text>
             <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{formatCurrency(r.total_amount)}</Text>
           </View>
-          <View style={{ height: 5, borderRadius: 3, backgroundColor: colors.chipBg, marginTop: 3 }}>
-            <View style={{ height: 5, borderRadius: 3, width: `${(Math.abs(r.total_amount) / max) * 100}%`, backgroundColor: colors.primary }} />
+          <View style={{ height: 5, borderRadius: 3, backgroundColor: colors.chipBg, marginTop: 3, overflow: "hidden" }}>
+            <AnimatedBarFill pct={(Math.abs(r.total_amount) / max) * 100} color={colors.primary} height={5} delay={i * 60} />
           </View>
-        </View>
+        </Animated.View>
       ))}
     </View>
   );
@@ -156,21 +160,24 @@ export function CashflowTrendContent() {
   }, []);
   if (!data) return <Loading />;
   if (!data.series.length) return <Empty colors={colors} />;
-  const max = Math.max(...data.series.map((p) => Math.max(p.income, p.expense)), 1);
   return (
-    <View>
-      <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", height: CHART_HEIGHT }}>
-        {data.series.map((p) => (
-          <View key={p.date} style={{ alignItems: "center", flex: 1 }}>
-            <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 2, height: CHART_HEIGHT }}>
-              <View style={{ width: 6, borderRadius: 2, height: (p.income / max) * CHART_HEIGHT, backgroundColor: colors.primary }} />
-              <View style={{ width: 6, borderRadius: 2, height: (p.expense / max) * CHART_HEIGHT, backgroundColor: colors.danger }} />
-            </View>
-            <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 4 }}>{monthLabel(p.date)}</Text>
-          </View>
-        ))}
-      </View>
-    </View>
+    <BarChart
+      data={data.series.flatMap((p) => [
+        { value: p.income, frontColor: colors.primary, gradientColor: colors.background, showGradient: true, spacing: 2, label: monthLabel(p.date) },
+        { value: p.expense, frontColor: colors.danger, gradientColor: colors.background, showGradient: true, spacing: 16 },
+      ])}
+      height={CHART_HEIGHT}
+      barWidth={10}
+      barBorderRadius={3}
+      noOfSections={3}
+      hideRules
+      hideYAxisText
+      xAxisThickness={0}
+      yAxisThickness={0}
+      xAxisLabelTextStyle={{ color: colors.textSecondary, fontSize: 9 }}
+      isAnimated
+      animationDuration={500}
+    />
   );
 }
 
@@ -184,22 +191,28 @@ export function BalanceTrendContent() {
   }, []);
   if (!data) return <Loading />;
   if (data.series.length < 2) return <Empty colors={colors} text="Not enough history yet." />;
-  const max = Math.max(...data.series.map((p) => Math.abs(p.balance)), 1);
+  const lineColor = data.ending_balance >= 0 ? colors.primary : colors.danger;
   return (
-    <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", height: CHART_HEIGHT }}>
-      {data.series.map((p) => (
-        <View key={p.date} style={{ alignItems: "center", flex: 1 }}>
-          <View
-            style={{
-              width: 10, borderRadius: 3,
-              height: Math.max(4, (Math.abs(p.balance) / max) * CHART_HEIGHT),
-              backgroundColor: p.balance >= 0 ? colors.primary : colors.danger,
-            }}
-          />
-          <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 4 }}>{monthLabel(p.date)}</Text>
-        </View>
-      ))}
-    </View>
+    <LineChart
+      data={data.series.map((p) => ({ value: p.balance, label: monthLabel(p.date) }))}
+      height={CHART_HEIGHT}
+      color={lineColor}
+      thickness={2.5}
+      curved
+      areaChart
+      startFillColor={lineColor}
+      endFillColor={colors.background}
+      startOpacity={0.3}
+      endOpacity={0.02}
+      hideDataPoints
+      hideRules
+      hideYAxisText
+      xAxisThickness={0}
+      yAxisThickness={0}
+      xAxisLabelTextStyle={{ color: colors.textSecondary, fontSize: 9 }}
+      isAnimated
+      animationDuration={600}
+    />
   );
 }
 
@@ -297,23 +310,23 @@ export function BudgetProgressContent() {
   if (!data.budgets.length) return <Empty colors={colors} text="No budgets set up yet." />;
   return (
     <View style={{ gap: 10 }}>
-      {data.budgets.map((b) => (
-        <View key={b.id}>
+      {data.budgets.map((b, i) => (
+        <Animated.View key={b.id} entering={FadeIn.duration(350).delay(i * 60)}>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
             <Text style={{ color: colors.text, fontSize: 13 }}>{b.category}</Text>
             <Text style={{ color: b.over ? colors.danger : colors.textSecondary, fontSize: 12 }}>
               {formatCurrency(b.spent)} / {formatCurrency(b.monthly_limit)}
             </Text>
           </View>
-          <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.chipBg, marginTop: 4 }}>
-            <View
-              style={{
-                height: 6, borderRadius: 3, width: `${Math.min(100, b.pct)}%`,
-                backgroundColor: b.over ? colors.danger : b.pct > (b.alert_at_pct || 80) ? colors.warning : colors.primary,
-              }}
+          <View style={{ height: 6, borderRadius: 3, backgroundColor: colors.chipBg, marginTop: 4, overflow: "hidden" }}>
+            <AnimatedBarFill
+              pct={Math.min(100, b.pct)}
+              color={b.over ? colors.danger : b.pct > (b.alert_at_pct || 80) ? colors.warning : colors.primary}
+              height={6}
+              delay={i * 60}
             />
           </View>
-        </View>
+        </Animated.View>
       ))}
     </View>
   );
@@ -378,7 +391,7 @@ export function TopMerchantsContent() {
   return (
     <View style={{ gap: 10 }}>
       {data.merchants.map((m, i) => (
-        <View key={i}>
+        <Animated.View key={i} entering={FadeIn.duration(350).delay(i * 50)}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 3 }}>
             <Text style={{ color: colors.text, fontSize: 13, flex: 1, marginRight: 8 }} numberOfLines={1}>
               {m.sample_description || m.merchant}
@@ -386,9 +399,9 @@ export function TopMerchantsContent() {
             <Text style={{ color: colors.text, fontWeight: "700", fontSize: 13 }}>{formatCurrency(m.total)}</Text>
           </View>
           <View style={{ height: 5, borderRadius: 3, backgroundColor: colors.chipBg, overflow: "hidden" }}>
-            <View style={{ height: "100%", width: `${(m.total / max) * 100}%`, backgroundColor: colors.primary, borderRadius: 3 }} />
+            <AnimatedBarFill pct={(m.total / max) * 100} color={colors.primary} height={5} delay={i * 50} />
           </View>
-        </View>
+        </Animated.View>
       ))}
     </View>
   );

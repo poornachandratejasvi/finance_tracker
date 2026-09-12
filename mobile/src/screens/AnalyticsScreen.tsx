@@ -24,6 +24,7 @@ import { categoryIconFor } from "../utils/categoryIcons";
 import { formatCurrency } from "../utils/format";
 import PeriodPager, { ResolvedPeriod } from "../components/PeriodPager";
 import ScalePressable from "../components/ScalePressable";
+import AnimatedBarFill from "../components/AnimatedBarFill";
 import { RootStackParamList, MetricKey } from "../navigation/RootNavigator";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -249,8 +250,8 @@ export default function AnalyticsScreen() {
           </View>
           <BarChart
             data={cashflow.series.flatMap((p) => [
-              { value: p.income, frontColor: colors.primary, spacing: 2, label: monthLabel(p.date) },
-              { value: p.expense, frontColor: colors.danger, spacing: 18 },
+              { value: p.income, frontColor: colors.primary, gradientColor: colors.background, showGradient: true, spacing: 2, label: monthLabel(p.date) },
+              { value: p.expense, frontColor: colors.danger, gradientColor: colors.background, showGradient: true, spacing: 18 },
             ])}
             height={CHART_HEIGHT}
             barWidth={14}
@@ -319,6 +320,8 @@ export default function AnalyticsScreen() {
               radius={56}
               innerRadius={38}
               innerCircleColor={colors.card}
+              isAnimated
+              animationDuration={600}
               centerLabelComponent={() => (
                 <View style={{ alignItems: "center" }}>
                   <Text style={styles.donutCenterValue}>{formatCurrency(totalTopExpenses)}</Text>
@@ -327,11 +330,11 @@ export default function AnalyticsScreen() {
               )}
             />
           </View>
-          {topExpenses.map((c) => {
+          {topExpenses.map((c, i) => {
             const meta = categories.find((cat) => cat.name === c.category);
             const pct = Math.round((c.amount / totalTopExpenses) * 100);
             return (
-              <View key={c.category} style={styles.categoryListRow}>
+              <Animated.View key={c.category} entering={FadeIn.duration(350).delay(i * 50)} style={styles.categoryListRow}>
                 <View style={[styles.categoryIcon, { backgroundColor: meta?.color || colors.primary }]}>
                   <Ionicons name={categoryIconFor(meta?.icon)} size={14} color="#fff" />
                 </View>
@@ -341,11 +344,11 @@ export default function AnalyticsScreen() {
                     <Text style={styles.listValue}>{formatCurrency(c.amount)}</Text>
                   </View>
                   <View style={styles.categoryBarTrack}>
-                    <View style={[styles.categoryBarFill, { width: `${pct}%`, backgroundColor: meta?.color || colors.primary }]} />
+                    <AnimatedBarFill pct={pct} color={meta?.color || colors.primary} height={5} delay={i * 50} />
                   </View>
                 </View>
                 <Text style={styles.categoryPct}>{pct}%</Text>
-              </View>
+              </Animated.View>
             );
           })}
         </Animated.View>
@@ -435,6 +438,8 @@ export default function AnalyticsScreen() {
               value: p.total,
               label: p.day.slice(0, 3),
               frontColor: p.day === spendingPatterns.busiest_day ? colors.primary : colors.chipBg,
+              gradientColor: p.day === spendingPatterns.busiest_day ? colors.background : undefined,
+              showGradient: p.day === spendingPatterns.busiest_day,
             }))}
             height={CHART_HEIGHT}
             barWidth={20}
@@ -509,7 +514,6 @@ const makeStyles = (c: ThemeColors) =>
     categoryIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", marginRight: 10 },
     categoryTopRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
     categoryBarTrack: { height: 5, borderRadius: 3, backgroundColor: c.chipBg, overflow: "hidden" },
-    categoryBarFill: { height: 5, borderRadius: 3 },
     categoryPct: { fontSize: 11, color: c.textSecondary, fontWeight: "700", marginLeft: 10, width: 32, textAlign: "right" },
     metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 },
     metricCard: { width: "47%", backgroundColor: c.card, borderRadius: 16, padding: 12, ...c.cardShadow },

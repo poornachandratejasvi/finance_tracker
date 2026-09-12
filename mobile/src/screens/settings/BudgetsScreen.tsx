@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Animated, { useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
+import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 
 import { Ionicons } from "@expo/vector-icons";
 
@@ -22,6 +22,8 @@ import { ThemeColors, useTheme } from "../../context/ThemeContext";
 import { Budget, BudgetStatus, Category } from "../../types";
 import { categoryIconFor } from "../../utils/categoryIcons";
 import { formatCurrency } from "../../utils/format";
+import AnimatedBarFill from "../../components/AnimatedBarFill";
+import ScalePressable from "../../components/ScalePressable";
 
 interface EditableBudget extends Budget {
   key: string;
@@ -122,12 +124,12 @@ export default function BudgetsScreen() {
       {status && status.budgets.length > 0 && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>{status.period} spend</Text>
-          {status.budgets.map((b) => {
+          {status.budgets.map((b, i) => {
             const barColor = b.over ? colors.danger : b.pct >= 80 ? colors.warning : colors.primary;
             const meta = categories.find((c) => c.name === b.category);
             const dotColor = meta?.color || colors.primary;
             return (
-              <View key={b.id} style={styles.statusRow}>
+              <Animated.View key={b.id} entering={FadeInDown.duration(350).delay(i * 70).springify().damping(16)} style={styles.statusRow}>
                 <View style={styles.statusHeader}>
                   <View style={[styles.categoryIcon, { backgroundColor: dotColor }]}>
                     <Ionicons name={categoryIconFor(meta?.icon)} size={13} color="#fff" />
@@ -136,12 +138,12 @@ export default function BudgetsScreen() {
                   <Text style={styles.statusPct}>{Math.round(b.pct)}%</Text>
                 </View>
                 <View style={styles.progressTrack}>
-                  <AnimatedProgressFill pct={Math.min(100, b.pct)} color={barColor} />
+                  <AnimatedBarFill pct={Math.min(100, b.pct)} color={barColor} height={8} delay={i * 70} />
                 </View>
                 <Text style={styles.statusAmounts}>
                   {formatCurrency(b.spent)} of {formatCurrency(b.monthly_limit)}
                 </Text>
-              </View>
+              </Animated.View>
             );
           })}
           <Text style={styles.meta}>
@@ -156,7 +158,7 @@ export default function BudgetsScreen() {
           <View key={b.key} style={styles.editRow}>
             <View style={styles.chipRow}>
               {categories.map((c) => (
-                <TouchableOpacity
+                <ScalePressable
                   key={c.id}
                   style={[styles.chip, b.category === c.name && styles.chipActive]}
                   onPress={() => updateRow(b.key, { category: c.name })}
@@ -164,7 +166,7 @@ export default function BudgetsScreen() {
                   <Text style={[styles.chipText, b.category === c.name && styles.chipTextActive]}>
                     {c.name}
                   </Text>
-                </TouchableOpacity>
+                </ScalePressable>
               ))}
             </View>
             <View style={styles.editInputsRow}>
@@ -207,23 +209,6 @@ export default function BudgetsScreen() {
       </TouchableOpacity>
     </ScrollView>
   );
-}
-
-// Animates from 0 to its target width on mount/change -- a hook can't live
-// inside the .map() above (rules of hooks), hence this tiny extracted component.
-function AnimatedProgressFill({ pct, color }: { pct: number; color: string }) {
-  const width = useSharedValue(0);
-
-  useEffect(() => {
-    width.value = withTiming(pct, { duration: 700 });
-  }, [pct, width]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    width: `${width.value}%`,
-    backgroundColor: color,
-  }));
-
-  return <Animated.View style={[{ height: 8, borderRadius: 4 }, animatedStyle]} />;
 }
 
 const makeStyles = (c: ThemeColors) =>

@@ -1,9 +1,10 @@
 import React, { useEffect } from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, TouchableOpacity, View } from "react-native";
 import { DarkTheme, DefaultTheme, NavigationContainer, NavigatorScreenParams, useNavigationContainerRef } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -53,9 +54,24 @@ export type TabParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
+// A small spring "pop" on the icon whenever it becomes the focused tab --
+// tabs previously just swapped color instantly with no motion at all.
+function AnimatedTabIcon({ name, color, focused }: { name: keyof typeof Ionicons.glyphMap; color: string; focused: boolean }) {
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    scale.value = withSpring(focused ? 1.15 : 1, { damping: 10, stiffness: 200 });
+  }, [focused, scale]);
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <Animated.View style={animatedStyle}>
+      <Ionicons name={name} size={22} color={color} />
+    </Animated.View>
+  );
+}
+
 function tabIcon(name: keyof typeof Ionicons.glyphMap, focusedName: keyof typeof Ionicons.glyphMap) {
   return ({ focused, color }: { focused: boolean; color: string }) => (
-    <Ionicons name={focused ? focusedName : name} size={22} color={color} />
+    <AnimatedTabIcon name={focused ? focusedName : name} color={color} focused={focused} />
   );
 }
 
@@ -78,28 +94,38 @@ function EmptyPlaceholderScreen() {
 // tabs' layout -- the one deliberate exception to "the bar itself stays in
 // normal layout flow, not position:absolute" (see tabBarStyle below), scoped
 // to just this one button.
-function AddTabButton({ color }: { color: string }) {
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+function AddTabButton({ color, onPress }: { color: string; onPress: () => void }) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
     <View style={{ flex: 1, alignItems: "center" }}>
-      <View
-        style={{
-          position: "absolute",
-          top: -(TAB_BAR_HEIGHT / 2 + 6),
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          backgroundColor: color,
-          alignItems: "center",
-          justifyContent: "center",
-          elevation: 6,
-          shadowColor: "#000",
-          shadowOpacity: 0.25,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 3 },
-        }}
+      <AnimatedPressable
+        onPress={onPress}
+        onPressIn={() => { scale.value = withSpring(0.9, { damping: 12, stiffness: 300 }); }}
+        onPressOut={() => { scale.value = withSpring(1, { damping: 12, stiffness: 300 }); }}
+        style={[
+          {
+            position: "absolute",
+            top: -(TAB_BAR_HEIGHT / 2 + 6),
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            backgroundColor: color,
+            alignItems: "center",
+            justifyContent: "center",
+            elevation: 6,
+            shadowColor: "#000",
+            shadowOpacity: 0.25,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 3 },
+          },
+          animatedStyle,
+        ]}
       >
         <Ionicons name="add" size={30} color="#fff" />
-      </View>
+      </AnimatedPressable>
     </View>
   );
 }
@@ -191,13 +217,9 @@ function AppTabs({ navigation }: any) {
         options={{
           tabBarLabel: () => null,
           tabBarButton: (props) => (
-            <TouchableOpacity
-              style={props.style}
-              activeOpacity={0.85}
-              onPress={() => navigation.navigate("Add")}
-            >
-              <AddTabButton color={colors.primary} />
-            </TouchableOpacity>
+            <View style={props.style}>
+              <AddTabButton color={colors.primary} onPress={() => navigation.navigate("Add")} />
+            </View>
           ),
         }}
         listeners={{ tabPress: (e) => e.preventDefault() }}
