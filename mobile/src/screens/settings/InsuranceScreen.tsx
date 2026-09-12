@@ -96,6 +96,11 @@ export default function InsuranceScreen({ navigation }: Props) {
                   {(item.days_until_expiry ?? 0) < 0 ? `Expired ${item.expiry_date}` : `Expires ${item.expiry_date}`}
                 </Text>
               ) : null}
+              {item.next_premium_due_date ? (
+                <Text style={{ color: item.premium_status === "overdue" ? colors.danger : colors.primary, fontSize: 12, fontWeight: "700", marginTop: 4 }}>
+                  {item.premium_status === "overdue" ? `Premium overdue since ${item.next_premium_due_date}` : `Next premium due ${item.next_premium_due_date}`}
+                </Text>
+              ) : null}
               {item.document_count > 0 && <Text style={styles.docCount}>{item.document_count} document(s)</Text>}
             </TouchableOpacity>
           )}

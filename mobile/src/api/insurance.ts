@@ -18,6 +18,9 @@ export interface InsurancePolicyPayload {
   expiry_date?: string | null;
   notes?: string | null;
   is_active?: boolean;
+  sender_email?: string | null;
+  sender_emails?: string[];
+  pdf_password?: string;
 }
 
 export async function createInsurancePolicy(payload: InsurancePolicyPayload): Promise<InsurancePolicy> {

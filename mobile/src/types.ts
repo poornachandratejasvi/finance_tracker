@@ -848,6 +848,13 @@ export interface InsurancePolicy {
   is_active: boolean;
   notes: string | null;
   document_count: number;
+  sender_email: string | null;
+  sender_emails: string[];
+  has_pdf_password: boolean;
+  next_premium_due_date: string | null;
+  last_premium_paid_date: string | null;
+  last_premium_amount: number | null;
+  premium_status: "paid" | "overdue" | "unknown";
 }
 
 export interface PolicyDocument {

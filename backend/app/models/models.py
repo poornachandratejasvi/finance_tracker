@@ -1243,6 +1243,21 @@ class InsurancePolicy(Base):
     expiry_date = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
     notes = Column(Text, nullable=True)
+    # Auto-read premium receipts (see insurance_email_sync.py): the insurer's own
+    # statement-sending address (e.g. service@iciciprulife.com) to match against --
+    # same idea as Bank.sender_email, including its forwarded-copy fallback -- and
+    # the password protecting the emailed receipt PDF (encrypted at rest, same
+    # convention as Bank.account_password). next_premium_due_date/
+    # last_premium_paid_date/last_premium_amount are populated straight from the
+    # most recently parsed receipt; "is the current premium paid" is derived from
+    # next_premium_due_date vs now rather than stored, so it can never drift out
+    # of sync with the date itself.
+    sender_email = Column(String(255), nullable=True)  # Primary email (mirrors Bank.sender_email)
+    sender_emails = Column(Text, nullable=True)  # JSON array of additional emails (e.g. LIC sends from two different domains depending on payment channel) -- mirrors Bank.sender_emails
+    pdf_password = Column(EncryptedText, nullable=True)
+    next_premium_due_date = Column(DateTime, nullable=True)
+    last_premium_paid_date = Column(DateTime, nullable=True)
+    last_premium_amount = Column(Float, nullable=True)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
@@ -1266,6 +1281,26 @@ class InsuranceDocument(Base):
 
     policy = relationship("InsurancePolicy", back_populates="documents")
     user = relationship("User")
+
+
+class InsuranceEmail(Base):
+    """Dedupe record for a premium-receipt email already processed by
+    insurance_email_sync.py -- mirrors BankEmail's role for the statement-sync
+    pipeline, just scoped to an InsurancePolicy instead of a Bank."""
+    __tablename__ = "insurance_emails"
+
+    id = Column(Integer, primary_key=True, index=True)
+    gmail_account_id = Column(Integer, ForeignKey("gmail_accounts.id", ondelete="CASCADE"), nullable=False, index=True)
+    policy_id = Column(Integer, ForeignKey("insurance_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    email_id = Column(String(255), unique=True, nullable=False)
+    subject = Column(String(500))
+    from_email = Column(String(255))
+    received_date = Column(DateTime)
+    is_processed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=utcnow)
+
+    gmail_account = relationship("GmailAccount")
+    policy = relationship("InsurancePolicy")
 
 
 class Warranty(Base):

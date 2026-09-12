@@ -216,6 +216,15 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "rate_source", "ALTER TABLE currencies ADD COLUMN rate_source VARCHAR(10) DEFAULT 'manual'")
         _add_column_if_missing(columns, "rate_updated_at", "ALTER TABLE currencies ADD COLUMN rate_updated_at TIMESTAMP")
 
+    if "insurance_policies" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("insurance_policies")}
+        _add_column_if_missing(columns, "sender_email", "ALTER TABLE insurance_policies ADD COLUMN sender_email VARCHAR(255)")
+        _add_column_if_missing(columns, "sender_emails", "ALTER TABLE insurance_policies ADD COLUMN sender_emails TEXT")
+        _add_column_if_missing(columns, "pdf_password", "ALTER TABLE insurance_policies ADD COLUMN pdf_password TEXT")
+        _add_column_if_missing(columns, "next_premium_due_date", "ALTER TABLE insurance_policies ADD COLUMN next_premium_due_date TIMESTAMP")
+        _add_column_if_missing(columns, "last_premium_paid_date", "ALTER TABLE insurance_policies ADD COLUMN last_premium_paid_date TIMESTAMP")
+        _add_column_if_missing(columns, "last_premium_amount", "ALTER TABLE insurance_policies ADD COLUMN last_premium_amount FLOAT")
+
     if "users" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("users")}
         _add_column_if_missing(columns, "avatar_url", "ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500)")

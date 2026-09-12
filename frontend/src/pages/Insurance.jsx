@@ -24,6 +24,13 @@ const DOCUMENT_TYPES = [
 const blank = {
   policy_type: 'health', provider: '', policy_number: '', insured_name: '',
   premium_amount: '', premium_frequency: 'yearly', coverage_amount: '', issued_date: '', expiry_date: '', notes: '',
+  sender_email: '', sender_emails: '', pdf_password: '',
+};
+
+const premiumStatusColor = (status) => {
+  if (status === 'paid') return 'success';
+  if (status === 'overdue') return 'error';
+  return 'default';
 };
 
 const expiryColor = (days) => {
@@ -62,6 +69,10 @@ export default function Insurance() {
       policy_type: p.policy_type, provider: p.provider || '', policy_number: p.policy_number || '',
       insured_name: p.insured_name || '', premium_amount: p.premium_amount ?? '', premium_frequency: p.premium_frequency,
       coverage_amount: p.coverage_amount ?? '', issued_date: p.issued_date || '', expiry_date: p.expiry_date || '', notes: p.notes || '',
+      // pdf_password is write-only (never returned by the API) -- always starts
+      // blank on edit, same convention as Bank.account_password. Leaving it
+      // blank on save keeps whatever's already stored.
+      sender_email: p.sender_email || '', sender_emails: (p.sender_emails || []).join(', '), pdf_password: '',
     });
     setOpen(true);
   };
@@ -74,7 +85,12 @@ export default function Insurance() {
         ...form,
         premium_amount: form.premium_amount === '' ? null : parseFloat(form.premium_amount),
         coverage_amount: form.coverage_amount === '' ? null : parseFloat(form.coverage_amount),
+        sender_emails: form.sender_emails.split(',').map((s) => s.trim()).filter(Boolean),
       };
+      // Blank means "leave the stored password alone" -- never send an empty
+      // string that would overwrite it (the backend also guards this, but
+      // dropping it here avoids relying on that alone).
+      if (!payload.pdf_password) delete payload.pdf_password;
       if (editing) await updateInsurancePolicy(editing.id, payload);
       else await createInsurancePolicy(payload);
       setOpen(false);
@@ -152,13 +168,24 @@ export default function Insurance() {
                     )}
                     {p.coverage_amount != null && <Typography variant="body2">Coverage: {formatCurrency(p.coverage_amount)}</Typography>}
                   </Box>
-                  {p.expiry_date && (
-                    <Chip
-                      size="small" sx={{ mt: 1 }}
-                      color={expiryColor(p.days_until_expiry)}
-                      label={p.days_until_expiry < 0 ? `Expired ${p.expiry_date}` : `Expires ${p.expiry_date}`}
-                    />
-                  )}
+                  <Box display="flex" gap={1} flexWrap="wrap" mt={1}>
+                    {p.expiry_date && (
+                      <Chip
+                        size="small"
+                        color={expiryColor(p.days_until_expiry)}
+                        label={p.days_until_expiry < 0 ? `Expired ${p.expiry_date}` : `Expires ${p.expiry_date}`}
+                      />
+                    )}
+                    {p.next_premium_due_date && (
+                      <Tooltip title={p.last_premium_paid_date ? `Last paid ${p.last_premium_paid_date} (${formatCurrency(p.last_premium_amount)})` : ''}>
+                        <Chip
+                          size="small"
+                          color={premiumStatusColor(p.premium_status)}
+                          label={p.premium_status === 'overdue' ? `Premium overdue since ${p.next_premium_due_date}` : `Next premium due ${p.next_premium_due_date}`}
+                        />
+                      </Tooltip>
+                    )}
+                  </Box>
                 </Box>
                 <Box display="flex" gap={0.5}>
                   <Tooltip title="Documents">
@@ -198,6 +225,37 @@ export default function Insurance() {
             <TextField label="Expiry Date" type="date" value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} InputLabelProps={{ shrink: true }} fullWidth />
           </Box>
           <TextField label="Notes" multiline rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} fullWidth />
+
+          <Divider sx={{ my: 1 }} />
+          <Typography variant="subtitle2" color="text.secondary">
+            Auto-read premium receipts (optional)
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+            When the insurer emails a premium receipt (or a forwarded copy lands in your Gmail),
+            next due date and premium amount are read automatically from the attached PDF.
+          </Typography>
+          <TextField
+            label="Statement email"
+            placeholder="e.g. service@iciciprulife.com"
+            value={form.sender_email}
+            onChange={(e) => setForm({ ...form, sender_email: e.target.value })}
+            fullWidth
+          />
+          <TextField
+            label="Additional sender emails (comma-separated)"
+            placeholder="e.g. licreceipt@billdesk.in"
+            value={form.sender_emails}
+            onChange={(e) => setForm({ ...form, sender_emails: e.target.value })}
+            fullWidth
+          />
+          <TextField
+            label="PDF password"
+            type="password"
+            placeholder={editing?.has_pdf_password ? 'Leave blank to keep existing password' : 'Leave blank if the PDF has no password'}
+            value={form.pdf_password}
+            onChange={(e) => setForm({ ...form, pdf_password: e.target.value })}
+            fullWidth
+          />
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={() => setOpen(false)}>Cancel</Button>

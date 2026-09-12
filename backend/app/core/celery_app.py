@@ -27,7 +27,7 @@ celery_app = Celery(
         "app.tasks.warranty_document_tasks", "app.tasks.digest_tasks",
         "app.tasks.nav_refresh_tasks", "app.tasks.fx_refresh_tasks",
         "app.tasks.anomaly_tasks", "app.tasks.payslip_document_tasks",
-        "app.tasks.planned_item_tasks",
+        "app.tasks.planned_item_tasks", "app.tasks.insurance_email_tasks",
     ],
 )
 
@@ -96,6 +96,12 @@ celery_app.conf.beat_schedule = {
     "alert-email-sync": {
         "task": "alerts.sync_all",
         "schedule": 15 * 60.0,
+    },
+    # Premium receipts arrive at most monthly -- a daily check is plenty and
+    # avoids unnecessary Gmail API calls, unlike the 15-minute bank-alert cadence.
+    "insurance-email-sync": {
+        "task": "insurance.sync_emails",
+        "schedule": crontab(hour=6, minute=30),
     },
     # Keeps credit-card outstanding balances fresh without anyone needing to
     # remember to click "Redetect Credit Balances" — a no-op ("unchanged") if

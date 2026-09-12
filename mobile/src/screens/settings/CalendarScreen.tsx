@@ -30,6 +30,7 @@ const TYPE_META: Record<string, { color: string; icon: keyof typeof Ionicons.gly
   vehicle_puc: { color: "#b07aa1", icon: "car-outline" },
   autopay_mandate: { color: "#9c755f", icon: "repeat-outline" },
   insurance_expiry: { color: "#e6a532", icon: "medkit-outline" },
+  insurance_premium_due: { color: "#e6a532", icon: "medkit-outline" },
   warranty_expiry: { color: "#79706e", icon: "shield-outline" },
   amc_expiry: { color: "#79706e", icon: "shield-outline" },
   iou_due: { color: "#bab0ac", icon: "people-outline" },
@@ -44,7 +45,7 @@ const CATEGORIES = [
   { key: "subscription", label: "Subscriptions" },
   { key: "vehicle", label: "Vehicles" },
   { key: "autopay_mandate", label: "Autopay" },
-  { key: "insurance_expiry", label: "Insurance" },
+  { key: "insurance", label: "Insurance" },
   { key: "warranty", label: "Warranties" },
   { key: "iou_due", label: "IOUs" },
   { key: "reward_points_expiry", label: "Reward Points" },
@@ -56,6 +57,7 @@ function matchesCategory(item: CalendarItem, key: string): boolean {
   if (key === "credit_card") return item.type === "credit_card_statement" || item.type === "credit_card_due" || item.type === "credit_card_fee";
   if (key === "vehicle") return item.type === "vehicle_insurance" || item.type === "vehicle_puc";
   if (key === "warranty") return item.type === "warranty_expiry" || item.type === "amc_expiry";
+  if (key === "insurance") return item.type === "insurance_expiry" || item.type === "insurance_premium_due";
   return item.type === key;
 }
 

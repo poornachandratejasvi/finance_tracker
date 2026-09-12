@@ -45,6 +45,11 @@ export default function InsuranceFormScreen({ route, navigation }: Props) {
   const [issuedDate, setIssuedDate] = useState(existing?.issued_date || "");
   const [expiryDate, setExpiryDate] = useState(existing?.expiry_date || "");
   const [notes, setNotes] = useState(existing?.notes || "");
+  const [senderEmail, setSenderEmail] = useState(existing?.sender_email || "");
+  const [senderEmails, setSenderEmails] = useState((existing?.sender_emails || []).join(", "));
+  // Write-only, mirrors the web form -- never re-populated with the stored
+  // value, always starts blank on edit.
+  const [pdfPassword, setPdfPassword] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [documents, setDocuments] = useState<PolicyDocument[]>([]);
@@ -76,6 +81,9 @@ export default function InsuranceFormScreen({ route, navigation }: Props) {
         issued_date: issuedDate.trim() || null,
         expiry_date: expiryDate.trim() || null,
         notes: notes.trim() || null,
+        sender_email: senderEmail.trim() || null,
+        sender_emails: senderEmails.split(",").map((s) => s.trim()).filter(Boolean),
+        ...(pdfPassword.trim() ? { pdf_password: pdfPassword.trim() } : {}),
       };
       if (existing) await updateInsurancePolicy(existing.id, payload);
       else await createInsurancePolicy(payload);
@@ -185,6 +193,44 @@ export default function InsuranceFormScreen({ route, navigation }: Props) {
 
       <Text style={styles.label}>Notes</Text>
       <TextInput style={[styles.input, styles.multiline]} value={notes} onChangeText={setNotes} multiline />
+
+      <View style={styles.divider} />
+      <Text style={styles.sectionTitle}>Auto-read premium receipts (optional)</Text>
+      <Text style={styles.meta}>
+        When the insurer emails a premium receipt (or a forwarded copy lands in your Gmail), next due
+        date and premium amount are read automatically from the attached PDF.
+      </Text>
+
+      <Text style={styles.label}>Statement email</Text>
+      <TextInput
+        style={styles.input}
+        value={senderEmail}
+        onChangeText={setSenderEmail}
+        placeholder="e.g. service@iciciprulife.com"
+        placeholderTextColor={colors.textSecondary}
+        autoCapitalize="none"
+      />
+
+      <Text style={styles.label}>Additional sender emails (comma-separated)</Text>
+      <TextInput
+        style={styles.input}
+        value={senderEmails}
+        onChangeText={setSenderEmails}
+        placeholder="e.g. licreceipt@billdesk.in"
+        placeholderTextColor={colors.textSecondary}
+        autoCapitalize="none"
+      />
+
+      <Text style={styles.label}>PDF password</Text>
+      <TextInput
+        style={styles.input}
+        value={pdfPassword}
+        onChangeText={setPdfPassword}
+        placeholder={existing?.has_pdf_password ? "Leave blank to keep existing password" : "Leave blank if the PDF has no password"}
+        placeholderTextColor={colors.textSecondary}
+        autoCapitalize="none"
+        secureTextEntry
+      />
 
       <TouchableOpacity style={[styles.button, submitting && styles.buttonDisabled]} onPress={onSave} disabled={submitting}>
         {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Save</Text>}

@@ -4,8 +4,9 @@ policy per vehicle), a person can hold several simultaneous policies of the
 same type (e.g. two health policies), so this is a flat, independently-managed
 list rather than a history-with-a-derived-current shape.
 """
+import json
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from pydantic import BaseModel
@@ -44,14 +45,31 @@ class PolicyCreate(BaseModel):
     issued_date: Optional[str] = None
     expiry_date: Optional[str] = None
     notes: Optional[str] = None
+    # Auto-read premium receipts (see insurance_email_sync.py): the insurer's
+    # statement-sending address to match against, and the password protecting
+    # the emailed receipt PDF. Both optional -- leave blank to keep tracking
+    # this policy manually.
+    sender_email: Optional[str] = None
+    sender_emails: Optional[List[str]] = None
+    pdf_password: Optional[str] = None
 
 
 class PolicyUpdate(PolicyCreate):
     is_active: Optional[bool] = None
 
 
+def _premium_status(p: InsurancePolicy, now) -> str:
+    """Derived, not stored -- 'paid' just means the next known due date is
+    still ahead of us, so it can never drift out of sync with the date
+    itself the way a separately-stored status flag could."""
+    if not p.next_premium_due_date:
+        return "unknown"
+    return "paid" if p.next_premium_due_date >= now else "overdue"
+
+
 def _policy_dict(p: InsurancePolicy) -> dict:
-    days_until_expiry = (p.expiry_date - utcnow()).days if p.expiry_date else None
+    now = utcnow()
+    days_until_expiry = (p.expiry_date - now).days if p.expiry_date else None
     return {
         "id": p.id,
         "policy_type": p.policy_type,
@@ -67,6 +85,13 @@ def _policy_dict(p: InsurancePolicy) -> dict:
         "is_active": p.is_active,
         "notes": p.notes,
         "document_count": len(p.documents),
+        "sender_email": p.sender_email,
+        "sender_emails": (json.loads(p.sender_emails) if p.sender_emails else []),
+        "has_pdf_password": bool(p.pdf_password),
+        "next_premium_due_date": p.next_premium_due_date.strftime("%Y-%m-%d") if p.next_premium_due_date else None,
+        "last_premium_paid_date": p.last_premium_paid_date.strftime("%Y-%m-%d") if p.last_premium_paid_date else None,
+        "last_premium_amount": p.last_premium_amount,
+        "premium_status": _premium_status(p, now),
     }
 
 
@@ -119,6 +144,9 @@ def create_policy(payload: PolicyCreate, db: Session = Depends(get_db), current_
         issued_date=_parse_date(payload.issued_date),
         expiry_date=_parse_date(payload.expiry_date),
         notes=payload.notes,
+        sender_email=payload.sender_email,
+        sender_emails=json.dumps(payload.sender_emails) if payload.sender_emails else None,
+        pdf_password=payload.pdf_password,
     )
     db.add(p)
     db.commit()
@@ -130,9 +158,15 @@ def create_policy(payload: PolicyCreate, db: Session = Depends(get_db), current_
 def update_policy(policy_id: int, payload: PolicyUpdate, db: Session = Depends(get_db), current_user: User = Depends(require_write_access)):
     p = _get_policy(db, policy_id, current_user.id)
     data = payload.dict(exclude_unset=True)
-    for field in ("provider", "policy_number", "insured_name", "premium_amount", "coverage_amount", "notes", "is_active"):
+    # Never overwrite an existing password with blank/None -- same convention
+    # as Bank.account_password (banks.py's update_bank).
+    if "pdf_password" in data and not (data["pdf_password"] or "").strip():
+        del data["pdf_password"]
+    for field in ("provider", "policy_number", "insured_name", "premium_amount", "coverage_amount", "notes", "is_active", "sender_email", "pdf_password"):
         if field in data:
             setattr(p, field, data[field])
+    if "sender_emails" in data:
+        p.sender_emails = json.dumps(data["sender_emails"]) if data["sender_emails"] else None
     if "policy_type" in data and data["policy_type"] in _POLICY_TYPES:
         p.policy_type = data["policy_type"]
     if "premium_frequency" in data and data["premium_frequency"] in _PREMIUM_FREQUENCIES:

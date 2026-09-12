@@ -260,16 +260,28 @@ def get_upcoming_items(db, user_id: int, days_ahead: int = 60, days_back: int = 
             })
 
     policies = db.query(InsurancePolicy).filter(
-        InsurancePolicy.user_id == user_id, InsurancePolicy.is_active.is_(True), InsurancePolicy.expiry_date.isnot(None),
+        InsurancePolicy.user_id == user_id, InsurancePolicy.is_active.is_(True),
     ).all()
     for p in policies:
-        if p.expiry_date <= horizon and (p.expiry_date >= window_start or p.expiry_date < now):
+        if p.expiry_date and p.expiry_date <= horizon and (p.expiry_date >= window_start or p.expiry_date < now):
             items.append({
                 "type": "insurance_expiry", "id": p.id, "date": p.expiry_date,
                 "title": f"{(p.provider or p.policy_type.title())} insurance expiry",
                 "subtitle": f"{p.policy_type.title()} insurance",
                 "amount": p.premium_amount, "link": None,
                 "is_overdue": p.expiry_date < now,
+            })
+        # Auto-read from the insurer's emailed receipt (see insurance_email_sync.py)
+        # when sender_email/pdf_password are configured -- distinct from
+        # expiry_date, which is the policy's own renewal/lapse date, not a
+        # per-cycle premium due date.
+        if p.next_premium_due_date and p.next_premium_due_date <= horizon and (p.next_premium_due_date >= window_start or p.next_premium_due_date < now):
+            items.append({
+                "type": "insurance_premium_due", "id": p.id, "date": p.next_premium_due_date,
+                "title": f"{(p.provider or p.policy_type.title())} premium due",
+                "subtitle": f"{p.policy_type.title()} insurance",
+                "amount": p.last_premium_amount or p.premium_amount, "link": None,
+                "is_overdue": p.next_premium_due_date < now,
             })
 
     warranties = db.query(Warranty).filter(Warranty.user_id == user_id).all()
