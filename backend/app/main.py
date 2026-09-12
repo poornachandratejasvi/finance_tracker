@@ -224,6 +224,15 @@ def _ensure_columns() -> None:
         _add_column_if_missing(columns, "next_premium_due_date", "ALTER TABLE insurance_policies ADD COLUMN next_premium_due_date TIMESTAMP")
         _add_column_if_missing(columns, "last_premium_paid_date", "ALTER TABLE insurance_policies ADD COLUMN last_premium_paid_date TIMESTAMP")
         _add_column_if_missing(columns, "last_premium_amount", "ALTER TABLE insurance_policies ADD COLUMN last_premium_amount FLOAT")
+        # premium_frequency widened from VARCHAR(10) to fit 'half_yearly' (11 chars) --
+        # LIC pays half-yearly, unlike the original monthly/quarterly/yearly-only set.
+        try:
+            with engine.begin() as connection:
+                connection.execute(text(
+                    "ALTER TABLE insurance_policies ALTER COLUMN premium_frequency TYPE VARCHAR(20)"
+                ))
+        except Exception:
+            logger.warning("Failed to widen insurance_policies.premium_frequency", exc_info=True)
 
     if "users" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("users")}

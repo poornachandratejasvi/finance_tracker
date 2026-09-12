@@ -831,7 +831,7 @@ export interface AutopayMandate {
 // ---- Insurance ----
 
 export type InsurancePolicyType = "health" | "life" | "home" | "other";
-export type PremiumFrequency = "monthly" | "quarterly" | "yearly";
+export type PremiumFrequency = "monthly" | "quarterly" | "half_yearly" | "yearly";
 
 export interface InsurancePolicy {
   id: number;

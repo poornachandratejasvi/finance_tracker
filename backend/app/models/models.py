@@ -1237,7 +1237,7 @@ class InsurancePolicy(Base):
     policy_number = Column(String(60), nullable=True)
     insured_name = Column(String(150), nullable=True)  # who/what is covered
     premium_amount = Column(Float, nullable=True)
-    premium_frequency = Column(String(10), default="yearly")  # monthly|quarterly|yearly
+    premium_frequency = Column(String(20), default="yearly")  # monthly|quarterly|half_yearly|yearly
     coverage_amount = Column(Float, nullable=True)
     issued_date = Column(DateTime, nullable=True)
     expiry_date = Column(DateTime, nullable=True)

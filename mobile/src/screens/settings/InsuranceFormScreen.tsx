@@ -27,7 +27,7 @@ import { InsurancePolicyType, PolicyDocument, PremiumFrequency } from "../../typ
 type Props = NativeStackScreenProps<SettingsStackParamList, "InsuranceForm">;
 
 const POLICY_TYPES: InsurancePolicyType[] = ["health", "life", "home", "other"];
-const PREMIUM_FREQUENCIES: PremiumFrequency[] = ["monthly", "quarterly", "yearly"];
+const PREMIUM_FREQUENCIES: PremiumFrequency[] = ["monthly", "quarterly", "half_yearly", "yearly"];
 const DOCUMENT_TYPES = ["policy_doc", "proposal", "claim", "other"];
 
 export default function InsuranceFormScreen({ route, navigation }: Props) {
@@ -180,7 +180,7 @@ export default function InsuranceFormScreen({ route, navigation }: Props) {
       <TextInput style={styles.input} value={premium} onChangeText={setPremium} keyboardType="decimal-pad" />
 
       <Text style={styles.label}>Premium Frequency</Text>
-      <ChipRow options={PREMIUM_FREQUENCIES} selected={premiumFrequency} onSelect={(v) => setPremiumFrequency(v as PremiumFrequency)} />
+      <ChipRow options={PREMIUM_FREQUENCIES} selected={premiumFrequency} onSelect={(v) => setPremiumFrequency(v as PremiumFrequency)} labelFor={(v) => v.replace("_", " ")} />
 
       <Text style={styles.label}>Coverage Amount</Text>
       <TextInput style={styles.input} value={coverage} onChangeText={setCoverage} keyboardType="decimal-pad" />

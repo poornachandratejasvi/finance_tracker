@@ -14,7 +14,7 @@ import {
 import { formatCurrency } from '../utils/format';
 
 const POLICY_TYPES = ['health', 'life', 'home', 'other'];
-const PREMIUM_FREQUENCIES = ['monthly', 'quarterly', 'yearly'];
+const PREMIUM_FREQUENCIES = ['monthly', 'quarterly', 'half_yearly', 'yearly'];
 const DOCUMENT_TYPES = [
   { value: 'policy_doc', label: 'Policy document' },
   { value: 'proposal', label: 'Proposal' },
@@ -216,7 +216,7 @@ export default function Insurance() {
           <Box display="flex" gap={1}>
             <TextField label="Premium Amount" type="number" value={form.premium_amount} onChange={(e) => setForm({ ...form, premium_amount: e.target.value })} fullWidth />
             <TextField select label="Frequency" value={form.premium_frequency} onChange={(e) => setForm({ ...form, premium_frequency: e.target.value })} sx={{ minWidth: 140 }}>
-              {PREMIUM_FREQUENCIES.map((f) => <MenuItem key={f} value={f} sx={{ textTransform: 'capitalize' }}>{f}</MenuItem>)}
+              {PREMIUM_FREQUENCIES.map((f) => <MenuItem key={f} value={f} sx={{ textTransform: 'capitalize' }}>{f.replace('_', ' ')}</MenuItem>)}
             </TextField>
           </Box>
           <TextField label="Coverage Amount" type="number" value={form.coverage_amount} onChange={(e) => setForm({ ...form, coverage_amount: e.target.value })} fullWidth />

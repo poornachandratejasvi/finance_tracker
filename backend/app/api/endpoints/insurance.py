@@ -20,7 +20,7 @@ from app.models.models import User, InsurancePolicy, InsuranceDocument
 router = APIRouter()
 
 _POLICY_TYPES = {"health", "life", "home", "other"}
-_PREMIUM_FREQUENCIES = {"monthly", "quarterly", "yearly"}
+_PREMIUM_FREQUENCIES = {"monthly", "quarterly", "half_yearly", "yearly"}
 _DOCUMENT_TYPES = {"policy_doc", "proposal", "claim", "other"}
 _DOCUMENT_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png", "application/pdf"}
 
