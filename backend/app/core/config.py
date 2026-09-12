@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     
     # Application
     APP_NAME: str = "Finance Tracker"
-    APP_VERSION: str = "1.1.27"
+    APP_VERSION: str = "1.1.28"
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
     BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
