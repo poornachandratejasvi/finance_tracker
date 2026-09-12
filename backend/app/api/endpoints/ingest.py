@@ -10,7 +10,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, Response, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -22,6 +22,7 @@ from app.models.models import User, Bank, Category, Transaction, IngestMapping, 
 from app.services.transaction_service import TransactionService
 from app.services import shortcut_service
 from app.services import ai_sms_extraction
+from app.services.pdf_parser import PDFParser
 from app.services.transaction_hooks import dedupe_incoming_pending, dedupe_against_confirmed
 
 router = APIRouter()
@@ -546,6 +547,11 @@ class SmsIngestRequest(BaseModel):
     text: str
     sender: Optional[str] = None
     bank_id: Optional[int] = None  # optional override; falls back to auto-match, then the mapping's default/External bank
+    # Distinguishes a real SMS from other callers reusing this same endpoint's
+    # regex+AI text extraction (e.g. the WhatsApp bridge's text messages) --
+    # purely a label for the Transactions list/source badge, doesn't change
+    # any extraction behavior.
+    source: str = "sms"
 
 
 @router.post("/sms", status_code=status.HTTP_201_CREATED)
@@ -627,10 +633,136 @@ def ingest_sms(
         "transaction_type": transaction_type,
         "notes": notes,
     }
-    result = _ingest_one(db, user, record, None, bank_id, allow_duplicates, source="sms")
+    result = _ingest_one(db, user, record, None, bank_id, allow_duplicates, source=payload.source)
     if result.get("error"):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=result["error"])
     return result
+
+
+# ─────────────────────────── receipt ingestion (photo/PDF, no in-app confirm step) ───────────────────────────
+
+_RECEIPT_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png"}
+_RECEIPT_MAX_BYTES = 12 * 1024 * 1024
+
+
+def _extract_text_from_receipt_bytes(raw: bytes, content_type: str) -> str:
+    """Shared by every receipt-ingest entry point (WhatsApp photo, emailed
+    attachment): PDF -> PDFParser.extract_text (already used for bank
+    statements), image -> OCR. Never raises for an unsupported type -- callers
+    treat empty text the same as "couldn't read it" either way."""
+    from app.services.receipt_ocr import extract_receipt_text, OCR_AVAILABLE
+
+    content_type = (content_type or "").lower()
+    if content_type == "application/pdf":
+        import os
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(raw)
+            tmp_path = tmp.name
+        try:
+            return PDFParser.extract_text(tmp_path) or ""
+        finally:
+            os.unlink(tmp_path)
+    if content_type in _RECEIPT_IMAGE_TYPES:
+        if not OCR_AVAILABLE:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "OCR is not available on the server.")
+        return extract_receipt_text(raw) or ""
+    raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unsupported attachment type -- expected a JPEG/PNG photo or a PDF.")
+
+
+def _ingest_receipt_text(db: Session, user: User, text: str, source: str) -> dict:
+    """Shared tail end: OCR/extracted text -> AI structured extraction ->
+    unconfirmed Transaction, same as every other best-effort ingest path."""
+    from app.services.ai_receipt_extraction import extract_receipt_transaction
+
+    if not text or not text.strip():
+        return {"created": False, "reason": "no_text"}
+
+    extracted = extract_receipt_transaction(db, user.id, text)
+    if not extracted:
+        return {"created": False, "reason": "no_amount_found"}
+
+    # A photo/emailed receipt has no sender/account-number context to match
+    # against (unlike SMS's _match_bank_from_sms) -- which of the user's own
+    # banks paid for this is genuinely unknowable from the image alone, so
+    # this always files under the per-user External bank for later review,
+    # same as any other ingest path with nothing better to go on.
+    bank_id = _get_external_bank(db, user).id
+    record = {
+        "amount": extracted["amount"],
+        "description": extracted["description"],
+        "transaction_type": "debit",
+        "category": extracted.get("category"),
+        "notes": f"Auto-detected from a {source} receipt",
+    }
+    if extracted.get("transaction_date"):
+        record["transaction_date"] = extracted["transaction_date"]
+
+    result = _ingest_one(db, user, record, None, bank_id, False, source=source)
+    if result.get("error"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, result["error"])
+    return {**result, "amount": extracted["amount"], "description": extracted["description"], "category": extracted.get("category")}
+
+
+@router.post("/receipt", status_code=status.HTTP_201_CREATED)
+async def ingest_receipt(
+    file: UploadFile = File(...),
+    source: str = "receipt",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_user_from_api_key),
+):
+    """Ingest a receipt photo or PDF from a channel with no in-app confirm step
+    (WhatsApp bridge) -- unlike POST /api/receipts/scan (JWT-only, preview-
+    then-confirm-in-app), this creates the transaction directly, unconfirmed
+    (is_confirmed=False, same semantics as /ingest/sms), for review later in
+    the Transactions list. Reuses the exact same OCR/AI extraction
+    receipts.py's /scan already uses -- only the "auto-create instead of
+    preview" and the API-token auth differ.
+    """
+    raw = await file.read()
+    if len(raw) > _RECEIPT_MAX_BYTES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "File is too large.")
+    text = _extract_text_from_receipt_bytes(raw, file.content_type or "")
+    return _ingest_receipt_text(db, user, text, source)
+
+
+@router.post("/receipt-email", status_code=status.HTTP_201_CREATED)
+async def ingest_receipt_email(
+    request: Request,
+    source: str = "email",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_user_from_api_key),
+):
+    """Ingest a receipt emailed to a dedicated address (e.g. receipts@yourdomain),
+    forwarded here as a raw RFC822 message by a Cloudflare Email Worker -- see
+    cloudflare/email-receipt-worker.js. Parses the email with the stdlib `email`
+    module (far more robust than hand-rolling MIME parsing in a Worker with no
+    external dependencies available) and extracts the first image/PDF
+    attachment, then reuses the exact same OCR/AI pipeline as /ingest/receipt.
+    """
+    import email as email_lib
+    from email.message import Message
+
+    raw_bytes = await request.body()
+    if len(raw_bytes) > _RECEIPT_MAX_BYTES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Email is too large.")
+    if not raw_bytes:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty request body -- expected a raw RFC822 email.")
+
+    parsed = email_lib.message_from_bytes(raw_bytes)
+
+    attachment: Optional[Message] = None
+    for part in parsed.walk():
+        content_type = (part.get_content_type() or "").lower()
+        if content_type == "application/pdf" or content_type in _RECEIPT_IMAGE_TYPES:
+            attachment = part
+            break
+    if attachment is None:
+        return {"created": False, "reason": "no_attachment"}
+
+    payload = attachment.get_payload(decode=True) or b""
+    text = _extract_text_from_receipt_bytes(payload, attachment.get_content_type())
+    return _ingest_receipt_text(db, user, text, source)
 
 
 @router.post("/transactions")

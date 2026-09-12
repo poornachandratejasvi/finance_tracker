@@ -133,6 +133,31 @@ services:
     networks:
       - finance-network
 
+  # Self-hosted WhatsApp bridge (see whatsapp_bridge/) -- forwards messages from
+  # a DEDICATED WhatsApp number into /api/ingest/sms and /api/ingest/receipt.
+  # Purely outbound (to the backend, and to WhatsApp's own servers) -- no
+  # Traefik route, no published port. First run needs a one-time QR-code
+  # pairing scan; see `docker logs -f finance_tracker-whatsapp-bridge-1`.
+  whatsapp-bridge:
+    build:
+      context: ./whatsapp_bridge
+    environment:
+      - FINANCE_API_URL=http://backend:8000
+      - FINANCE_API_TOKEN=${WHATSAPP_BRIDGE_API_TOKEN}
+      - ALLOWED_SENDER_JID=${WHATSAPP_ALLOWED_SENDER_JID:-}
+    volumes:
+      - whatsapp_auth:/data/auth
+    depends_on:
+      - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    networks:
+      - finance-network
+    restart: unless-stopped
+
   frontend:
     image: ghcr.io/poornachandratejasvi/finance_tracker-frontend:${IMAGE_TAG:-latest}
     environment:
@@ -230,6 +255,7 @@ volumes:
   paperless_media:
   paperless_export:
   paperless_consume:
+  whatsapp_auth:
 
 networks:
   finance-network:
