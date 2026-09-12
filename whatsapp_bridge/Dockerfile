@@ -1,9 +1,14 @@
 FROM node:20-alpine
 
+# git is required at install time -- @whiskeysockets/baileys depends on
+# libsignal-node, which npm resolves straight from GitHub (not the registry),
+# and node:20-alpine ships without git.
+RUN apk add --no-cache git
+
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --omit=dev
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
 COPY index.js ./
 
