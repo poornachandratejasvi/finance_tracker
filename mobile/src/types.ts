@@ -532,6 +532,7 @@ export interface ScheduleConfig {
   enabled: boolean;
   frequency: "hourly" | "every4h" | "daily" | "weekly";
   hour: number;
+  minute: number;
   day_of_week: number;
   notify_on_completion: boolean;
   auto_generate_csv: boolean;

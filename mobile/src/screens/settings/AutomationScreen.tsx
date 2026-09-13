@@ -301,13 +301,27 @@ export default function AutomationScreen() {
         </View>
         {(schedule.frequency === "daily" || schedule.frequency === "weekly") && (
           <>
-            <Text style={styles.label}>Hour of day (0-23, UTC)</Text>
-            <TextInput
-              style={styles.input}
-              value={String(schedule.hour)}
-              onChangeText={(v) => saveSchedulePatch({ hour: Math.max(0, Math.min(23, parseInt(v, 10) || 0)) })}
-              keyboardType="number-pad"
-            />
+            <Text style={styles.label}>Time of day (UTC)</Text>
+            <Text style={styles.meta}>
+              Stored in UTC -- for IST (UTC+5:30), subtract 5h30m from your desired local time
+              (e.g. midnight IST = 18:30 UTC the previous day).
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                value={String(schedule.hour)}
+                onChangeText={(v) => saveSchedulePatch({ hour: Math.max(0, Math.min(23, parseInt(v, 10) || 0)) })}
+                keyboardType="number-pad"
+                placeholder="Hour (0-23)"
+              />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                value={String(schedule.minute)}
+                onChangeText={(v) => saveSchedulePatch({ minute: Math.max(0, Math.min(59, parseInt(v, 10) || 0)) })}
+                keyboardType="number-pad"
+                placeholder="Minute (0-59)"
+              />
+            </View>
           </>
         )}
         {schedule.frequency === "weekly" && (

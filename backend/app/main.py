@@ -234,6 +234,10 @@ def _ensure_columns() -> None:
         except Exception:
             logger.warning("Failed to widen insurance_policies.premium_frequency", exc_info=True)
 
+    if "sync_schedules" in existing_tables:
+        columns = {col["name"] for col in inspector.get_columns("sync_schedules")}
+        _add_column_if_missing(columns, "minute", "ALTER TABLE sync_schedules ADD COLUMN minute INTEGER DEFAULT 0")
+
     if "users" in existing_tables:
         columns = {col["name"] for col in inspector.get_columns("users")}
         _add_column_if_missing(columns, "avatar_url", "ALTER TABLE users ADD COLUMN avatar_url VARCHAR(500)")

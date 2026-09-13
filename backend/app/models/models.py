@@ -439,6 +439,10 @@ class SyncSchedule(Base):
     enabled = Column(Boolean, default=False)
     frequency = Column(String(20), default="daily")  # hourly, every4h, daily, weekly
     hour = Column(Integer, default=9)                # 0-23, for daily/weekly (UTC)
+    # Lets a daily/weekly schedule land on an exact wall-clock time in a
+    # half-hour-offset timezone (e.g. IST is UTC+5:30 -- "midnight IST" is
+    # 18:30 UTC, not representable by hour alone).
+    minute = Column(Integer, default=0)              # 0-59, for daily/weekly (UTC)
     day_of_week = Column(Integer, default=1)         # 1=Mon … 7=Sun, for weekly
     notify_on_completion = Column(Boolean, default=True)
     auto_generate_csv = Column(Boolean, default=False)

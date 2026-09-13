@@ -221,7 +221,8 @@ def test_notify_urls(
 class ScheduleSettings(BaseModel):
     enabled: bool = False
     frequency: str = "daily"   # hourly, every4h, daily, weekly
-    hour: int = 9              # 0-23 — used for daily/weekly
+    hour: int = 9              # 0-23 (UTC) — used for daily/weekly
+    minute: int = 0            # 0-59 (UTC) — used for daily/weekly
     day_of_week: int = 1       # 1=Monday … 7=Sunday — used for weekly
     notify_on_completion: bool = True
     auto_generate_csv: bool = False
@@ -240,6 +241,7 @@ def get_schedule(
         "enabled": sched.enabled,
         "frequency": sched.frequency,
         "hour": sched.hour,
+        "minute": sched.minute,
         "day_of_week": sched.day_of_week,
         "notify_on_completion": sched.notify_on_completion,
         "auto_generate_csv": sched.auto_generate_csv,
@@ -254,20 +256,35 @@ def save_schedule(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    """Persist the per-user auto-sync schedule (read by the Celery beat dispatcher)."""
+    """Persist the per-user auto-sync schedule (read by the Celery beat dispatcher).
+
+    Only applies fields actually present in the request body -- the mobile
+    Automation screen sends single-field patches (e.g. just {"enabled": true}
+    when toggling the switch), and applying every ScheduleSettings field
+    unconditionally would silently reset hour/minute/frequency/etc. back to
+    this model's hardcoded defaults on every such call.
+    """
     sched = db.query(SyncSchedule).filter(SyncSchedule.user_id == current_user.id).first()
     if not sched:
         sched = SyncSchedule(user_id=current_user.id)
         db.add(sched)
-    sched.enabled = payload.enabled
-    sched.frequency = payload.frequency
-    sched.hour = payload.hour
-    sched.day_of_week = payload.day_of_week
-    sched.notify_on_completion = payload.notify_on_completion
-    sched.auto_generate_csv = payload.auto_generate_csv
-    sched.csv_email_on_sync = payload.csv_email_on_sync
+    data = payload.dict(exclude_unset=True)
+    for field in ("enabled", "frequency", "hour", "minute", "day_of_week", "notify_on_completion", "auto_generate_csv", "csv_email_on_sync"):
+        if field in data:
+            setattr(sched, field, data[field])
     db.commit()
-    return {"success": True, **payload.dict()}
+    db.refresh(sched)
+    return {
+        "enabled": sched.enabled,
+        "frequency": sched.frequency,
+        "hour": sched.hour,
+        "minute": sched.minute,
+        "day_of_week": sched.day_of_week,
+        "notify_on_completion": sched.notify_on_completion,
+        "auto_generate_csv": sched.auto_generate_csv,
+        "csv_email_on_sync": sched.csv_email_on_sync,
+        "last_run_at": sched.last_run_at.isoformat() + "Z" if sched.last_run_at else None,
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────────────

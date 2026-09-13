@@ -46,16 +46,22 @@ def _is_due(sched, now: datetime) -> bool:
         return last is None or (now - last) >= timedelta(hours=1)
     if freq == "every4h":
         return last is None or (now - last) >= timedelta(hours=4)
+    # Compared as (hour, minute) tuples, not just hour, so a schedule can target
+    # an exact wall-clock time in a half-hour-offset timezone (e.g. "midnight
+    # IST" is 18:30 UTC) -- firing any time at/after that point today (not
+    # requiring an exact minute match) keeps the same tolerance-to-missed-ticks
+    # robustness the hour-only check already had.
+    target = ((sched.hour or 0), (sched.minute or 0))
     if freq == "daily":
         if last is not None and (now - last) >= timedelta(hours=25):
             return True
-        if now.hour != (sched.hour or 0):
+        if (now.hour, now.minute) < target:
             return False
         return last is None or last.date() < now.date()
     if freq == "weekly":
         if last is not None and (now - last) >= timedelta(days=7, hours=1):
             return True
-        if now.isoweekday() != (sched.day_of_week or 1) or now.hour != (sched.hour or 0):
+        if now.isoweekday() != (sched.day_of_week or 1) or (now.hour, now.minute) < target:
             return False
         return last is None or (now - last) >= timedelta(days=6)
     return False
