@@ -178,6 +178,8 @@ export default function DashboardScreen() {
                 <Text
                   style={[styles.accountBalance, { color: b.current_balance < 0 ? colors.danger : colors.text }]}
                   numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
                 >
                   {formatCurrency(b.current_balance)}
                 </Text>
@@ -218,7 +220,7 @@ const makeStyles = (c: ThemeColors) =>
     accountRow: { height: 100, marginBottom: 16, marginHorizontal: -16, flexGrow: 0, flexShrink: 0 },
     accountRowContent: { paddingHorizontal: 16, gap: 10, alignItems: "flex-start" },
     accountCard: {
-      width: 136,
+      width: 152,
       backgroundColor: c.card,
       borderRadius: 16,
       padding: 14,

@@ -163,8 +163,8 @@ export function CashflowTrendContent() {
   return (
     <BarChart
       data={data.series.flatMap((p) => [
-        { value: p.income, frontColor: colors.primary, gradientColor: colors.background, showGradient: true, spacing: 2, label: monthLabel(p.date) },
-        { value: p.expense, frontColor: colors.danger, gradientColor: colors.background, showGradient: true, spacing: 16 },
+        { value: p.income, frontColor: colors.primary, spacing: 2, label: monthLabel(p.date) },
+        { value: p.expense, frontColor: colors.danger, spacing: 16 },
       ])}
       height={CHART_HEIGHT}
       barWidth={10}
@@ -175,6 +175,7 @@ export function CashflowTrendContent() {
       xAxisThickness={0}
       yAxisThickness={0}
       xAxisLabelTextStyle={{ color: colors.textSecondary, fontSize: 9 }}
+      labelWidth={32}
       isAnimated
       animationDuration={500}
     />

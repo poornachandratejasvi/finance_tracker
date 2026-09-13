@@ -250,8 +250,8 @@ export default function AnalyticsScreen() {
           </View>
           <BarChart
             data={cashflow.series.flatMap((p) => [
-              { value: p.income, frontColor: colors.primary, gradientColor: colors.background, showGradient: true, spacing: 2, label: monthLabel(p.date) },
-              { value: p.expense, frontColor: colors.danger, gradientColor: colors.background, showGradient: true, spacing: 18 },
+              { value: p.income, frontColor: colors.primary, spacing: 2, label: monthLabel(p.date) },
+              { value: p.expense, frontColor: colors.danger, spacing: 18 },
             ])}
             height={CHART_HEIGHT}
             barWidth={14}
@@ -262,6 +262,7 @@ export default function AnalyticsScreen() {
             xAxisThickness={0}
             yAxisThickness={0}
             xAxisLabelTextStyle={{ color: colors.textSecondary, fontSize: 10 }}
+            labelWidth={36}
             isAnimated
             animationDuration={500}
           />
@@ -438,8 +439,6 @@ export default function AnalyticsScreen() {
               value: p.total,
               label: p.day.slice(0, 3),
               frontColor: p.day === spendingPatterns.busiest_day ? colors.primary : colors.chipBg,
-              gradientColor: p.day === spendingPatterns.busiest_day ? colors.background : undefined,
-              showGradient: p.day === spendingPatterns.busiest_day,
             }))}
             height={CHART_HEIGHT}
             barWidth={20}
@@ -451,6 +450,7 @@ export default function AnalyticsScreen() {
             xAxisThickness={0}
             yAxisThickness={0}
             xAxisLabelTextStyle={{ color: colors.textSecondary, fontSize: 10 }}
+            labelWidth={30}
             isAnimated
             animationDuration={500}
           />
