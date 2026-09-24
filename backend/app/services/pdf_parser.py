@@ -5,7 +5,7 @@ import os
 import re
 import tempfile
 from typing import List, Dict, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import logging
 
@@ -1057,6 +1057,35 @@ class PDFParser:
         return cleaned
 
     @staticmethod
+    def _drop_out_of_period_rows(transactions: List[Dict], period) -> List[Dict]:
+        """Drop a generically-parsed row whose date falls well outside the
+        statement's own extracted period -- see the call site in
+        parse_statement for the real misparse this catches. A few days'
+        grace on each side covers a statement period boundary vs. a
+        transaction's value date legitimately landing a day or two apart."""
+        start_date, end_date = period
+        if not start_date or not end_date:
+            return transactions
+        lo = start_date - timedelta(days=5)
+        hi = end_date + timedelta(days=5)
+        cleaned = []
+        for t in transactions or []:
+            d = t.get('transaction_date')
+            if d is not None:
+                try:
+                    dt = d if isinstance(d, datetime) else pd.to_datetime(d)
+                    if dt < lo or dt > hi:
+                        logger.info(
+                            "Dropping generically-parsed row outside statement period (%s to %s): %r dated %s",
+                            start_date, end_date, str(t.get('description', ''))[:80], dt,
+                        )
+                        continue
+                except Exception:
+                    pass
+            cleaned.append(t)
+        return cleaned
+
+    @staticmethod
     def _infer_ending_balance(transactions: List[Dict]) -> Optional[float]:
         balances = [t.get('balance') for t in transactions if t.get('balance') is not None]
         return balances[-1] if balances else None
@@ -1761,7 +1790,20 @@ class PDFParser:
                     bank_code=bank_code,
                     statement_period=(start_date, end_date)
                 )
-            
+
+            if not has_dedicated_parser:
+                # The generic table/text parser has no per-bank layout knowledge, so a
+                # statement's own summary/reward-points boilerplate can get mistaken for
+                # a transaction row -- seen for real with an IndusInd credit card
+                # statement, where an "Account Summary" text block sitting next to a
+                # Rewards table got glued into one messy row by pdfplumber's table
+                # detection, producing a bogus transaction dated the statement's
+                # *payment due date* (three weeks after the statement period ended)
+                # with the "Total Amount Due" as its amount. A dedicated per-bank
+                # parser already knows its own layout well enough not to need this, so
+                # it's scoped to the generic fallback only.
+                transactions = PDFParser._drop_out_of_period_rows(transactions, (start_date, end_date))
+
             transactions = PDFParser._drop_page_artifacts(transactions)
             result['transactions'] = transactions
             result['ending_balance'] = PDFParser._infer_ending_balance(transactions)
