@@ -28,6 +28,7 @@ _DATE_FORMATS = [
     "%d-%m-%y",    # 30-10-25
     "%d/%m/%y",    # 16/01/26
     "%d/%m/%Y",
+    "%d-%b-%Y",    # 05-Oct-2026
 ]
 
 
@@ -264,6 +265,38 @@ def _pluxee(sender, subject, body, received_date=None):
     }
 
 
+def _amex(sender, subject, body, received_date=None):
+    # American Express's RBI-mandated "Balance Update" email (Reserve Bank of
+    # India Commercial Banks - Credit Cards and Debit Cards: Issuance and
+    # Conduct Directions, 2025) -- a pure balance snapshot ("Last statement
+    # balance" / "Recent credits" / "Recent debits" / "Current balance" /
+    # "Minimum payment due"), not a single discrete transaction. No PDF
+    # statement parser exists for Amex in this app, so this is the only
+    # automated balance signal available -- trusted outright, same idea as
+    # Pluxee's alert stating its own resulting balance. Deliberately returns
+    # no amount/transaction_type/description: there's nothing resembling a
+    # single purchase here, only an aggregate the user already sees reflected
+    # in their real statement transactions.
+    m = re.search(r"Current balance\s+INR\s*([\d,]+\.\d{2})", body, re.IGNORECASE)
+    if not m:
+        return None
+    # Stored as a positive amount-owed, matching apply_statement_balance()'s
+    # credit-card convention (balance_service.py) -- NOT negated here.
+    balance = _amount(m.group(1))
+    date_m = re.search(r"as of\s+(\d{2}-[A-Za-z]{3}-\d{4})", body, re.IGNORECASE)
+    transaction_date = _parse_date(date_m.group(1)) if date_m else None
+    if transaction_date is None and received_date:
+        transaction_date = received_date.replace(tzinfo=None)
+    return {
+        "amount": None,
+        "transaction_type": None,
+        "description": None,
+        "transaction_date": transaction_date,
+        "card_hint": None,
+        "updated_balance": balance,
+    }
+
+
 # (sender substring match, parser function) — checked in order, first match wins.
 # Sender substrings are the ACTUAL alert-sending addresses observed in the inbox,
 # which are frequently different from the statement-email sender configured on
@@ -284,6 +317,7 @@ ALERT_PARSERS = [
     ("hsbc@mail.hsbc.co.in", _hsbc),
     ("alerts.in@sc.com", _standard_chartered),
     ("cardinfo@services.pluxee.in", _pluxee),
+    ("americanexpress@welcome.americanexpress.com", _amex),
 ]
 
 
@@ -292,7 +326,11 @@ def parse_alert_email(sender: str, subject: str, body: str, received_date=None) 
     if this looks like a real-time spend/credit alert this module knows how to
     read, else None (never raises — a bank template change should degrade to
     "skipped", not break the sync). received_date is the email's own date, used
-    as a transaction_date fallback by templates that don't include one in the body."""
+    as a transaction_date fallback by templates that don't include one in the body.
+
+    A result needs EITHER a real transaction (amount + date) OR a standalone
+    balance snapshot (updated_balance, e.g. Amex's "Balance Update" email,
+    which carries no discrete transaction at all) — not necessarily both."""
     sender_lower = (sender or "").lower()
     for sender_match, parser in ALERT_PARSERS:
         if sender_match in sender_lower:
@@ -301,7 +339,7 @@ def parse_alert_email(sender: str, subject: str, body: str, received_date=None) 
             except Exception:
                 logger.warning("Alert parser for %s raised on a message", sender_match, exc_info=True)
                 return None
-            if result and result.get("transaction_date") and result.get("amount"):
+            if result and ((result.get("transaction_date") and result.get("amount")) or result.get("updated_balance") is not None):
                 return result
             return None
     return None

@@ -41,7 +41,10 @@ ALERT_KEYWORDS_QUERY = (
     # Pluxee's own wording ("You've made a payment of...") doesn't contain any of
     # the phrases above -- without this it would never even be fetched, regardless
     # of sender/forwarding handling below.
-    'OR "made a payment")) '
+    'OR "made a payment" '
+    # Amex's RBI-mandated "Balance Update" email is a pure balance snapshot with
+    # no debited/credited wording at all -- same reasoning as Pluxee above.
+    'OR "balance update")) '
     'OR (from:alerts.in@sc.com (credited OR debited OR credit OR debit))'
 )
 
@@ -183,7 +186,10 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
                 bank.balance_updated_at = parsed["transaction_date"] or msg.get('date')
                 bank.balance_source = "auto"
 
-            if parsed and not _already_confirmed(db, bank.user_id, bank.id, parsed):
+            # A balance-only result (e.g. Amex's "Balance Update" email, no discrete
+            # transaction at all -- see the updated_balance branch above) has nothing
+            # to create a Transaction from; only proceed when there's a real amount.
+            if parsed and parsed.get("amount") and not _already_confirmed(db, bank.user_id, bank.id, parsed):
                 # Gmail is the highest-priority real-time source (see
                 # transaction_hooks._SOURCE_PRIORITY) -- if an SMS/Shortcut-ingest
                 # pending row already covers this same purchase, absorb it into
