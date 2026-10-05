@@ -182,9 +182,22 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
             # derive/adjust a balance from the transaction amount, same as any other
             # bank without a manual override (see Bank.balance_source).
             if parsed and parsed.get("updated_balance") is not None and bank.balance_source != "manual":
-                bank.current_balance = parsed["updated_balance"]
-                bank.balance_updated_at = parsed["transaction_date"] or msg.get('date')
-                bank.balance_source = "auto"
+                new_balance_date = parsed["transaction_date"] or msg.get('date')
+                if new_balance_date is not None and getattr(new_balance_date, "tzinfo", None) is not None:
+                    new_balance_date = new_balance_date.replace(tzinfo=None)
+                existing_date = bank.balance_updated_at
+                if existing_date is not None and getattr(existing_date, "tzinfo", None) is not None:
+                    existing_date = existing_date.replace(tzinfo=None)
+                # Messages aren't guaranteed to arrive in chronological order within
+                # one sync batch (confirmed live: a backfill right after configuring
+                # Amex processed an older email last and clobbered a newer balance
+                # already applied) -- an older email must never overwrite a newer
+                # one, same "don't let an older statement overwrite a newer balance"
+                # guard apply_statement_balance() already has for PDF statements.
+                if not existing_date or not new_balance_date or new_balance_date >= existing_date:
+                    bank.current_balance = parsed["updated_balance"]
+                    bank.balance_updated_at = new_balance_date or msg.get('date')
+                    bank.balance_source = "auto"
 
             # A balance-only result (e.g. Amex's "Balance Update" email, no discrete
             # transaction at all -- see the updated_balance branch above) has nothing
