@@ -29,6 +29,7 @@ services:
       retries: 5
     networks:
       - finance-network
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -43,6 +44,7 @@ services:
       retries: 5
     networks:
       - finance-network
+    restart: unless-stopped
 
   backend:
     image: ghcr.io/poornachandratejasvi/finance_tracker-backend:${IMAGE_TAG:-latest}
@@ -71,6 +73,7 @@ services:
         labels: "service=backend"
     networks:
       - finance-network
+    restart: unless-stopped
 
   worker:
     image: ghcr.io/poornachandratejasvi/finance_tracker-backend:${IMAGE_TAG:-latest}
@@ -97,6 +100,7 @@ services:
         labels: "service=worker"
     networks:
       - finance-network
+    restart: unless-stopped
 
   beat:
     image: ghcr.io/poornachandratejasvi/finance_tracker-backend:${IMAGE_TAG:-latest}
@@ -123,6 +127,7 @@ services:
         labels: "service=beat"
     networks:
       - finance-network
+    restart: unless-stopped
 
   frontend:
     image: ghcr.io/poornachandratejasvi/finance_tracker-frontend:${IMAGE_TAG:-latest}
@@ -139,6 +144,7 @@ services:
   # Ensures the `paperless` database exists on this SAME Postgres server -- avoids
   # running a second Postgres instance just for Paperless-ngx. Idempotent (safe to
   # leave permanently): a no-op after the first run.
+    restart: unless-stopped
   paperless-db-init:
     image: postgres:15-alpine
     environment:
@@ -191,6 +197,7 @@ services:
         condition: service_completed_successfully
     networks:
       - finance-network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
