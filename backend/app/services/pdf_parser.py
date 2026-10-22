@@ -682,6 +682,65 @@ class PDFParser:
         logger.info(f"Extracted {len(transactions)} transactions from HSBC statement")
         return transactions
 
+    _SBI_SAVINGS_ROW_RE = re.compile(
+        r'^(\d{2}-\d{2}-\d{2})\s+(.+?)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+\.\d{2})$'
+    )
+    _SBI_SAVINGS_CLOSING_RE = re.compile(
+        r'Closing\s+Balance\s+on\s+\d{2}-\d{2}-\d{2}:\s*([\d,]+\.\d{2})', re.IGNORECASE
+    )
+
+    @staticmethod
+    def is_sbi_savings_statement(text: str) -> bool:
+        return bool(text) and 'TRANSACTION OVERVIEW' in text.upper() and bool(PDFParser._SBI_SAVINGS_CLOSING_RE.search(text))
+
+    @staticmethod
+    def extract_sbi_savings_closing_balance(text: str) -> Optional[float]:
+        m = PDFParser._SBI_SAVINGS_CLOSING_RE.search(text or '')
+        return PDFParser._parse_amount(m.group(1)) if m else None
+
+    @staticmethod
+    def parse_sbi_savings(text: str) -> List[Dict]:
+        """Parse an SBI e-account (savings) statement.
+
+        Rows read `DD-MM-YY <details> <credit> <debit> <balance>` with a literal 0 in
+        whichever of credit/debit doesn't apply, under a "TRANSACTION OVERVIEW"
+        heading. The same PDF also carries a "Balance Summary" recap page with the
+        account's balance that must never be read as a transaction.
+        """
+        transactions = []
+        in_section = False
+        for line in (l.strip() for l in text.split('\n')):
+            if 'TRANSACTION OVERVIEW' in line.upper():
+                in_section = True
+                continue
+            if not in_section:
+                continue
+            m = PDFParser._SBI_SAVINGS_ROW_RE.match(line)
+            if not m:
+                continue
+            date_str, description, credit_str, debit_str, balance_str = m.groups()
+            credit, debit = PDFParser._parse_amount(credit_str), PDFParser._parse_amount(debit_str)
+            if credit > 0 and debit == 0:
+                amount, txn_type = credit, 'credit'
+            elif debit > 0 and credit == 0:
+                amount, txn_type = debit, 'debit'
+            else:
+                continue
+            try:
+                transaction_date = datetime.strptime(date_str, '%d-%m-%y')
+            except ValueError:
+                continue
+            transactions.append({
+                'transaction_date': transaction_date,
+                'description': description.strip(),
+                'amount': amount,
+                'transaction_type': txn_type,
+                'balance': PDFParser._parse_amount(balance_str),
+                'reference_number': None,
+                'original_description': description.strip(),
+            })
+        return transactions
+
     @staticmethod
     def parse_sbi_credit_card(
         text: str,
@@ -693,6 +752,12 @@ class PDFParser:
 
         if not text:
             return transactions
+
+        # SBI savings e-statements share this bank code but have an entirely
+        # different layout; without this they fell through to the generic text
+        # fallback below and the balance-summary page became bogus transactions.
+        if PDFParser.is_sbi_savings_statement(text):
+            return PDFParser.parse_sbi_savings(text)
 
         lines = [line.strip() for line in text.split('\n') if line.strip()]
         seen = set()
@@ -1807,6 +1872,12 @@ class PDFParser:
             transactions = PDFParser._drop_page_artifacts(transactions)
             result['transactions'] = transactions
             result['ending_balance'] = PDFParser._infer_ending_balance(transactions)
+            # A month with no transactions has no running balance to infer from, but
+            # the statement still states its closing balance.
+            if 'SBI' in bc and PDFParser.is_sbi_savings_statement(text):
+                closing = PDFParser.extract_sbi_savings_closing_balance(text)
+                if closing is not None:
+                    result['ending_balance'] = closing
             result['total_amount_due'] = PDFParser.extract_total_amount_due(text)
             result['success'] = True
             

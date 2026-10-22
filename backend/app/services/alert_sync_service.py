@@ -45,7 +45,10 @@ ALERT_KEYWORDS_QUERY = (
     # Amex's RBI-mandated "Balance Update" email is a pure balance snapshot with
     # no debited/credited wording at all -- same reasoning as Pluxee above.
     'OR "balance update")) '
-    'OR (from:alerts.in@sc.com (credited OR debited OR credit OR debit))'
+    'OR (from:alerts.in@sc.com (credited OR debited OR credit OR debit)) '
+    # SBI's debit-card alert is a bare key/value table ("Terminal Owner Name ...
+    # Amount (INR) ...") with none of the keywords above, so scope it by sender.
+    'OR (from:donotreply.sbionline@alerts.sbi.co.in -has:attachment)'
 )
 
 

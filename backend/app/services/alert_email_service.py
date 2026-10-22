@@ -125,6 +125,27 @@ def _sbi_savings(sender, subject, body, received_date=None):
     }
 
 
+def _sbi_debit_card(sender, subject, body, received_date=None):
+    # Sent from donotreply.sbionline@alerts.sbi.co.in (note: .co.in, unlike the
+    # alerts.sbi.bank.in sender _sbi_savings handles) -- a key/value table, no
+    # "debited"/"spent" wording anywhere in it.
+    m = re.search(
+        r"Terminal Owner Name\s+(.+?)\s+Terminal Id\s+\S+\s+Date & Time\s+([A-Za-z]{3} \d{1,2}, \d{4}),\s*(\d{1,2}:\d{2})"
+        r"\s+Transaction Number\s+\S+\s+Amount \(INR\)\s+([\d,]+\.\d{2})\s+Last 4 Digit of Card\s+X?(\d+)"
+        r"(?:\s+Transaction Type\s+(\w+))?",
+        body,
+    )
+    if not m:
+        return None
+    return {
+        "amount": _amount(m.group(4)),
+        "transaction_type": "credit" if (m.group(6) or "").upper() == "REFUND" else "debit",
+        "description": m.group(1).strip(),
+        "transaction_date": _parse_date(m.group(2), m.group(3)),
+        "card_hint": m.group(5),
+    }
+
+
 def _bank_of_baroda(sender, subject, body, received_date=None):
     m = re.search(
         r"Rs\.?\s*([\d,]+\.\d{2})\s*(debited|credited)\s*(?:from|to)\s*A/c no\.?\s*(\w+) on "
@@ -308,6 +329,7 @@ ALERT_PARSERS = [
     ("credit_cards@icici.bank.in", _icici),
     ("onlinesbicard@sbicard.com", _sbi_card),
     ("alerts.sbi.bank.in", _sbi_savings),
+    ("alerts.sbi.co.in", _sbi_debit_card),
     ("bankofbaroda.bank.in", _bank_of_baroda),
     ("rblalerts@rbl.bank.in", _rbl),
     ("rblalerts@rblbank.com", _rbl),
