@@ -11,12 +11,12 @@ override always remains available via PUT /banks/{id}.
 """
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.models import Bank, PDFStatement, BankEmail, CreditCardBill
+from app.models.models import Bank, PDFStatement, BankEmail, CreditCardBill, Transaction, TransactionType
 from app.services.password_service import get_password_candidates
 from app.services.pdf_storage import ensure_decrypted_with_candidates
 from app.services.pdf_parser import PDFParser
@@ -52,6 +52,21 @@ def _upsert_credit_card_bill(db: Session, bank: Bank, due_date: datetime, statem
     if minimum_due is not None:
         bill.minimum_amount_due = minimum_due
     return bill
+
+
+def _net_after_statement(db: Session, bank: Bank, statement_end: Optional[datetime]) -> float:
+    """Net amount owed added by transactions dated AFTER the statement's last day
+    (purchases up, payments/refunds down) -- spends the Total Amount Due can't
+    include yet, e.g. real-time email alerts that arrived since the statement."""
+    if not statement_end:
+        return 0.0
+    cutoff = datetime(statement_end.year, statement_end.month, statement_end.day) + timedelta(days=1)
+    txns = (
+        db.query(Transaction.transaction_type, Transaction.amount)
+        .filter(Transaction.bank_id == bank.id, Transaction.transaction_date >= cutoff)
+        .all()
+    )
+    return sum((a or 0.0) if t == TransactionType.DEBIT else -(a or 0.0) for t, a in txns)
 
 
 def _latest_pdf(db: Session, bank_id: int) -> Optional[tuple]:
@@ -172,7 +187,14 @@ def redetect_credit_card_balance(db: Session, uid: int, bank: Bank, use_ai: bool
             report["detail"] = "Neither regex nor AI could find a Total Amount Due figure. Set it manually."
         return report
 
-    if bank.current_balance == new_balance:
+    # The statement's Total Amount Due is as of its closing date; anything spent
+    # since (alerts, manual entries) is real outstanding too. Without this, every
+    # run reset the balance to the stale statement figure and wiped out the
+    # per-transaction adjustments made as those transactions arrived.
+    statement_end = pdf.statement_period_end or received_date or pdf.created_at
+    new_balance = round(new_balance + _net_after_statement(db, bank, statement_end), 2)
+
+    if bank.current_balance is not None and round(bank.current_balance, 2) == new_balance:
         # Value didn't change, but a manual override still needs to be cleared here —
         # this path runs for both the explicit "Redetect" button and the periodic auto
         # task, and the caller distinguishes them by whether 'manual' banks were queried.
@@ -181,7 +203,7 @@ def redetect_credit_card_balance(db: Session, uid: int, bank: Bank, use_ai: bool
         return report
 
     bank.current_balance = new_balance
-    bank.balance_updated_at = pdf.statement_period_end or received_date or pdf.created_at
+    bank.balance_updated_at = statement_end
     bank.balance_source = "auto"  # re-detecting explicitly supersedes any earlier manual override
     report["new_balance"] = new_balance
     report["source"] = source
