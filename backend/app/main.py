@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import time
 import os
 import secrets
 from logging.handlers import RotatingFileHandler
@@ -417,6 +418,35 @@ def _widen_to_text(inspector, existing_tables, table: str, column: str) -> None:
         logger.warning("Failed to widen %s.%s to TEXT", table, column, exc_info=True)
 
 
+def _wait_for_database(timeout_s: int = 180, interval_s: float = 2.0) -> None:
+    """Block until Postgres accepts connections, retrying for up to timeout_s.
+
+    After a host reboot Docker restarts containers in no particular order and
+    does not honour depends_on, so the backend can start before the `db`
+    hostname resolves or Postgres is accepting connections. Without this the
+    very first engine.connect() raised, startup failed, and uvicorn's
+    supervisor process stayed alive -- the container read "Up" while serving
+    nothing (a 502 from the proxy) until someone restarted it by hand.
+    """
+    deadline = time.monotonic() + timeout_s
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            with engine.connect() as conn:
+                conn.exec_driver_sql("SELECT 1")
+            if attempt > 1:
+                logger.info("Database became reachable after %d attempts", attempt)
+            return
+        except Exception as exc:
+            if time.monotonic() >= deadline:
+                logger.error("Database still unreachable after %ds -- giving up: %s", timeout_s, exc)
+                raise
+            if attempt == 1 or attempt % 10 == 0:
+                logger.warning("Database not reachable yet (attempt %d), retrying: %s", attempt, str(exc).splitlines()[0])
+            time.sleep(interval_s)
+
+
 _SCHEMA_LOCK_KEY = 741_852_963  # arbitrary constant advisory-lock id for schema bootstrap
 
 
@@ -428,6 +458,7 @@ def _bootstrap_schema() -> None:
     unique-violation. The advisory lock makes exactly one worker do the (idempotent)
     work while the others wait, then no-op. Any residual error is logged, not fatal.
     """
+    _wait_for_database()
     lock_conn = engine.connect()
     try:
         lock_conn.exec_driver_sql("SELECT pg_advisory_lock(%s)", (_SCHEMA_LOCK_KEY,))
