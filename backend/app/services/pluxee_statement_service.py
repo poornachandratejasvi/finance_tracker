@@ -18,7 +18,7 @@ Dates are dd/mm/yyyy hh:mm:ss, amounts are strings with thousands commas.
 """
 import io
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -132,8 +132,37 @@ def apply_pluxee_statement(db, bank, parsed: Dict) -> Dict:
         if already:
             continue
 
+        # A row an alert already recorded and confirmed: just attach the statement's
+        # identifiers to it rather than adding the purchase a second time.
+        # Only rows still lacking a Pluxee transaction id qualify -- rows this very
+        # import just added already carry one, and two genuine same-amount purchases
+        # a day apart (a recurring cafeteria charge) must not swallow each other.
+        known = db.query(Transaction).filter(
+            Transaction.bank_id == bank.id, Transaction.is_confirmed.is_(True),
+            Transaction.reference_number.is_(None), Transaction.transaction_type == ttype,
+            Transaction.amount.between(t["amount"] - 0.01, t["amount"] + 0.01),
+            Transaction.transaction_date >= t["date"] - timedelta(days=2),
+            Transaction.transaction_date <= t["date"] + timedelta(days=2),
+        ).order_by(Transaction.id.asc()).first()
+        if known:
+            if not known.reference_number:
+                known.reference_number = t["reference"]
+            if known.balance is None:
+                known.balance = t["balance"]
+            continue
+
         # Absorb a Pending alert-created row for this purchase instead of doubling it.
         pending = find_pending_match(db, bank.user_id, bank.id, ttype, t["amount"], t["date"])
+        if not pending:
+            # A manual entry typed in after the fact (dated the day it was typed, not
+            # the day of the purchase) while no alert/statement had covered it yet.
+            pending = db.query(Transaction).filter(
+                Transaction.bank_id == bank.id, Transaction.source == "manual",
+                Transaction.is_confirmed.is_(False), Transaction.transaction_type == ttype,
+                Transaction.amount.between(t["amount"] - 0.01, t["amount"] + 0.01),
+                Transaction.transaction_date >= t["date"],
+                Transaction.transaction_date <= t["date"] + timedelta(days=45),
+            ).order_by(Transaction.id.asc()).first()
         if pending:
             pending.transaction_date = t["date"]
             pending.description = t["description"]
