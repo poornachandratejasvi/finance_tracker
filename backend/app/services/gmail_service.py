@@ -3,7 +3,7 @@ import base64
 import pickle
 import re
 import html as _html
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -377,6 +377,38 @@ class GmailService:
             logger.error(f"Error downloading attachment: {error}")
             return None
     
+    def get_attachments_by_extension(self, message_id: str, extensions: Tuple[str, ...]) -> List[Tuple[str, bytes]]:
+        """Download every attachment on a message whose filename ends with one of
+        `extensions` (lowercase, e.g. (".xls", ".xlsx")). _parse_message only ever
+        surfaces PDF attachments, so spreadsheet statements need this."""
+        if not self.service:
+            return []
+        try:
+            full = self.service.users().messages().get(userId='me', id=message_id, format='full').execute()
+        except HttpError as error:
+            logger.warning(f"Failed to fetch message {message_id}: {error}")
+            return []
+
+        found = []
+
+        def walk(part):
+            name = part.get('filename') or ''
+            if name.lower().endswith(extensions):
+                body = part.get('body', {})
+                if body.get('attachmentId'):
+                    data = self.get_attachment(message_id, body['attachmentId'])
+                elif body.get('data'):
+                    data = base64.urlsafe_b64decode(body['data'])
+                else:
+                    data = None
+                if data:
+                    found.append((name, data))
+            for child in part.get('parts', []) or []:
+                walk(child)
+
+        walk(full.get('payload', {}))
+        return found
+
     def search_bank_emails(
         self,
         email_patterns: List[str],

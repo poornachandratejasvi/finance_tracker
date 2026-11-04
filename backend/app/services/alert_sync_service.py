@@ -84,6 +84,55 @@ def _already_confirmed(db, user_id: int, bank_id: int, parsed: dict) -> bool:
     return hit
 
 
+def _sync_statement_spreadsheets(db, gmail_service, gmail_account: GmailAccount, domain_to_bank: dict, after_date=None) -> int:
+    """Import Pluxee's emailed transaction-statement spreadsheet (see
+    pluxee_statement_service.py) -- sent at random, whenever the cardholder
+    requests one in the app, so it's picked up here alongside the alert emails
+    rather than on its own schedule. Returns how many transactions were added."""
+    from app.services.pluxee_statement_service import (
+        STATEMENT_EXTENSIONS, STATEMENT_QUERY, apply_pluxee_statement, parse_pluxee_statement,
+    )
+
+    if not any("pluxee" in d for d in domain_to_bank):
+        return 0
+    messages = gmail_service.search_messages_with_body(STATEMENT_QUERY, max_results=20, after_date=after_date)
+    imported = 0
+    for msg in messages:
+        try:
+            if db.query(BankEmail).filter(BankEmail.email_id == msg['id']).first():
+                continue
+            sender = msg.get('sender', '')
+            candidates = [sender, _extract_forwarded_sender(msg.get('body', '') or '') or '']
+            bank = next(
+                (b for cand in candidates for d, b in domain_to_bank.items()
+                 if "pluxee" in d and '@' in cand and cand.split('@')[-1].rstrip('>').lower().endswith(d)),
+                None,
+            )
+            if not bank:
+                continue
+
+            for filename, data in gmail_service.get_attachments_by_extension(msg['id'], STATEMENT_EXTENSIONS):
+                parsed = parse_pluxee_statement(data)
+                if not parsed:
+                    logger.warning("Spreadsheet %s from Pluxee sender wasn't a recognizable transaction statement", filename)
+                    continue
+                result = apply_pluxee_statement(db, bank, parsed)
+                imported += result["added"]
+                logger.info("Pluxee statement %s: %d added, %d confirmed, balance updated=%s",
+                            filename, result["added"], result["confirmed"], result["balance_updated"])
+
+            db.add(BankEmail(
+                gmail_account_id=gmail_account.id, bank_id=bank.id, email_id=msg['id'],
+                subject=msg.get('subject'), from_email=sender, received_date=msg.get('date'),
+                has_attachment=True, email_type='statement_xls', is_processed=True,
+            ))
+            db.commit()
+        except Exception:
+            logger.warning("Failed to process one statement-spreadsheet candidate", exc_info=True)
+            db.rollback()
+    return imported
+
+
 def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_date=None) -> int:
     """Search this Gmail account for alert-style emails, match each to one of
     `banks` by sender domain, parse, and create a pending Transaction. Returns
@@ -259,5 +308,10 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
         except Exception:
             logger.warning("Failed to process one alert-email candidate", exc_info=True)
             db.rollback()
+
+    try:
+        created += _sync_statement_spreadsheets(db, gmail_service, gmail_account, domain_to_bank, after_date)
+    except Exception:
+        logger.warning("Statement-spreadsheet sync failed for Gmail account %s", gmail_account.id, exc_info=True)
 
     return created
