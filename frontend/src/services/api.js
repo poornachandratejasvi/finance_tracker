@@ -1141,4 +1141,10 @@ export const settleSharedExpenseShare = async (expenseId, shareId) =>
   (await api.post(`/api/shared-expenses/${expenseId}/shares/${shareId}/settle`)).data;
 export const deleteSharedExpense = async (id) => (await api.delete(`/api/shared-expenses/${id}`)).data;
 
+export const listSmsSamples = async () => (await api.get('/api/sms-samples/')).data;
+export const previewSmsSample = async (data) => (await api.post('/api/sms-samples/preview', data)).data;
+export const createSmsSample = async (data) => (await api.post('/api/sms-samples/', data)).data;
+export const updateSmsSample = async (id, data) => (await api.put(`/api/sms-samples/${id}`, data)).data;
+export const deleteSmsSample = async (id) => (await api.delete(`/api/sms-samples/${id}`)).data;
+
 export default api;

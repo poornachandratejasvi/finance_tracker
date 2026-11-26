@@ -1467,3 +1467,32 @@ class SharedExpenseShare(Base):
 
     expense = relationship("SharedExpense", back_populates="shares")
     user = relationship("User")
+
+
+class SmsSample(Base):
+    """One SMS the extractor has seen, used as a template for the next one.
+
+    A manual sample is something the user labeled on Settings → SMS samples.
+    An ai sample is a shape the model read once, saved so the same wording
+    does not call the model again. An unmatched row is an SMS nobody could
+    read yet; labeling it on the page turns it into a manual template.
+    """
+    __tablename__ = "sms_samples"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    raw_text = Column(Text, nullable=False)
+    sender = Column(String(80))
+    is_transaction = Column(Boolean, nullable=True)
+    amount = Column(Float)
+    transaction_type = Column(String(10))
+    description = Column(String(200))
+    bank_id = Column(Integer, ForeignKey("banks.id", ondelete="SET NULL"))
+    balance_amount = Column(Float)
+    skeleton = Column(Text)
+    source = Column(String(20), default="manual")  # manual | ai | unmatched
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("User")
+    bank = relationship("Bank")

@@ -50,6 +50,7 @@ import {
   AutoAwesome,
   Terminal,
   Info,
+  Textsms,
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -75,6 +76,7 @@ import UsersPanel from '../components/settings/UsersPanel';
 import BackupPanel from '../components/settings/BackupPanel';
 import AIPanel from '../components/settings/AIPanel';
 import LogsPanel from '../components/settings/LogsPanel';
+import SmsSamplesPanel from '../components/settings/SmsSamplesPanel';
 
 const NAV_WIDTH = 230;
 
@@ -616,6 +618,7 @@ const NAV_SECTIONS = [
     items: [
       { key: 'general', label: 'General', icon: <Person /> },
       { key: 'ai', label: 'AI', icon: <AutoAwesome /> },
+      { key: 'sms-samples', label: 'SMS samples', icon: <Textsms /> },
       { key: 'rest-api', label: 'REST API', icon: <Api /> },
       { key: 'users', label: 'Users', icon: <People />, adminOnly: true },
       { key: 'external-accounts', label: 'External Accounts', icon: <Email /> },
@@ -674,6 +677,8 @@ function Settings() {
         return <BackupPanel />;
       case 'ai':
         return <AIPanel />;
+      case 'sms-samples':
+        return <SmsSamplesPanel />;
       case 'rest-api':
         return <RestApiPanel />;
       case 'mcp':

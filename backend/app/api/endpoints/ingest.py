@@ -21,7 +21,6 @@ from app.api.endpoints.auth import get_current_active_user
 from app.models.models import User, Bank, Category, Transaction, IngestMapping, ApiToken
 from app.services.transaction_service import TransactionService
 from app.services import shortcut_service
-from app.services import ai_sms_extraction
 from app.services.pdf_parser import PDFParser
 from app.services.transaction_hooks import dedupe_incoming_pending, dedupe_against_confirmed
 
@@ -488,14 +487,9 @@ def ingest_transaction(
 # Same generic amount/direction detection Android's SmsReceiver.kt does natively in
 # Kotlin before POSTing to /transaction above -- iOS has no equivalent (Apple doesn't
 # allow apps to read the SMS inbox), so a Shortcuts Automation on "message received"
-# instead forwards the raw, unparsed message text here and this endpoint does the
-# same parsing server-side. Deliberately generic (not per-bank regex like the Gmail
-# alert-email parser in alert_email_service.py) to match Android's proven approach:
-# less precise, but works across every bank's SMS wording without needing a sample
-# from each one.
-_SMS_AMOUNT_RE = re.compile(r"(?:rs\.?|inr)\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)", re.IGNORECASE)
-_SMS_CREDIT_RE = re.compile(r"credited|received|deposited", re.IGNORECASE)
-_SMS_DEBIT_RE = re.compile(r"debited|withdrawn|withdrew|spent", re.IGNORECASE)
+# instead forwards the raw, unparsed message text here. Reading the amount and
+# the debit/credit direction happens in sms_sample_service: saved samples first,
+# then a structural read, then AI, which stores the new shape for next time.
 
 
 def _match_bank_from_sms(db: Session, user: User, sender: Optional[str], body: str) -> Optional[int]:
@@ -569,55 +563,28 @@ def ingest_sms(
     amount = None
     transaction_type = None
     description = payload.text.strip()[:140]
-    used_ai = False
+    via = "structure"
 
-    m = _SMS_AMOUNT_RE.search(payload.text)
-    if m:
-        try:
-            amount = float(m.group(1).replace(",", ""))
-        except ValueError:
-            amount = None
-        if amount is not None:
-            credit_m = _SMS_CREDIT_RE.search(payload.text)
-            debit_m = _SMS_DEBIT_RE.search(payload.text)
-            if credit_m and debit_m:
-                # Both keywords present -- common for an outgoing UPI transfer
-                # ("Your a/c XX1234 is debited ... and credited to a/c XX5678"),
-                # where "credited" describes the OTHER party's account, not the
-                # user's own. Regex can't safely tell which account is "yours"
-                # here -- leave it unresolved rather than guess wrong, and let
-                # the AI fallback below disambiguate instead.
-                transaction_type = None
-            elif debit_m:
-                transaction_type = "debit"
-            elif credit_m:
-                transaction_type = "credit"
-            else:
-                transaction_type = "debit"  # neither keyword present -- safe default
-
-    if amount is None or transaction_type is None:
-        # Either the generic regex couldn't find/parse an amount, or it found
-        # one but the debit/credit direction is ambiguous -- bank SMS templates
-        # vary too much for one regex to cover reliably (see ai_sms_extraction.py).
-        # Best-effort fallback via the user's own configured AI provider; never
-        # raises, just returns {} if nothing usable comes back.
-        ai_result = ai_sms_extraction.extract_sms_transaction(db, user.id, payload.text)
-        if ai_result:
-            if amount is None:
-                amount = ai_result["amount"]
-            if transaction_type is None:
-                transaction_type = ai_result["transaction_type"]
-            if ai_result.get("description"):
-                description = ai_result["description"]
-            used_ai = True
-        elif transaction_type is None:
-            transaction_type = "debit"  # AI unavailable/unhelpful -- same safe default as before
+    from app.services.sms_sample_service import interpret
+    decision = interpret(db, user, payload.text, payload.sender, use_ai=True, remember_result=True)
+    if decision.get("action") == "ignore":
+        return {"ignored": True, "reason": "This SMS matches a sample marked as not a transaction."}
+    if decision.get("action") != "transaction":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Couldn't read this SMS. It is saved under Settings → SMS samples for you to label.",
+        )
+    amount = decision.get("amount")
+    transaction_type = decision.get("transaction_type")
+    if decision.get("description"):
+        description = decision["description"]
+    via = decision.get("via") or "structure"
 
     if amount is None or amount <= 0:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Couldn't find a Rs./INR amount in this text.")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Couldn't find an amount in this text.")
 
     mapping = _active_mapping(db, user)
-    matched_bank_id = _match_bank_from_sms(db, user, payload.sender, payload.text)
+    matched_bank_id = decision.get("bank_id") or _match_bank_from_sms(db, user, payload.sender, payload.text)
     bank_id = (
         payload.bank_id
         or matched_bank_id
@@ -626,7 +593,7 @@ def ingest_sms(
     if not db.query(Bank.id).filter(Bank.id == bank_id, Bank.user_id == user.id).first():
         bank_id = _get_external_bank(db, user).id
 
-    notes = "Auto-detected from SMS" + (", AI-parsed" if used_ai else "") + (f" ({payload.sender})" if payload.sender else "")
+    notes = "Auto-detected from SMS" + (f" ({via})" if via else "") + (f" ({payload.sender})" if payload.sender else "")
     record = {
         "amount": amount,
         "description": description,
