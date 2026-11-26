@@ -76,6 +76,8 @@ automatically on Apple Pay taps and hands over `Amount`/`Merchant` as inputs. Ma
 this intent's `Amount`/`Merchant` parameters and transactions get logged with no manual
 step at all — the same idea as Wallet by BudgetBakers' Apple Pay integration.
 
+The same file also exposes **Log SMS**. That action has one text field, Message, and an optional Sender. It posts the raw text to `/api/ingest/sms`. In Shortcuts, add the Finance Tracker action **Log SMS**, then point Message at the text you want to send. For a Message automation, pass the message content into that field (and the sender into Sender when the automation has it). The server matches a saved sample, then reads the structure, and only calls the AI when both of those fail.
+
 This intent (`mobile/ios-native/AddTransactionIntent.swift`) doesn't share your logged-in
 session with the rest of the app — sharing runtime data between the RN app and native
 Swift code needs an iOS "App Group" entitlement, which is normally gated behind a paid

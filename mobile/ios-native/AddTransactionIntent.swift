@@ -151,8 +151,87 @@ enum AddTransactionIntentError: Swift.Error, CustomLocalizedStringResourceConver
     }
 }
 
+// One text field. A Shortcuts automation fills Message with the SMS body (and
+// Sender when it has one). This action only forwards that text; amount and
+// direction are decided on the server.
+struct LogSmsIntent: AppIntent {
+    static var title: LocalizedStringResource = "Log SMS"
+    static var description = IntentDescription(
+        "Send a bank SMS to Finance Tracker. Put the message in the text field, or pass it from a Message automation."
+    )
+    static var openAppWhenRun: Bool { false }
+
+    @Parameter(title: "Message")
+    var message: String
+
+    @Parameter(title: "Sender")
+    var sender: String?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Log \(\.$message)")
+    }
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let text = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            return .result(dialog: "The Message field is empty.")
+        }
+        guard let url = URL(string: "\(APIConfig.serverURL)/api/ingest/sms") else {
+            throw AddTransactionIntentError.invalidServerURL
+        }
+
+        var body: [String: Any] = ["text": text]
+        if let sender = sender?.trimmingCharacters(in: .whitespacesAndNewlines), !sender.isEmpty {
+            body["sender"] = sender
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue(APIConfig.apiKey, forHTTPHeaderField: "X-API-Key")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            return .result(dialog: "Couldn't reach Finance Tracker.")
+        }
+
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        if (200...299).contains(code) {
+            if json?["ignored"] as? Bool == true {
+                return .result(dialog: "Ignored. This SMS is not a transaction.")
+            }
+            if json?["skipped_duplicate"] as? Bool == true {
+                return .result(dialog: "Already recorded.")
+            }
+            if json?["created"] as? Bool == false, let err = json?["error"] as? String, !err.isEmpty {
+                return .result(dialog: "\(String(err.prefix(180)))")
+            }
+            return .result(dialog: "Saved.")
+        }
+        if let detail = json?["detail"] as? String, !detail.isEmpty {
+            return .result(dialog: "\(String(detail.prefix(180)))")
+        }
+        return .result(dialog: "Couldn't read this SMS.")
+    }
+}
+
 struct FinanceTrackerShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
+        AppShortcut(
+            intent: LogSmsIntent(),
+            phrases: [
+                "Log an SMS in \(.applicationName)",
+                "Log a bank message in \(.applicationName)",
+            ],
+            shortTitle: "Log SMS",
+            systemImageName: "message"
+        )
         AppShortcut(
             intent: AddTransactionIntent(),
             phrases: [
