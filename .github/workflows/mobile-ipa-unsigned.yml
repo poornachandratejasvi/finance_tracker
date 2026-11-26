@@ -93,13 +93,24 @@ jobs:
             find build/Build/Products -maxdepth 3 >&2 || true
             exit 1
           fi
+          # SideStore reads CFBundleIdentifier before it installs. Xcode writes a
+          # binary plist, and that read fails, so SideStore falls back to the
+          # file name and then rejects the real bundle ID. XML, stored first,
+          # and a file name equal to the bundle ID both make the check pass.
+          plutil -convert xml1 "$APP_PATH/Info.plist"
+          BUNDLE_ID=$(plutil -extract CFBundleIdentifier raw -o - "$APP_PATH/Info.plist")
+          rm -rf Payload
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          zip -r "../${SCHEME}-unsigned.ipa" Payload
+          APP_NAME=$(basename "$APP_PATH")
+          rm -f "../${BUNDLE_ID}.ipa"
+          zip -0 "../${BUNDLE_ID}.ipa" "Payload/${APP_NAME}/Info.plist"
+          zip -r "../${BUNDLE_ID}.ipa" Payload -x "Payload/${APP_NAME}/Info.plist"
+          echo "Packaged mobile/${BUNDLE_ID}.ipa"
 
       - name: Upload .ipa artifact
         uses: actions/upload-artifact@v7
         with:
           name: unsigned-ipa
-          path: mobile/*-unsigned.ipa
+          path: mobile/*.ipa
           retention-days: 14
