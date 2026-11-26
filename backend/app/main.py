@@ -112,11 +112,17 @@ async def lifespan(app: FastAPI):
     logger.info("Creating database tables...")
     _bootstrap_schema()
     _validate_google_config()
+    # Runs here, not in Celery: the worker and beat are what crash when the
+    # broker client breaks, and this is the process that stayed up last time.
+    from app.services.system_health import start_system_health_monitor
+    start_system_health_monitor()
     logger.info("Application started successfully")
 
     yield
 
     # Shutdown
+    from app.services.system_health import stop_system_health_monitor
+    stop_system_health_monitor()
     logger.info("Shutting down Finance Tracker Application")
 
 
