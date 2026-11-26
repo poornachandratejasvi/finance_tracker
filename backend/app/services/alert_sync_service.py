@@ -44,11 +44,20 @@ ALERT_KEYWORDS_QUERY = (
     'OR "made a payment" '
     # Amex's RBI-mandated "Balance Update" email is a pure balance snapshot with
     # no debited/credited wording at all -- same reasoning as Pluxee above.
-    'OR "balance update")) '
+    'OR "balance update" '
+    # SBI savings UPI alerts say "has credit for", not "credited".
+    'OR "has credit for" OR "has debit for")) '
     'OR (from:alerts.in@sc.com (credited OR debited OR credit OR debit)) '
     # SBI's debit-card alert is a bare key/value table ("Terminal Owner Name ...
     # Amount (INR) ...") with none of the keywords above, so scope it by sender.
-    'OR (from:donotreply.sbionline@alerts.sbi.co.in -has:attachment)'
+    'OR (from:donotreply.sbionline@alerts.sbi.co.in -has:attachment) '
+    # bob World NEFT acceptance ("NEFT of Rs. 15000 to NAME is accepted") has
+    # neither debited nor credited. IMPS alerts from the same sender already
+    # match "debited" above.
+    'OR (from:no-reply@bankofbaroda.bank.in subject:"Transaction Alert" -has:attachment) '
+    # IndusInd card alerts say "is Approved" and name the merchant, with no
+    # debited/spent wording.
+    'OR (from:transactionalert@indusind.com -has:attachment)'
 )
 
 
@@ -133,7 +142,7 @@ def _sync_statement_spreadsheets(db, gmail_service, gmail_account: GmailAccount,
     return imported
 
 
-def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_date=None) -> int:
+def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_date=None, query=None, max_results=100) -> int:
     """Search this Gmail account for alert-style emails, match each to one of
     `banks` by sender domain, parse, and create a pending Transaction. Returns
     how many new pending transactions were created. Never raises — a broken
@@ -160,7 +169,9 @@ def sync_alert_emails(db, gmail_account: GmailAccount, banks: List[Bank], after_
         return 0
 
     try:
-        messages = gmail_service.search_messages_with_body(ALERT_KEYWORDS_QUERY, max_results=100, after_date=after_date)
+        messages = gmail_service.search_messages_with_body(
+            query or ALERT_KEYWORDS_QUERY, max_results=max_results, after_date=after_date
+        )
     except Exception:
         logger.warning("Alert-email search failed for Gmail account %s", gmail_account.id, exc_info=True)
         return 0

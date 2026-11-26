@@ -109,20 +109,46 @@ def _sbi_card(sender, subject, body, received_date=None):
     }
 
 
+def _sbi_balance(body):
+    bal = re.search(r"Avl Bal Rs\.?\s*([\d,]+\.\d{2})", body)
+    return _amount(bal.group(1)) if bal else None
+
+
 def _sbi_savings(sender, subject, body, received_date=None):
+    # Two live templates from alerts.sbi.bank.in. "by transfer" is the older
+    # NEFT/IMPS line. "has credit/debit for ..." is the UPI line, which does
+    # not contain the word "credited", so the Gmail query has to ask for it
+    # separately. Both state the available balance.
     m = re.search(
         r"Your A/C (\w+) has a (debit|credit) by transfer of Rs ([\d,]+\.\d{2}) on (\d{2}/\d{2}/\d{2})",
         body,
     )
-    if not m:
-        return None
-    return {
-        "amount": _amount(m.group(3)),
-        "transaction_type": m.group(2),
-        "description": "Bank transfer",
-        "transaction_date": _parse_date(m.group(4)),
-        "card_hint": m.group(1),
-    }
+    if m:
+        result = {
+            "amount": _amount(m.group(3)),
+            "transaction_type": m.group(2),
+            "description": "Bank transfer",
+            "transaction_date": _parse_date(m.group(4)),
+            "card_hint": m.group(1),
+        }
+    else:
+        m = re.search(
+            r"Your A/C (\w+) has (debit|credit) for (.+?) of Rs\.?\s*([\d,]+\.\d{2}) on (\d{2}/\d{2}/\d{2})",
+            body,
+        )
+        if not m:
+            return None
+        result = {
+            "amount": _amount(m.group(4)),
+            "transaction_type": m.group(2),
+            "description": m.group(3).strip()[:200],
+            "transaction_date": _parse_date(m.group(5)),
+            "card_hint": m.group(1),
+        }
+    balance = _sbi_balance(body)
+    if balance is not None:
+        result["updated_balance"] = balance
+    return result
 
 
 def _sbi_debit_card(sender, subject, body, received_date=None):
@@ -147,19 +173,57 @@ def _sbi_debit_card(sender, subject, body, received_date=None):
 
 
 def _bank_of_baroda(sender, subject, body, received_date=None):
+    # IMPS/bob World debit, seen as "Rs. 15,000.00 debited from A/c no. ... on
+    # 30-10-25 via bob World".
     m = re.search(
         r"Rs\.?\s*([\d,]+\.\d{2})\s*(debited|credited)\s*(?:from|to)\s*A/c no\.?\s*(\w+) on "
         r"(\d{2}-\d{2}-\d{2}) via bob World",
         body,
     )
+    if m:
+        return {
+            "amount": _amount(m.group(1)),
+            "transaction_type": "debit" if m.group(2) == "debited" else "credit",
+            "description": "bob World transfer",
+            "transaction_date": _parse_date(m.group(4)),
+            "card_hint": m.group(3),
+        }
+    # NEFT acceptance. The live mail (25 Nov 2026) says "is accepted" and names
+    # the beneficiary; it never says debited/credited, and the amount has no
+    # paise ("Rs. 15000"). Money going "to" someone is a debit.
+    m = re.search(
+        r"NEFT of Rs\.?\s*([\d,]+(?:\.\d{2})?) to (.+?) is accepted via bob World on (\d{2}/\d{2}/\d{4})",
+        body,
+        re.IGNORECASE,
+    )
     if not m:
         return None
     return {
         "amount": _amount(m.group(1)),
-        "transaction_type": "debit" if m.group(2) == "debited" else "credit",
-        "description": "bob World transfer",
-        "transaction_date": _parse_date(m.group(4)),
-        "card_hint": m.group(3),
+        "transaction_type": "debit",
+        "description": f"NEFT to {m.group(2).strip()}",
+        "transaction_date": _parse_date(m.group(3)),
+        "card_hint": None,
+    }
+
+
+def _indusind(sender, subject, body, received_date=None):
+    # "Transaction Alert - IndusInd Bank Credit Card". Available Limit is the
+    # unused credit line, not the amount owed, so it is not a balance update.
+    m = re.search(
+        r"transaction on your IndusInd Bank Credit Card ending (\d+) for INR\s*([\d,]+\.\d{2}) "
+        r"on (\d{2}-\d{2}-\d{4}) (\d{1,2}:\d{2}:\d{2}\s*[ap]m) at (.+?) is Approved",
+        body,
+        re.IGNORECASE,
+    )
+    if not m:
+        return None
+    return {
+        "amount": _amount(m.group(2)),
+        "transaction_type": "debit",
+        "description": m.group(5).strip(),
+        "transaction_date": _parse_date(m.group(3), m.group(4)),
+        "card_hint": m.group(1),
     }
 
 
@@ -331,6 +395,7 @@ ALERT_PARSERS = [
     ("alerts.sbi.bank.in", _sbi_savings),
     ("alerts.sbi.co.in", _sbi_debit_card),
     ("bankofbaroda.bank.in", _bank_of_baroda),
+    ("transactionalert@indusind.com", _indusind),
     ("rblalerts@rbl.bank.in", _rbl),
     ("rblalerts@rblbank.com", _rbl),
     ("notification.my.rbl.bank.in", _rbl),
